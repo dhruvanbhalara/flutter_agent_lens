@@ -741,6 +741,28 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       ),
       _handleCompareLayoutScreenshots,
     );
+
+    // Take Standalone Screenshot
+    registerTool(
+      Tool(
+        name: 'take_screenshot',
+        description: 'Capture a standalone screenshot of the running Flutter application.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'screenshot_type': StringSchema(
+              description: 'The capture method (device = native screenshot, skia = Skia Picture via VM service; default: device).',
+            ),
+            'device_id': StringSchema(
+              description: 'Target device ID or name if multiple devices are connected.',
+            ),
+            'output_path': StringSchema(
+              description: 'Optional destination file path. If not specified, the screenshot will be saved to a default directory.',
+            ),
+          },
+        ),
+      ),
+      _handleTakeScreenshot,
+    );
   }
 
   CallToolResult _notConnected() {

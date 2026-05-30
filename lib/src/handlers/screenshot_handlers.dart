@@ -207,4 +207,83 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
       );
     }
   }
+
+  Future<CallToolResult> _handleTakeScreenshot(CallToolRequest req) async {
+    final root = _workspaceRoot;
+    if (root == null || root.isEmpty) {
+      return CallToolResult(
+        content: [TextContent(text: 'Workspace root is not configured. Run connect_to_app first.')],
+        isError: true,
+      );
+    }
+
+    final screenshotType = req.arguments?['screenshot_type'] as String? ?? 'device';
+    final deviceId = req.arguments?['device_id'] as String?;
+    final outputPath = req.arguments?['output_path'] as String?;
+
+    if (screenshotType != 'device' && screenshotType != 'skia') {
+      return CallToolResult(
+        content: [TextContent(text: 'Invalid screenshot_type. Supported values: device, skia.')],
+        isError: true,
+      );
+    }
+
+    String targetPath;
+    if (outputPath != null && outputPath.isNotEmpty) {
+      targetPath = outputPath;
+    } else {
+      final screenshotDir = Directory(p.join(root, 'build', 'mcp_screenshots'));
+      if (!screenshotDir.existsSync()) {
+        screenshotDir.createSync(recursive: true);
+      }
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      targetPath = p.join(screenshotDir.path, 'screenshot_$timestamp.png');
+    }
+
+    try {
+      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+      final executable = flutterRoot != null
+          ? p.join(flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter')
+          : (Platform.isWindows ? 'flutter.bat' : 'flutter');
+
+      final args = [
+        'screenshot',
+        '--out=$targetPath',
+        if (screenshotType == 'skia' && _vmServiceUri != null) ...[
+          '--vm-service-url=$_vmServiceUri',
+          '--type=skia',
+        ] else ...[
+          '--type=device',
+        ],
+        if (deviceId != null && deviceId.isNotEmpty) ...[
+          '--device-id=$deviceId',
+        ],
+      ];
+
+      final result = await Process.run(executable, args);
+      if (result.exitCode != 0) {
+        return CallToolResult(
+          content: [
+            TextContent(
+              text: 'Failed to capture screenshot (Exit Code ${result.exitCode}):\n${result.stderr}',
+            )
+          ],
+          isError: true,
+        );
+      }
+
+      return CallToolResult(
+        content: [
+          TextContent(text: 'Screenshot saved to $targetPath'),
+        ],
+      );
+    } catch (e, st) {
+      stderr.writeln('[mcp:screenshot] ERROR: $e');
+      stderr.writeln('[mcp:screenshot] STACKTRACE: $st');
+      return CallToolResult(
+        content: [TextContent(text: 'Screenshot capture failed: $e')],
+        isError: true,
+      );
+    }
+  }
 }
