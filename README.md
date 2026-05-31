@@ -86,6 +86,7 @@ All tools require an active connection to a running application, unless stated o
 | `get_cpu_profile` | `duration_seconds` (default: 3) | Sample CPU ticks to identify performance hotspots in Dart functions. |
 | `get_widget_rebuild_counts` | `duration_seconds` (default: 3) | Track widget rebuild counts to identify unnecessary layout updates. |
 | `hot_reload` | None | Trigger a hot reload on the connected main isolate. |
+| `hot_restart` | None | Trigger a hot restart of the running application. |
 | `analyze_bundle_size` | `build_target` (default: 'apk') | Parse local `code-size-details.json` maps to find bloated packages. |
 
 ### Layout Inspection

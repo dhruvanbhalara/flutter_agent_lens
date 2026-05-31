@@ -113,6 +113,36 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     }
   }
 
+  Future<CallToolResult> _handleHotRestart(CallToolRequest req) async {
+    if (_vmService == null || _isolateId == null) return _notConnected();
+
+    try {
+      stderr.writeln('[mcp:hot_restart] Triggering hot restart...');
+      final response = await _vmService!.callServiceExtension(
+        'ext.flutter.restart',
+        isolateId: _isolateId,
+      );
+
+      final error = response.json?['error'];
+      if (error != null) {
+        return CallToolResult(
+          content: [TextContent(text: 'Hot restart failed: $error')],
+          isError: true,
+        );
+      }
+
+      return CallToolResult(
+        content: [TextContent(text: 'Hot restart completed successfully.')],
+      );
+    } catch (e) {
+      stderr.writeln('[mcp:hot_restart] ERROR: $e');
+      return CallToolResult(
+        content: [TextContent(text: 'Hot restart error: $e')],
+        isError: true,
+      );
+    }
+  }
+
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
     if (_vmService == null || _isolateId == null) return _notConnected();
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;

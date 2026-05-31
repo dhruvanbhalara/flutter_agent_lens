@@ -195,6 +195,16 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       _handleHotReload,
     );
 
+    // Hot Restart
+    registerTool(
+      Tool(
+        name: 'hot_restart',
+        description: 'Trigger a hot restart of the application.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleHotRestart,
+    );
+
     // Trigger Scroll Gesture
     registerTool(
       Tool(
