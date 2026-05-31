@@ -714,6 +714,108 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       ),
       _handleToggleLayoutGuidelines,
     );
+
+    // AI Analysis Tools
+    registerTool(
+      Tool(
+        name: 'analyze_jank_causes',
+        description:
+            'Analyze frame timing data and synthesize explanations for jank. Identifies whether build phase (Dart) or raster phase (GPU) is the bottleneck.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleAnalyzeJankCauses,
+    );
+
+    registerTool(
+      Tool(
+        name: 'explain_memory_breakdown',
+        description:
+            'Synthesize a natural-language explanation of memory usage patterns and recommend optimization strategies.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleExplainMemoryBreakdown,
+    );
+
+    // Advanced Memory Tools
+    registerTool(
+      Tool(
+        name: 'watch_gc_pressure',
+        description:
+            'Monitor garbage collection activity to identify excessive allocations.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'duration_seconds':
+                NumberSchema(description: 'Duration to monitor (default: 5)'),
+          },
+        ),
+      ),
+      _handleWatchGcPressure,
+    );
+
+    registerTool(
+      Tool(
+        name: 'get_memory_timeline',
+        description:
+            'Sample memory usage over time to identify memory leaks or growth patterns.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'duration_seconds':
+                NumberSchema(description: 'Sampling duration (default: 10)'),
+          },
+        ),
+      ),
+      _handleGetMemoryTimeline,
+    );
+
+    registerTool(
+      Tool(
+        name: 'force_gc',
+        description:
+            'Manually trigger garbage collection to measure memory cleanup.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleForceGc,
+    );
+
+    // Advanced Network Tools
+    registerTool(
+      Tool(
+        name: 'get_http_profile',
+        description:
+            'Get detailed HTTP request history with timing and response codes.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleGetHttpProfile,
+    );
+
+    registerTool(
+      Tool(
+        name: 'enable_http_logging',
+        description: 'Enable HTTP request logging in the timeline.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleEnableHttpLogging,
+    );
+
+    registerTool(
+      Tool(
+        name: 'disable_http_logging',
+        description: 'Disable HTTP request logging.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleDisableHttpLogging,
+    );
+
+    // Navigation Inspection
+    registerTool(
+      Tool(
+        name: 'get_navigation_stack',
+        description:
+            'Get the current route navigation stack (requires Navigator/GoRouter instrumentation).',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleGetNavigationStack,
+    );
   }
 
   CallToolResult _notConnected() {

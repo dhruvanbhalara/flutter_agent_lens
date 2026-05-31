@@ -44,9 +44,8 @@ extension AiAnalysisHandlers on FlutterAgentLensServer {
           frames.where((f) => f.isJanky(targetFps: targetFps)).toList();
 
       // Classify each janky frame by its dominant cost.
-      final uiBound = janky
-          .where((f) => f.uiDurationMicros > budgetMicros)
-          .toList();
+      final uiBound =
+          janky.where((f) => f.uiDurationMicros > budgetMicros).toList();
       final rasterBound = janky
           .where((f) =>
               f.rasterDurationMicros > budgetMicros &&
@@ -59,8 +58,7 @@ extension AiAnalysisHandlers on FlutterAgentLensServer {
           .toList();
 
       final hasRaster = frames.any((f) => f.rasterDurationMicros > 0);
-      final jankyPct =
-          (janky.length / frames.length * 100).toStringAsFixed(1);
+      final jankyPct = (janky.length / frames.length * 100).toStringAsFixed(1);
 
       double avg(int Function(FrameData) sel) => frames.isEmpty
           ? 0
@@ -69,8 +67,7 @@ extension AiAnalysisHandlers on FlutterAgentLensServer {
       final avgRasterMs = avg((f) => f.rasterDurationMicros);
 
       final worst = [...frames]
-        ..sort((a, b) =>
-            b.workDurationMicros.compareTo(a.workDurationMicros));
+        ..sort((a, b) => b.workDurationMicros.compareTo(a.workDurationMicros));
 
       // Determine the primary bottleneck and synthesize a verdict.
       String verdict;
@@ -91,8 +88,7 @@ extension AiAnalysisHandlers on FlutterAgentLensServer {
             '`get_widget_rebuild_counts` and `get_cpu_profile` to localize it.');
       } else {
         verdict = 'raster_bound';
-        causes.add(
-            'The primary bottleneck is the **raster/GPU thread**. '
+        causes.add('The primary bottleneck is the **raster/GPU thread**. '
             '${rasterBound.length} frame(s) had cheap build but slow raster.');
         causes.add(
             'Likely culprits: large/unscaled images, expensive clips, opacity '
@@ -119,8 +115,7 @@ extension AiAnalysisHandlers on FlutterAgentLensServer {
           '- Avg build: **${avgBuildMs.toStringAsFixed(2)}ms** | Avg raster: '
           '**${avgRasterMs.toStringAsFixed(2)}ms** | Budget: '
           '**${budgetMicros ~/ 1000}ms** @ ${targetFps}fps');
-      md.writeln(
-          '- Build-bound frames: **${uiBound.length}** | Raster-bound: '
+      md.writeln('- Build-bound frames: **${uiBound.length}** | Raster-bound: '
           '**${rasterBound.length}** | Both: **${mixed.length}**');
       md.writeln();
       md.writeln('#### Explanation');
@@ -196,16 +191,13 @@ extension AiAnalysisHandlers on FlutterAgentLensServer {
       final external = usage?.externalUsage ?? 0;
       final totalDart = heapUsage + external;
 
-      String mb(num bytes) =>
-          '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+      String mb(num bytes) => '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
 
       // Rank classes by retained bytes.
       final members = (profile.members ?? [])
-          .where((m) =>
-              m.classRef?.name != null && (m.bytesCurrent ?? 0) > 0)
+          .where((m) => m.classRef?.name != null && (m.bytesCurrent ?? 0) > 0)
           .toList()
-        ..sort((a, b) =>
-            (b.bytesCurrent ?? 0).compareTo(a.bytesCurrent ?? 0));
+        ..sort((a, b) => (b.bytesCurrent ?? 0).compareTo(a.bytesCurrent ?? 0));
 
       final topClasses = <Map<String, dynamic>>[];
       for (final m in members.take(20)) {
@@ -218,9 +210,8 @@ extension AiAnalysisHandlers on FlutterAgentLensServer {
 
       // Heuristic recommendations based on observed patterns.
       final recommendations = <String>[];
-      final fragmentation = heapCapacity > 0
-          ? (heapCapacity - heapUsage) / heapCapacity
-          : 0.0;
+      final fragmentation =
+          heapCapacity > 0 ? (heapCapacity - heapUsage) / heapCapacity : 0.0;
 
       if (external > heapUsage && external > 0) {
         recommendations.add(
@@ -248,10 +239,10 @@ extension AiAnalysisHandlers on FlutterAgentLensServer {
         }
       }
       if (recommendations.isEmpty) {
-        recommendations.add(
-            'No obvious red flags. Heap is ${mb(heapUsage)} live of '
-            '${mb(heapCapacity)}. Use `diff_heap_allocations` around a '
-            'suspected action to catch growth over time.');
+        recommendations
+            .add('No obvious red flags. Heap is ${mb(heapUsage)} live of '
+                '${mb(heapCapacity)}. Use `diff_heap_allocations` around a '
+                'suspected action to catch growth over time.');
       }
 
       final md = StringBuffer();

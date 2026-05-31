@@ -146,4 +146,33 @@ extension DebuggerHandlers on FlutterAgentLensServer {
           isError: true);
     }
   }
+
+  Future<CallToolResult> _handleGetNavigationStack(CallToolRequest req) async {
+    if (_vmService == null || _isolateId == null) return _notConnected();
+    stderr.writeln('[mcp:get_navigation_stack] Fetching navigation stack');
+
+    try {
+      final md = StringBuffer('### Navigation Stack\n\n')
+        ..writeln(
+            'Navigation stack inspection requires GoRouter/Navigator instrumentation.')
+        ..writeln('Unable to extract route stack from VM service API.');
+
+      return _serializeDualFormat(
+        title: '### Navigation Stack',
+        markdownBody: md.toString(),
+        structuredData: {
+          'stack': <String>[],
+          'current_route': null,
+          'note': 'Navigation tracking requires app-level instrumentation',
+        },
+      );
+    } catch (e, st) {
+      stderr.writeln('[mcp:get_navigation_stack] ERROR: $e');
+      stderr.writeln('[mcp:get_navigation_stack] STACKTRACE: $st');
+      return CallToolResult(
+        content: [TextContent(text: 'Navigation stack unavailable: $e')],
+        isError: true,
+      );
+    }
+  }
 }

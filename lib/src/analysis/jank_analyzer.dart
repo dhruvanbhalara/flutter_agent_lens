@@ -3,9 +3,9 @@ import 'package:vm_service/vm_service.dart';
 class FrameData {
   final int frameNumber;
   final int uiStartMicros;
-  final int uiDurationMicros;      // build time (Dart work)
-  final int rasterDurationMicros;  // raster time (GPU work)
-  final int totalDurationMicros;   // elapsed wall time (includes vsync wait)
+  final int uiDurationMicros; // build time (Dart work)
+  final int rasterDurationMicros; // raster time (GPU work)
+  final int totalDurationMicros; // elapsed wall time (includes vsync wait)
 
   const FrameData({
     required this.frameNumber,
@@ -34,13 +34,17 @@ class JankAnalyzer {
   ) async {
     final frames = <FrameData>[];
 
-    await service.streamListen(EventStreams.kExtension).catchError((_) => Success());
+    await service
+        .streamListen(EventStreams.kExtension)
+        .catchError((_) => Success());
 
     // Kick engine to produce frames — needed on Android/emulator when app is idle
-    await service.callServiceExtension(
-      'ext.ui.window.scheduleFrame',
-      isolateId: isolateId,
-    ).catchError((_) => Response());
+    await service
+        .callServiceExtension(
+          'ext.ui.window.scheduleFrame',
+          isolateId: isolateId,
+        )
+        .catchError((_) => Response());
 
     final sub = service.onExtensionEvent.listen((event) {
       if (event.extensionKind != 'Flutter.Frame') return;
@@ -81,7 +85,7 @@ class JankAnalyzer {
     final uiFrames = <_RawFrame>[];
     final rasterFrames = <_RawFrame>[];
     final Map<String, int> asyncBegin = {}; // async frames: key = 'name|id'
-    final Map<String, int> syncBegin = {};  // sync frames: key = 'name|tid'
+    final Map<String, int> syncBegin = {}; // sync frames: key = 'name|tid'
 
     for (final event in events) {
       final raw = event.json;
@@ -149,8 +153,8 @@ class JankAnalyzer {
 
     for (int i = 0; i < uiFrames.length; i++) {
       final ui = uiFrames[i];
-      while (rIdx < rasterFrames.length &&
-          rasterFrames[rIdx].start < ui.start) {
+      while (
+          rIdx < rasterFrames.length && rasterFrames[rIdx].start < ui.start) {
         rIdx++;
       }
       int rasterDur = 0;
@@ -197,7 +201,8 @@ class JankAnalyzer {
       final ph = raw['ph'] as String? ?? '';
 
       if (name == 'Frame' && cat == 'Dart' && ph == 'b') uiAsync++;
-      if (name == 'Animator::BeginFrame' && cat == 'Embedder' && ph == 'B') uiSync++;
+      if (name == 'Animator::BeginFrame' && cat == 'Embedder' && ph == 'B')
+        uiSync++;
       if ((name == 'GPURasterizer::Draw' ||
               name == 'CompositorContext::ScopedFrame::Raster') &&
           cat == 'Embedder' &&
@@ -205,8 +210,8 @@ class JankAnalyzer {
     }
     return {
       'total_events': total,
-      'ui_async_frames': uiAsync,   // [Dart] Frame async — primary
-      'ui_sync_frames': uiSync,     // Animator::BeginFrame sync — fallback
+      'ui_async_frames': uiAsync, // [Dart] Frame async — primary
+      'ui_sync_frames': uiSync, // Animator::BeginFrame sync — fallback
       'raster_frames': rasterCount,
     };
   }
@@ -221,8 +226,7 @@ class JankAnalyzer {
     final janky = frames.where((f) => f.isJanky(targetFps: targetFps)).toList();
     final jankyPct = (janky.length / frames.length * 100).toStringAsFixed(1);
 
-    final uiJank =
-        janky.where((f) => f.uiDurationMicros > budgetMicros).length;
+    final uiJank = janky.where((f) => f.uiDurationMicros > budgetMicros).length;
     final rasterJank = janky
         .where((f) =>
             f.rasterDurationMicros > budgetMicros &&
@@ -239,9 +243,8 @@ class JankAnalyzer {
       if (windowMicros > 0) {
         final rawFps = (frames.length - 1) / (windowMicros / 1e6);
         // Cap at targetFps+10 — higher values indicate stale timeline events
-        final displayFps = rawFps > targetFps + 10
-            ? targetFps.toDouble()
-            : rawFps;
+        final displayFps =
+            rawFps > targetFps + 10 ? targetFps.toDouble() : rawFps;
         fpsNote = ' (~${displayFps.toStringAsFixed(1)} fps)';
       }
     }
@@ -250,8 +253,7 @@ class JankAnalyzer {
     final hasRaster = frames.any((f) => f.rasterDurationMicros > 0);
 
     final sb = StringBuffer();
-    sb.writeln(
-        'Frame Analysis — ${frames.length} frames$fpsNote via $source');
+    sb.writeln('Frame Analysis — ${frames.length} frames$fpsNote via $source');
     sb.writeln('Budget: ${budgetMicros ~/ 1000}ms at ${targetFps}fps');
     sb.writeln('━' * 60);
     sb.writeln(

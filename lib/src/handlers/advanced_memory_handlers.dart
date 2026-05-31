@@ -59,9 +59,8 @@ extension AdvancedMemoryHandlers on FlutterAgentLensServer {
       final gcPerSec = duration > 0 ? gcCount / duration : 0.0;
       final totalGcMs = totalGcMicros / 1000.0;
       final maxGcMs = maxGcMicros / 1000.0;
-      final pressurePct = duration > 0
-          ? (totalGcMicros / (duration * 1000000)) * 100
-          : 0.0;
+      final pressurePct =
+          duration > 0 ? (totalGcMicros / (duration * 1000000)) * 100 : 0.0;
 
       String mb(num b) => '${(b / 1024 / 1024).toStringAsFixed(1)} MB';
 
@@ -82,12 +81,10 @@ extension AdvancedMemoryHandlers on FlutterAgentLensServer {
       md.writeln();
       md.writeln('- GC events: **$gcCount** over ${duration}s '
           '(**${gcPerSec.toStringAsFixed(2)}/s**)');
-      md.writeln(
-          '- Total GC pause: **${totalGcMs.toStringAsFixed(2)} ms** '
+      md.writeln('- Total GC pause: **${totalGcMs.toStringAsFixed(2)} ms** '
           '(**${pressurePct.toStringAsFixed(2)}%** of window)');
       md.writeln('- Longest pause: **${maxGcMs.toStringAsFixed(2)} ms**');
-      md.writeln(
-          '- Heap before/after: **${mb(before.heapUsage ?? 0)}** → '
+      md.writeln('- Heap before/after: **${mb(before.heapUsage ?? 0)}** → '
           '**${mb(after.heapUsage ?? 0)}**');
       if (severity == 'HIGH') {
         md.writeln();
@@ -190,9 +187,9 @@ extension AdvancedMemoryHandlers on FlutterAgentLensServer {
       md.writeln('**Trend:** `$trend` '
           '(${heapDelta >= 0 ? '+' : ''}${mb(heapDelta)} over ${duration}s)');
       md.writeln();
-      md.writeln('- Min heap: **${mb(minHeap)}** | Peak heap: **${mb(peakHeap)}**');
       md.writeln(
-          '- Start: **${mb(firstHeap)}** → End: **${mb(lastHeap)}**');
+          '- Min heap: **${mb(minHeap)}** | Peak heap: **${mb(peakHeap)}**');
+      md.writeln('- Start: **${mb(firstHeap)}** → End: **${mb(lastHeap)}**');
       if (trend == 'GROWING') {
         md.writeln();
         md.writeln(

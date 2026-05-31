@@ -10,7 +10,8 @@ extension AdvancedNetworkHandlers on FlutterAgentLensServer {
     if (_vmService == null || _isolateId == null) return _notConnected();
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 50;
 
-    stderr.writeln('[mcp:get_http_profile] Fetching HTTP profile, limit=$limit');
+    stderr
+        .writeln('[mcp:get_http_profile] Fetching HTTP profile, limit=$limit');
 
     try {
       final response = await _vmService!.callServiceExtension(
