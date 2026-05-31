@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 
 import 'src/path_resolver.dart';
 import 'src/port_discovery.dart';
+import 'src/analysis/jank_analyzer.dart';
 
 part 'src/handlers/connection_handlers.dart';
 part 'src/handlers/widget_handlers.dart';
@@ -20,6 +21,10 @@ part 'src/handlers/debugger_handlers.dart';
 
 part 'src/handlers/bundle_handlers.dart';
 part 'src/handlers/deeplink_handlers.dart';
+
+part 'src/handlers/ai_analysis_handlers.dart';
+part 'src/handlers/advanced_memory_handlers.dart';
+part 'src/handlers/advanced_network_handlers.dart';
 
 /// Flutter Agent Lens MCP Server.
 final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
