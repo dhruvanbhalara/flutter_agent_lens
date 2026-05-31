@@ -6,6 +6,7 @@ import 'package:stream_channel/stream_channel.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 import 'package:path/path.dart' as p;
+import 'package:image/image.dart' as img;
 
 import 'src/path_resolver.dart';
 import 'src/port_discovery.dart';
@@ -20,6 +21,7 @@ part 'src/handlers/debugger_handlers.dart';
 
 part 'src/handlers/bundle_handlers.dart';
 part 'src/handlers/deeplink_handlers.dart';
+part 'src/handlers/screenshot_handlers.dart';
 
 /// Flutter Agent Lens MCP Server.
 final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
@@ -35,6 +37,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         );
 
   VmService? _vmService;
+  String? _vmServiceUri;
   String? _isolateId;
   String? _workspaceRoot;
   PathResolver? _pathResolver;
@@ -708,6 +711,35 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         ),
       ),
       _handleToggleLayoutGuidelines,
+    );
+
+    // Compare Layout Screenshots
+    registerTool(
+      Tool(
+        name: 'compare_layout_screenshots',
+        description: 'Capture screenshots and perform pixel diff checks to find layout changes or bugs.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'baseline_name': StringSchema(
+              description: 'The filename prefix for the baseline screenshot (e.g. "home_screen").',
+            ),
+            'action': StringSchema(
+              description: 'The visual operation to execute (capture_baseline, compare).',
+            ),
+            'threshold': NumberSchema(
+              description: 'The similarity pass threshold from 0.0 to 1.0 (default: 0.98).',
+            ),
+            'screenshot_type': StringSchema(
+              description: 'The format/method to capture (device = native screenshot, skia = Skia Picture via VM service; default: device).',
+            ),
+            'device_id': StringSchema(
+              description: 'Target device ID or name if multiple devices are connected (prefixes allowed).',
+            ),
+          },
+          required: ['baseline_name', 'action'],
+        ),
+      ),
+      _handleCompareLayoutScreenshots,
     );
   }
 

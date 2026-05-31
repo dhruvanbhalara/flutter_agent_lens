@@ -16,6 +16,7 @@ dependencies:
   stream_channel: ^2.1.4
   vm_service: ^15.2.0
   path: ^1.9.1
+  image: ^4.9.1
 
 dev_dependencies:
   lints: 6.1.0
