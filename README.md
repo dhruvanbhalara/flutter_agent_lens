@@ -102,7 +102,30 @@ All tools require an active connection to a running application, unless stated o
 | `toggle_slow_animations` | `enabled` (required) | Apply a 5x time dilation factor to slow down UI animations. |
 | `toggle_debug_flag` | `flag_name` (required), `value` (required) | Set a custom value for any registered Flutter service extension flag. |
 
-### Memory and Debugging
+### AI Analysis (from flutter-profile-mcp)
+
+| Tool Name | Parameters | Description |
+| :--- | :--- | :--- |
+| `analyze_jank_causes` | None | Synthesize AI-generated explanations of jank data, identifying build vs raster bottlenecks and providing remediation guidance. |
+| `explain_memory_breakdown` | None | Generate natural-language summaries of memory usage patterns with optimization recommendations. |
+
+### Advanced Memory Profiling (from flutter-profile-mcp)
+
+| Tool Name | Parameters | Description |
+| :--- | :--- | :--- |
+| `watch_gc_pressure` | `duration_seconds` (default: 5) | Monitor garbage collection events and classify severity (LOW, MODERATE, HIGH) based on pause time. |
+| `get_memory_timeline` | `duration_seconds` (default: 10) | Sample memory usage over time to identify GROWING, SHRINKING, or STABLE trends. |
+| `force_gc` | None | Manually trigger garbage collection to measure how much memory is reclaimed. |
+
+### Advanced Network Inspection (from flutter-profile-mcp)
+
+| Tool Name | Parameters | Description |
+| :--- | :--- | :--- |
+| `get_http_profile` | None | List all HTTP requests with per-request timing (slowest-first sort). |
+| `enable_http_logging` | None | Enable HTTP request timeline capture. |
+| `disable_http_logging` | None | Disable HTTP request timeline capture. |
+
+### Basic Memory and Debugging
 
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
@@ -113,6 +136,7 @@ All tools require an active connection to a running application, unless stated o
 | `set_exception_pause_mode` | `mode` (required: 'None', 'Unhandled', 'All') | Configure exception pausing behavior. |
 | `add_breakpoint` | `file_path` (required), `line` (required), `column` (optional) | Install a breakpoint in a source file. |
 | `remove_breakpoint` | `breakpoint_id` (required) | Remove a breakpoint. |
+| `get_navigation_stack` | None | Get the current route navigation stack (requires GoRouter/Navigator instrumentation). |
 | `eval_expression` / `evaluate_expression` | `expression` (required) | Evaluate a Dart expression in the context of the running application library. |
 
 ### Logs and Gestures
