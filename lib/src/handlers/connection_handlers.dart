@@ -7,6 +7,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
       final uri =
           (req.arguments!['uri'] ?? req.arguments!['vmServiceUri']) as String;
       stderr.writeln('[mcp:connect] Attempting connection to: $uri');
+      _vmServiceUri = uri;
       _workspaceRoot = req.arguments?['workspace_root'] as String?;
 
       if (_workspaceRoot != null) {
@@ -235,6 +236,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
       await _vmService!.dispose();
     } catch (_) {}
     _vmService = null;
+    _vmServiceUri = null;
     _isolateId = null;
     return CallToolResult(
       content: [TextContent(text: 'Disconnected from Flutter app.')],

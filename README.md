@@ -93,6 +93,7 @@ All tools require an active connection to a running application, unless stated o
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
 | `inspect_layout_constraints` / `inspect_widget` | `widget_id` (required, or `widgetId` for alias) | Inspect parent constraints, render size, and diagnostics of a widget. |
+| `compare_layout_screenshots` | `baseline_name` (required), `action` (required), `threshold` (optional) | Capture screenshots and run pixel diff comparison to detect visual changes. |
 | `toggle_widget_selection` | `enabled` (required) | Toggle the on-device widget selection overlay. |
 | `toggle_package_widgets` | `enabled` (required) | Configure whether third-party packages appear in the inspector tree. |
 | `toggle_layout_guidelines` / `toggle_debug_paint` | `enabled` (required) | Toggle layout guidelines (debug paint) on the device. |
