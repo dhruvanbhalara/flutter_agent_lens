@@ -773,6 +773,25 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       ),
       _handleTakeScreenshot,
     );
+
+    // Get Widget Tree
+    registerTool(
+      Tool(
+        name: 'get_widget_tree',
+        description: 'Get the current widget tree of the running Flutter application.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'maxDepth': NumberSchema(
+              description: 'Maximum depth of the widget tree to return (default: 15).',
+            ),
+            'projectOnly': BooleanSchema(
+              description: 'If true, only return widgets created by the local project code.',
+            ),
+          },
+        ),
+      ),
+      _handleGetWidgetTree,
+    );
   }
 
   CallToolResult _notConnected() {

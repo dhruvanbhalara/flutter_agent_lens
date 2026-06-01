@@ -93,6 +93,7 @@ All tools require an active connection to a running application, unless stated o
 
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
+| `get_widget_tree` | `maxDepth` (optional, default: 15), `projectOnly` (optional, default: false) | Retrieve the structured widget tree of the running Flutter application. |
 | `inspect_layout_constraints` / `inspect_widget` | `widget_id` (required, or `widgetId` for alias) | Inspect parent constraints, render size, and diagnostics of a widget. |
 | `compare_layout_screenshots` | `baseline_name` (required), `action` (required), `threshold` (optional) | Capture screenshots and run pixel diff comparison to detect visual changes. |
 | `take_screenshot` | `screenshot_type` (optional), `device_id` (optional), `output_path` (optional) | Capture a standalone screenshot of the running Flutter application. |
