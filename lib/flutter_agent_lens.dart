@@ -30,7 +30,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           channel,
           implementation: Implementation(
             name: 'flutter_agent_lens',
-            version: '1.1.0',
+            version: '1.2.0',
           ),
           instructions: 'A tool server to interact with running Flutter apps. '
               'Connect using the connect tool, or discover running apps with discover_apps.',
