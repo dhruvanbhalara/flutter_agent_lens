@@ -120,41 +120,12 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     }
   }
 
-  Future<CallToolResult> _handleListRunningApps(CallToolRequest req) async {
-    try {
-      stderr.writeln('[mcp:list_running_apps] Scanning for active apps...');
-      final runningApps = await discoverActiveApps();
-      if (runningApps.isEmpty) {
-        return CallToolResult(
-          content: [
-            TextContent(text: 'No active Flutter VM service ports discovered.')
-          ],
-        );
-      }
-
-      final reportBuffer = StringBuffer('### Discovered Active Apps\n');
-      for (final app in runningApps) {
-        reportBuffer.writeln('- **Project**: ${app.projectName}');
-        reportBuffer.writeln('  - **URI**: `${app.serviceUri}`');
-        reportBuffer.writeln('  - **Config Path**: `${app.configPath}`');
-      }
-
-      return CallToolResult(
-        content: [TextContent(text: reportBuffer.toString())],
-      );
-    } catch (e) {
-      return CallToolResult(
-        content: [TextContent(text: 'Failed to discover active apps: $e')],
-        isError: true,
-      );
-    }
-  }
-
   Future<CallToolResult> _handleAutodiscover(CallToolRequest req) async {
     try {
       final workspaceRoot = req.arguments?['workspace_root'] as String?;
+      final autoConnect = req.arguments?['autoConnect'] as bool? ?? true;
       stderr.writeln(
-          '[mcp:autodiscover] Starting auto-discovery, workspace_root=$workspaceRoot');
+          '[mcp:autodiscover] Starting auto-discovery, workspace_root=$workspaceRoot, autoConnect=$autoConnect');
       final runningApps = await discoverActiveApps();
       stderr.writeln('[mcp:autodiscover] Found ${runningApps.length} app(s)');
 
@@ -169,6 +140,18 @@ extension ConnectionHandlers on FlutterAgentLensServer {
         );
       }
 
+      if (!autoConnect) {
+        final reportBuffer = StringBuffer('### Discovered Active Apps\n');
+        for (final app in runningApps) {
+          reportBuffer.writeln('- **Project**: ${app.projectName}');
+          reportBuffer.writeln('  - **URI**: `${app.serviceUri}`');
+          reportBuffer.writeln('  - **Config Path**: `${app.configPath}`');
+        }
+        return CallToolResult(
+          content: [TextContent(text: reportBuffer.toString())],
+        );
+      }
+
       if (runningApps.length == 1) {
         final app = runningApps.first;
         final arguments = {
@@ -177,7 +160,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
         };
 
         final connectReq = CallToolRequest(
-          name: 'connect_to_app',
+          name: 'connect',
           arguments: arguments,
         );
 
@@ -222,6 +205,13 @@ extension ConnectionHandlers on FlutterAgentLensServer {
         isError: true,
       );
     }
+  }
+
+  Future<CallToolResult> _handleListRunningApps(CallToolRequest req) async {
+    return _handleAutodiscover(CallToolRequest(
+      name: 'discover_apps',
+      arguments: {'autoConnect': false},
+    ));
   }
 
   /// Closes the active VM service connection and cancels running streams.
