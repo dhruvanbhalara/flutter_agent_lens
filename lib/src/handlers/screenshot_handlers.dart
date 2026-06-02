@@ -6,7 +6,7 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
     final root = _workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
-        content: [TextContent(text: 'Workspace root is not configured. Run connect_to_app first to set it.')],
+        content: [TextContent(text: 'Workspace root is not configured. Run connect first to set it.')],
         isError: true,
       );
     }
@@ -187,7 +187,7 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
     final root = _workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
-        content: [TextContent(text: 'Workspace root is not configured. Run connect_to_app first.')],
+        content: [TextContent(text: 'Workspace root is not configured. Run connect first.')],
         isError: true,
       );
     }

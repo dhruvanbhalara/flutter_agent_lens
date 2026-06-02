@@ -231,7 +231,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
   Future<CallToolResult> _handleEvalExpression(CallToolRequest req) async {
     if (_vmService == null || _isolateId == null) return _notConnected();
     final expression = req.arguments!['expression'] as String;
-    stderr.writeln('[mcp:eval_expression] Evaluating: $expression');
+    stderr.writeln('[mcp:evaluate_expression] Evaluating: $expression');
 
     try {
       final libraryId = await _getEvaluationLibraryId();
@@ -250,8 +250,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
         ],
       );
     } catch (e, st) {
-      stderr.writeln('[mcp:eval_expression] ERROR: $e');
-      stderr.writeln('[mcp:eval_expression] STACKTRACE: $st');
+      stderr.writeln('[mcp:evaluate_expression] ERROR: $e');
+      stderr.writeln('[mcp:evaluate_expression] STACKTRACE: $st');
       return CallToolResult(
           content: [TextContent(text: 'Evaluation failed: $e')], isError: true);
     }
@@ -305,6 +305,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
         isolateId: _isolateId,
         args: {
           'id': widgetId,
+          'arg': widgetId,
           'objectGroup': 'widget_inspector_group',
           'subtreeDepth': '2',
         },
@@ -609,60 +610,6 @@ extension WidgetHandlers on FlutterAgentLensServer {
         isError: true,
       );
     }
-  }
-
-  Future<CallToolResult> _handleToggleLayoutGuidelines(
-      CallToolRequest req) async {
-    final enabled = req.arguments!['enabled'] as bool;
-    final value = enabled ? 'true' : 'false';
-    final request = CallToolRequest(
-      name: 'toggle_debug_flag',
-      arguments: {'flag_name': 'debugPaint', 'value': value},
-    );
-    return _handleToggleDebugFlag(request);
-  }
-
-  Future<CallToolResult> _handleToggleOversizedImages(
-      CallToolRequest req) async {
-    final enabled = req.arguments!['enabled'] as bool;
-    final value = enabled ? 'true' : 'false';
-    final request = CallToolRequest(
-      name: 'toggle_debug_flag',
-      arguments: {'flag_name': 'invertOversizedImages', 'value': value},
-    );
-    return _handleToggleDebugFlag(request);
-  }
-
-  Future<CallToolResult> _handleToggleRepaintRainbow(
-      CallToolRequest req) async {
-    final enabled = req.arguments!['enabled'] as bool;
-    final value = enabled ? 'true' : 'false';
-    final request = CallToolRequest(
-      name: 'toggle_debug_flag',
-      arguments: {'flag_name': 'repaintRainbow', 'value': value},
-    );
-    return _handleToggleDebugFlag(request);
-  }
-
-  Future<CallToolResult> _handleToggleBaselines(CallToolRequest req) async {
-    final enabled = req.arguments!['enabled'] as bool;
-    final value = enabled ? 'true' : 'false';
-    final request = CallToolRequest(
-      name: 'toggle_debug_flag',
-      arguments: {'flag_name': 'debugPaintBaselinesEnabled', 'value': value},
-    );
-    return _handleToggleDebugFlag(request);
-  }
-
-  Future<CallToolResult> _handleToggleSlowAnimations(
-      CallToolRequest req) async {
-    final enabled = req.arguments!['enabled'] as bool;
-    final value = enabled ? '5.0' : '1.0';
-    final request = CallToolRequest(
-      name: 'toggle_debug_flag',
-      arguments: {'flag_name': 'timeDilation', 'value': value},
-    );
-    return _handleToggleDebugFlag(request);
   }
 
   Future<CallToolResult> _handleGetWidgetTree(CallToolRequest req) async {

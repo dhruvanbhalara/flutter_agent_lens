@@ -72,9 +72,8 @@ All tools require an active connection to a running application, unless stated o
 
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
-| `connect_to_app` / `connect` | `uri` (required, or `vmServiceUri` for alias), `workspace_root` (optional) | Connect to a running Flutter application via its VM Service URI. |
-| `list_running_apps` | None | Scan for running Flutter VM Service ports on the host. |
-| `autodiscover_app` / `discover_apps` | `workspace_root` (optional) | Scan active OS processes and connect automatically if exactly one application is running. |
+| `connect` | `uri` or `vmServiceUri` (required), `workspace_root` (optional) | Connect to a running Flutter application via its VM Service URI. |
+| `discover_apps` | `autoConnect` (optional, default: true), `workspace_root` (optional) | Automatically discover running Flutter applications on the host. |
 | `disconnect` | None | Disconnect from the currently active application. |
 | `get_app_info` | None | Retrieve VM metadata, isolates, platform details, and active extension RPCs. |
 
@@ -94,17 +93,12 @@ All tools require an active connection to a running application, unless stated o
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
 | `get_widget_tree` | `maxDepth` (optional, default: 15), `projectOnly` (optional, default: false) | Retrieve the structured widget tree of the running Flutter application. |
-| `inspect_layout_constraints` / `inspect_widget` | `widget_id` (required, or `widgetId` for alias) | Inspect parent constraints, render size, and diagnostics of a widget. |
+| `inspect_widget` | `widgetId` (required) | Inspect parent constraints, render size, and diagnostics of a widget by its ID. |
 | `compare_layout_screenshots` | `baseline_name` (required), `action` (required), `threshold` (optional) | Capture screenshots and run pixel diff comparison to detect visual changes. |
 | `take_screenshot` | `screenshot_type` (optional), `device_id` (optional), `output_path` (optional) | Capture a standalone screenshot of the running Flutter application. |
 | `toggle_widget_selection` | `enabled` (required) | Toggle the on-device widget selection overlay. |
 | `toggle_package_widgets` | `enabled` (required) | Configure whether third-party packages appear in the inspector tree. |
-| `toggle_layout_guidelines` / `toggle_debug_paint` | `enabled` (required) | Toggle layout guidelines (debug paint) on the device. |
-| `toggle_oversized_images` | `enabled` (required) | Highlight oversized images by inverting their colors. |
-| `toggle_repaint_rainbow` | `enabled` (required) | Show color borders around repaint boundaries during redraws. |
-| `toggle_baselines` | `enabled` (required) | Render alignment baselines for text rendering. |
-| `toggle_slow_animations` | `enabled` (required) | Apply a 5x time dilation factor to slow down UI animations. |
-| `toggle_debug_flag` | `flag_name` (required), `value` (required) | Set a custom value for any registered Flutter service extension flag. |
+| `toggle_debug_flag` | `flag_name` (required), `value` (required) | Configure Flutter framework debug flags (e.g. debugPaint, invertOversizedImages, repaintRainbow, debugPaintBaselinesEnabled, timeDilation). |
 
 ### Memory and Debugging
 
@@ -120,7 +114,7 @@ All tools require an active connection to a running application, unless stated o
 | `set_exception_pause_mode` | `mode` (required: 'None', 'Unhandled', 'All') | Configure exception pausing behavior. |
 | `add_breakpoint` | `file_path` (required), `line` (required), `column` (optional) | Install a breakpoint in a source file. |
 | `remove_breakpoint` | `breakpoint_id` (required) | Remove a breakpoint. |
-| `eval_expression` / `evaluate_expression` | `expression` (required) | Evaluate a Dart expression in the context of the running application library. |
+| `evaluate_expression` | `expression` (required) | Evaluate a Dart expression in the context of the running application library. |
 
 ### Logs and Gestures
 
@@ -140,10 +134,10 @@ All tools require an active connection to a running application, unless stated o
   ```bash
   adb reverse tcp:8181 tcp:8181
   ```
-- If `autodiscover_app` fails to connect, verify that your application has initialized the Dart Development Service (DDS). You can check by running `list_running_apps` to list active endpoints.
-
-### Layout File Path Mapping Fails
-- When connecting via `connect_to_app`, ensure you provide the absolute path to your local Flutter project directory in the `workspace_root` argument. This allows the path resolver to match package references back to your local files.
+- If `discover_apps` fails to connect, verify that your application has initialized the Dart Development Service (DDS). You can check by running `discover_apps` with `autoConnect: false` to list active endpoints.
+ 
+ ### Layout File Path Mapping Fails
+ - When connecting via `connect`, ensure you provide the absolute path to your local Flutter project directory in the `workspace_root` argument. This allows the path resolver to match package references back to your local files.
 
 ---
 
