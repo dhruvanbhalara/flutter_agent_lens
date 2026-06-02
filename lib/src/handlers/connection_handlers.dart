@@ -163,7 +163,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
           content: [
             TextContent(
                 text: 'No active Flutter applications were discovered. '
-                    'Please make sure your app is running in debug mode, or connect manually using connect_to_app.')
+                    'Please make sure your app is running in debug mode, or connect manually using connect.')
           ],
           isError: true,
         );
@@ -207,7 +207,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
 
       final report = StringBuffer(
           'Multiple active Flutter applications were discovered. '
-          'Please connect explicitly using the connect_to_app tool with one of the URIs below:\n\n');
+          'Please connect explicitly using the connect tool with one of the URIs below:\n\n');
       for (final app in runningApps) {
         report.writeln('- **Project**: ${app.projectName}');
         report.writeln('  - **URI**: `${app.serviceUri}`');

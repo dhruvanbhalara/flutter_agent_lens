@@ -851,7 +851,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       content: [
         TextContent(
             text:
-                'Not connected to a running application. Run connect_to_app first.')
+                'Not connected to a running application. Run connect first.')
       ],
       isError: true,
     );

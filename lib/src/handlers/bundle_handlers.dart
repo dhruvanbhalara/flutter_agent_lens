@@ -9,7 +9,7 @@ extension BundleHandlers on FlutterAgentLensServer {
         content: [
           TextContent(
               text:
-                  'Workspace root is not configured. Run connect_to_app first to set it.')
+                  'Workspace root is not configured. Run connect first to set it.')
         ],
         isError: true,
       );
