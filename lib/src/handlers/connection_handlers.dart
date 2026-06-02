@@ -207,13 +207,6 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     }
   }
 
-  Future<CallToolResult> _handleListRunningApps(CallToolRequest req) async {
-    return _handleAutodiscover(CallToolRequest(
-      name: 'discover_apps',
-      arguments: {'autoConnect': false},
-    ));
-  }
-
   /// Closes the active VM service connection and cancels running streams.
   Future<CallToolResult> _handleDisconnect(CallToolRequest req) async {
     if (_vmService == null) {

@@ -68,56 +68,6 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
   }
 
   void _registerTools() {
-    // Connect to App
-    registerTool(
-      Tool(
-        name: 'connect_to_app',
-        description: 'Connect to a running Flutter app via its VM Service URI.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'uri': StringSchema(
-              description:
-                  'The VM Service HTTP or WS URI (e.g. http://127.0.0.1:8181/auth_token=/).',
-            ),
-            'workspace_root': StringSchema(
-              description:
-                  'Absolute path to the local Flutter project root directory.',
-            ),
-          },
-          required: ['uri'],
-        ),
-      ),
-      _handleConnect,
-    );
-
-    // Discover Running Apps
-    registerTool(
-      Tool(
-        name: 'list_running_apps',
-        description: 'Find running Flutter apps on this machine.',
-        inputSchema: ObjectSchema(properties: {}),
-      ),
-      _handleListRunningApps,
-    );
-
-    // Auto-discover and connect
-    registerTool(
-      Tool(
-        name: 'autodiscover_app',
-        description:
-            'Auto-discover running Flutter applications and automatically connect to them if exactly one is running.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'workspace_root': StringSchema(
-              description:
-                  'Absolute path to the local Flutter project root directory.',
-            ),
-          },
-        ),
-      ),
-      _handleAutodiscover,
-    );
-
     // Get Widget Rebuild Counts
     registerTool(
       Tool(
@@ -133,24 +83,6 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         ),
       ),
       _handleWidgetRebuildCounts,
-    );
-
-    // Evaluate Expression
-    registerTool(
-      Tool(
-        name: 'eval_expression',
-        description:
-            'Evaluate a Dart expression in the context of the running app.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'expression': StringSchema(
-              description: 'The Dart expression to evaluate.',
-            ),
-          },
-          required: ['expression'],
-        ),
-      ),
-      _handleEvalExpression,
     );
 
     // Diagnose Jank
@@ -271,23 +203,6 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         inputSchema: ObjectSchema(properties: {}),
       ),
       _handleGetNetworkProfile,
-    );
-
-    // Inspect Layout Constraints
-    registerTool(
-      Tool(
-        name: 'inspect_layout_constraints',
-        description: 'Retrieve layout constraints and sizes of a widget.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'widget_id': StringSchema(
-              description: 'The unique widget details ID.',
-            ),
-          },
-          required: ['widget_id'],
-        ),
-      ),
-      _handleInspectLayoutConstraints,
     );
 
     // Toggle Widget Selection Mode
@@ -460,95 +375,6 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       _handleToggleDebugFlag,
     );
 
-    // Toggle Layout Guidelines
-    registerTool(
-      Tool(
-        name: 'toggle_layout_guidelines',
-        description:
-            'Toggle rendering of visual layout guidelines (debug paint overlay) on the device.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'enabled': BooleanSchema(
-              description: 'Whether layout guidelines are enabled.',
-            ),
-          },
-          required: ['enabled'],
-        ),
-      ),
-      _handleToggleLayoutGuidelines,
-    );
-
-    // Toggle Oversized Images
-    registerTool(
-      Tool(
-        name: 'toggle_oversized_images',
-        description:
-            'Toggle highlighting of oversized images by inverting their colors.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'enabled': BooleanSchema(
-              description: 'Whether oversized images highlighting is enabled.',
-            ),
-          },
-          required: ['enabled'],
-        ),
-      ),
-      _handleToggleOversizedImages,
-    );
-
-    // Toggle Repaint Rainbow
-    registerTool(
-      Tool(
-        name: 'toggle_repaint_rainbow',
-        description:
-            'Toggle repaint rainbow overlay to show borders when elements repaint.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'enabled': BooleanSchema(
-              description: 'Whether repaint rainbow is enabled.',
-            ),
-          },
-          required: ['enabled'],
-        ),
-      ),
-      _handleToggleRepaintRainbow,
-    );
-
-    // Toggle Baselines
-    registerTool(
-      Tool(
-        name: 'toggle_baselines',
-        description: 'Toggle rendering of text baselines on the device.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'enabled': BooleanSchema(
-              description: 'Whether baselines rendering is enabled.',
-            ),
-          },
-          required: ['enabled'],
-        ),
-      ),
-      _handleToggleBaselines,
-    );
-
-    // Toggle Slow Animations
-    registerTool(
-      Tool(
-        name: 'toggle_slow_animations',
-        description:
-            'Toggle slow animations mode (5x time dilation) for visual debugging.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'enabled': BooleanSchema(
-              description: 'Whether slow animations are enabled.',
-            ),
-          },
-          required: ['enabled'],
-        ),
-      ),
-      _handleToggleSlowAnimations,
-    );
-
     // Get Object Referrers
     registerTool(
       Tool(
@@ -617,12 +443,19 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Connect to a running Flutter app via its VM Service URI.',
         inputSchema: ObjectSchema(
           properties: {
-            'vmServiceUri': StringSchema(
+            'uri': StringSchema(
               description:
                   'The VM Service HTTP or WS URI (e.g. http://127.0.0.1:8181/auth_token=/).',
             ),
+            'vmServiceUri': StringSchema(
+              description:
+                  'Alias for the uri parameter.',
+            ),
+            'workspace_root': StringSchema(
+              description:
+                  'Absolute path to the local Flutter project root directory.',
+            ),
           },
-          required: ['vmServiceUri'],
         ),
       ),
       _handleConnect,
@@ -705,24 +538,6 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         ),
       ),
       _handleInspectLayoutConstraints,
-    );
-
-    // Toggle Debug Paint (Alias)
-    registerTool(
-      Tool(
-        name: 'toggle_debug_paint',
-        description:
-            'Toggle the debug paint overlay (visual layout guidelines) on the Flutter device.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'enabled': BooleanSchema(
-              description: 'Whether visual guidelines are enabled.',
-            ),
-          },
-          required: ['enabled'],
-        ),
-      ),
-      _handleToggleLayoutGuidelines,
     );
 
     // Compare Layout Screenshots
