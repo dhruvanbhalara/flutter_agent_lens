@@ -42,6 +42,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
   String? _workspaceRoot;
   PathResolver? _pathResolver;
   String? _cachedLibraryId;
+  final Map<String, _MemorySnapshot> _memorySnapshots = {};
 
   final List<String> _logBuffer = [];
   StreamSubscription? _stdoutSub;
@@ -56,6 +57,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     _stderrSub = null;
     _loggingSub = null;
     _cachedLibraryId = null;
+    _memorySnapshots.clear();
   }
 
   @override
@@ -791,6 +793,56 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         ),
       ),
       _handleGetWidgetTree,
+    );
+
+    // Save Snapshot
+    registerTool(
+      Tool(
+        name: 'save_snapshot',
+        description: 'Save a named memory snapshot for later comparison.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'name': StringSchema(
+              description: 'A name for this snapshot (e.g., "before-fix", "after-optimization").',
+            ),
+            'forceGC': BooleanSchema(
+              description: 'Force garbage collection before snapshot (default: true).',
+            ),
+          },
+          required: ['name'],
+        ),
+      ),
+      _handleSaveSnapshot,
+    );
+
+    // Compare Snapshots
+    registerTool(
+      Tool(
+        name: 'compare_snapshots',
+        description: 'Compare two previously saved memory snapshots to see deltas.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'before': StringSchema(
+              description: 'Name of the before snapshot.',
+            ),
+            'after': StringSchema(
+              description: 'Name of the after snapshot.',
+            ),
+          },
+          required: ['before', 'after'],
+        ),
+      ),
+      _handleCompareSnapshots,
+    );
+
+    // List Snapshots
+    registerTool(
+      Tool(
+        name: 'list_snapshots',
+        description: 'List all saved memory snapshots available for comparison.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleListSnapshots,
     );
   }
 

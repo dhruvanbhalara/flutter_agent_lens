@@ -110,6 +110,9 @@ All tools require an active connection to a running application, unless stated o
 
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
+| `save_snapshot` | `name` (required), `forceGC` (optional, default: true) | Save a named memory allocation profile snapshot for later comparison. |
+| `compare_snapshots` | `before` (required), `after` (required) | Compare two saved memory snapshots to calculate instance and byte differences. |
+| `list_snapshots` | None | List saved memory snapshots available for comparison. |
 | `audit_class_memory_leak` | `class_name` (required) | Scan heap instances of a class to verify if disposed objects are leaking. |
 | `diff_heap_allocations` | `duration_seconds` (default: 3), `expression` (optional), `force_gc` (default: true) | Calculate memory growth and instance delta metrics over a window. |
 | `get_object_referrers` | `object_id` (required), `limit` (default: 15) | Trace reference paths keeping an object alive in the heap. |

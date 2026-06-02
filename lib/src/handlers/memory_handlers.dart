@@ -267,4 +267,273 @@ extension MemoryHandlers on FlutterAgentLensServer {
           isError: true);
     }
   }
+
+  Future<CallToolResult> _handleSaveSnapshot(CallToolRequest req) async {
+    if (_vmService == null || _isolateId == null) return _notConnected();
+    final name = req.arguments!['name'] as String;
+    final forceGc = (req.arguments?['forceGC'] as bool?) ?? true;
+
+    try {
+      final snapshot = await _takeSnapshot(name, forceGc);
+      _memorySnapshots[name] = snapshot;
+
+      final lines = [
+        '✅ Snapshot "$name" saved.',
+        '',
+        '  Heap: ${_formatBytes(snapshot.heapUsage)} / ${_formatBytes(snapshot.heapCapacity)}',
+        '  Classes tracked: ${snapshot.topClasses.length}',
+        '  Time: ${DateTime.fromMillisecondsSinceEpoch(snapshot.timestamp).toLocal().toString().split(" ").last.split(".").first}',
+        '',
+        'Saved snapshots: ${_memorySnapshots.keys.join(", ")}',
+        '',
+        'Take another snapshot after your change, then use `compare_snapshots` to see the diff.',
+      ];
+
+      return CallToolResult(
+        content: [TextContent(text: lines.join('\n'))],
+      );
+    } catch (e, st) {
+      stderr.writeln('[mcp:save_snapshot] ERROR: $e');
+      stderr.writeln('[mcp:save_snapshot] STACKTRACE: $st');
+      return CallToolResult(
+        content: [TextContent(text: 'Failed to save snapshot: $e')],
+        isError: true,
+      );
+    }
+  }
+
+  Future<CallToolResult> _handleCompareSnapshots(CallToolRequest req) async {
+    final before = req.arguments!['before'] as String;
+    final after = req.arguments!['after'] as String;
+
+    final snap1 = _memorySnapshots[before];
+    final snap2 = _memorySnapshots[after];
+
+    if (snap1 == null) {
+      final available = _memorySnapshots.keys.isEmpty ? 'none' : _memorySnapshots.keys.join(', ');
+      return CallToolResult(
+        content: [TextContent(text: 'Snapshot "$before" not found. Available: $available')],
+        isError: true,
+      );
+    }
+
+    if (snap2 == null) {
+      final available = _memorySnapshots.keys.isEmpty ? 'none' : _memorySnapshots.keys.join(', ');
+      return CallToolResult(
+        content: [TextContent(text: 'Snapshot "$after" not found. Available: $available')],
+        isError: true,
+      );
+    }
+
+    final heapDiff = snap2.heapUsage - snap1.heapUsage;
+    final capacityDiff = snap2.heapCapacity - snap1.heapCapacity;
+
+    final beforeMap = {for (final c in snap1.topClasses) c.name: c};
+    final afterMap = {for (final c in snap2.topClasses) c.name: c};
+
+    final allClassNames = <String>{
+      ...beforeMap.keys,
+      ...afterMap.keys,
+    };
+
+    final diffs = <Map<String, dynamic>>[];
+
+    for (final name in allClassNames) {
+      final b = beforeMap[name];
+      final a = afterMap[name];
+      final bBytes = b?.bytes ?? 0;
+      final aBytes = a?.bytes ?? 0;
+      final bInstances = b?.instances ?? 0;
+      final aInstances = a?.instances ?? 0;
+
+      diffs.add({
+        'name': name,
+        'bytesBefore': bBytes,
+        'bytesAfter': aBytes,
+        'bytesDiff': aBytes - bBytes,
+        'instancesBefore': bInstances,
+        'instancesAfter': aInstances,
+        'instancesDiff': aInstances - bInstances,
+      });
+    }
+
+    final grew = diffs
+        .where((d) => (d['bytesDiff'] as int) > 0)
+        .toList();
+    grew.sort((a, b) => (b['bytesDiff'] as int).compareTo(a['bytesDiff'] as int));
+
+    final shrank = diffs
+        .where((d) => (d['bytesDiff'] as int) < 0)
+        .toList();
+    shrank.sort((a, b) => (a['bytesDiff'] as int).compareTo(b['bytesDiff'] as int));
+
+    final heapIcon = heapDiff <= 0 ? '🟢' : heapDiff > 10000000 ? '🔴' : '🟡';
+    final timeDiffS = ((snap2.timestamp - snap1.timestamp) / 1000).toStringAsFixed(1);
+
+    final output = [
+      '═══════════════════════════════════════════════════════════',
+      '  SNAPSHOT COMPARISON',
+      '  "$before" → "$after"',
+      '═══════════════════════════════════════════════════════════',
+      '',
+      '📊 HEAP OVERVIEW',
+      '───────────────────────────────────────────────────────────',
+      '$heapIcon Heap usage: ${_formatBytes(snap1.heapUsage)} → ${_formatBytes(snap2.heapUsage)} (${heapDiff <= 0 ? "" : "+"}${_formatBytes(heapDiff)}, ${_pctChange(snap1.heapUsage, snap2.heapUsage)})',
+      '  Capacity:   ${_formatBytes(snap1.heapCapacity)} → ${_formatBytes(snap2.heapCapacity)} (${capacityDiff <= 0 ? "" : "+"}${_formatBytes(capacityDiff)})',
+      '  Time between snapshots: ${timeDiffS}s',
+      '',
+    ];
+
+    if (grew.isNotEmpty) {
+      output.add('📈 GREW (top 10)');
+      output.add('───────────────────────────────────────────────────────────');
+      for (final d in grew.take(10)) {
+        final instDiffVal = d['instancesDiff'] as int;
+        final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
+        output.add('  🔺 +${_formatBytes(d['bytesDiff'] as int).padLeft(10)} | ${instDiff.padLeft(8)} inst | ${d['name']}');
+      }
+      output.add('');
+    }
+
+    if (shrank.isNotEmpty) {
+      output.add('📉 SHRANK (top 10)');
+      output.add('───────────────────────────────────────────────────────────');
+      for (final d in shrank.take(10)) {
+        final instDiffVal = d['instancesDiff'] as int;
+        final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
+        output.add('  🔻 ${_formatBytes(d['bytesDiff'] as int).padLeft(11)} | ${instDiff.padLeft(8)} inst | ${d['name']}');
+      }
+      output.add('');
+    }
+
+    output.add('💡 VERDICT');
+    output.add('───────────────────────────────────────────────────────────');
+
+    if (heapDiff < -1000000) {
+      output.add('✅ Memory improved by ${_formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Nice work!');
+    } else if (heapDiff > 1000000) {
+      output.add('⚠️ Memory increased by ${_formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.');
+    } else {
+      output.add('➡️ No significant change in memory usage between snapshots.');
+    }
+
+    return CallToolResult(
+      content: [TextContent(text: output.join('\n'))],
+    );
+  }
+
+  Future<CallToolResult> _handleListSnapshots(CallToolRequest req) async {
+    if (_memorySnapshots.isEmpty) {
+      return CallToolResult(
+        content: [TextContent(text: 'No snapshots saved yet. Use `save_snapshot` to create one.')],
+      );
+    }
+
+    final lines = ['Saved snapshots:', ''];
+    _memorySnapshots.forEach((name, snap) {
+      final timeStr = DateTime.fromMillisecondsSinceEpoch(snap.timestamp).toLocal().toString().split(' ').last.split('.').first;
+      lines.add('  • "$name" — ${_formatBytes(snap.heapUsage)} heap, $timeStr');
+    });
+
+    return CallToolResult(
+      content: [TextContent(text: lines.join('\n'))],
+    );
+  }
+
+  Future<_MemorySnapshot> _takeSnapshot(String name, bool gc) async {
+    final profile = await _vmService!.getAllocationProfile(_isolateId!, gc: gc);
+    final heapUsage = profile.memoryUsage?.heapUsage ?? 0;
+    final heapCapacity = profile.memoryUsage?.heapCapacity ?? 0;
+    final externalUsage = profile.memoryUsage?.externalUsage ?? 0;
+
+    final members = profile.members ?? [];
+    final validMembers = members.where((m) => m.classRef?.name != null).toList();
+
+    validMembers.sort((a, b) => (b.bytesCurrent ?? 0).compareTo(a.bytesCurrent ?? 0));
+    final sorted = validMembers.where((m) => (m.bytesCurrent ?? 0) > 0).take(50).toList();
+
+    final topClasses = sorted.map((m) => _ClassAllocation(
+      name: m.classRef!.name!,
+      bytes: m.bytesCurrent ?? 0,
+      instances: m.instancesCurrent ?? 0,
+    )).toList();
+
+    return _MemorySnapshot(
+      name: name,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+      heapUsage: heapUsage,
+      heapCapacity: heapCapacity,
+      externalUsage: externalUsage,
+      topClasses: topClasses,
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes == 0) return '0 B';
+    final sign = bytes < 0 ? '-' : '';
+    var absVal = bytes.abs().toDouble();
+    final units = ['B', 'KB', 'MB', 'GB'];
+    var i = 0;
+    while (absVal >= 1024.0 && i < units.length - 1) {
+      absVal /= 1024.0;
+      i++;
+    }
+    return '$sign${absVal.toStringAsFixed(2)} ${units[i]}';
+  }
+
+  String _pctChange(int before, int after) {
+    if (before == 0) return after > 0 ? '+∞%' : '0%';
+    final pct = ((after - before) / before) * 100;
+    final sign = pct > 0 ? '+' : '';
+    return '$sign${pct.toStringAsFixed(1)}%';
+  }
+}
+
+class _ClassAllocation {
+  final String name;
+  final int bytes;
+  final int instances;
+
+  _ClassAllocation({
+    required this.name,
+    required this.bytes,
+    required this.instances,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'bytes': bytes,
+      'instances': instances,
+    };
+  }
+}
+
+class _MemorySnapshot {
+  final String name;
+  final int timestamp;
+  final int heapUsage;
+  final int heapCapacity;
+  final int externalUsage;
+  final List<_ClassAllocation> topClasses;
+
+  _MemorySnapshot({
+    required this.name,
+    required this.timestamp,
+    required this.heapUsage,
+    required this.heapCapacity,
+    required this.externalUsage,
+    required this.topClasses,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'timestamp': timestamp,
+      'heapUsage': heapUsage,
+      'heapCapacity': heapCapacity,
+      'externalUsage': externalUsage,
+      'topClasses': topClasses.map((c) => c.toMap()).toList(),
+    };
+  }
 }
