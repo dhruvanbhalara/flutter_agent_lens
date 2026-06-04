@@ -136,8 +136,14 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       );
     } catch (e) {
       stderr.writeln('[mcp:hot_restart] ERROR: $e');
+      var message = 'Hot restart error: $e';
+      if (e is RPCError && e.code == -32601) {
+        message = 'Hot restart is not supported by the current connection. '
+            'This typically happens if the application was not started using a Flutter tool runner (like "flutter run") '
+            'that registers the "ext.flutter.restart" service extension, or if the runner is disconnected.';
+      }
       return CallToolResult(
-        content: [TextContent(text: 'Hot restart error: $e')],
+        content: [TextContent(text: message)],
         isError: true,
       );
     }

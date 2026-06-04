@@ -39,46 +39,30 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
         screenshotDir.createSync(recursive: true);
       }
 
-      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
-      final executable = flutterRoot != null
-          ? p.join(flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter')
-          : (Platform.isWindows ? 'flutter.bat' : 'flutter');
-
       if (action == 'capture_baseline') {
         final baselinePath = p.join(screenshotDir.path, '${baselineName}_baseline.png');
         stderr.writeln('[mcp:screenshot] Capturing baseline to $baselinePath');
 
-        final args = [
-          'screenshot',
-          '--out=$baselinePath',
-          if (screenshotType == 'skia' && _vmServiceUri != null) ...[
-            '--vm-service-url=$_vmServiceUri',
-            '--type=skia',
-          ] else ...[
-            '--type=device',
-          ],
-          if (deviceId != null && deviceId.isNotEmpty) ...[
-            '--device-id=$deviceId',
-          ],
-        ];
-
-        final result = await Process.run(executable, args);
-        if (result.exitCode != 0) {
+        try {
+          final actualType = await _captureDeviceScreenshot(
+            targetPath: baselinePath,
+            screenshotType: screenshotType,
+            deviceId: deviceId,
+          );
+          final notice = (screenshotType == 'skia' && actualType == 'device')
+              ? '\n(Note: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported)'
+              : '';
           return CallToolResult(
             content: [
-              TextContent(
-                text: 'Failed to capture baseline screenshot (Exit Code ${result.exitCode}):\n${result.stderr}',
-              )
+              TextContent(text: 'Successfully captured and saved baseline screenshot to $baselinePath$notice')
             ],
+          );
+        } catch (e) {
+          return CallToolResult(
+            content: [TextContent(text: e.toString())],
             isError: true,
           );
         }
-
-        return CallToolResult(
-          content: [
-            TextContent(text: 'Successfully captured and saved baseline screenshot to $baselinePath')
-          ],
-        );
       } else {
         // Compare action
         final baselinePath = p.join(screenshotDir.path, '${baselineName}_baseline.png');
@@ -95,28 +79,16 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
         }
 
         stderr.writeln('[mcp:screenshot] Capturing current screen to $currentPath');
-        final args = [
-          'screenshot',
-          '--out=$currentPath',
-          if (screenshotType == 'skia' && _vmServiceUri != null) ...[
-            '--vm-service-url=$_vmServiceUri',
-            '--type=skia',
-          ] else ...[
-            '--type=device',
-          ],
-          if (deviceId != null && deviceId.isNotEmpty) ...[
-            '--device-id=$deviceId',
-          ],
-        ];
-
-        final result = await Process.run(executable, args);
-        if (result.exitCode != 0) {
+        String actualType;
+        try {
+          actualType = await _captureDeviceScreenshot(
+            targetPath: currentPath,
+            screenshotType: screenshotType,
+            deviceId: deviceId,
+          );
+        } catch (e) {
           return CallToolResult(
-            content: [
-              TextContent(
-                text: 'Failed to capture comparison screenshot (Exit Code ${result.exitCode}):\n${result.stderr}',
-              )
-            ],
+            content: [TextContent(text: e.toString())],
             isError: true,
           );
         }
@@ -176,6 +148,9 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
         md.writeln('- **Status**: ${passed ? "✅ PASS" : "❌ FAIL"}');
         md.writeln('- **Similarity Score**: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)');
         md.writeln('- **Matching Pixels**: $matchingPixels / $totalPixels');
+        if (screenshotType == 'skia' && actualType == 'device') {
+          md.writeln('- **Notice**: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.');
+        }
         md.writeln();
         md.writeln('#### Files Generated:');
         md.writeln('- Baseline: `$baselinePath`');
@@ -241,40 +216,17 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
     }
 
     try {
-      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
-      final executable = flutterRoot != null
-          ? p.join(flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter')
-          : (Platform.isWindows ? 'flutter.bat' : 'flutter');
-
-      final args = [
-        'screenshot',
-        '--out=$targetPath',
-        if (screenshotType == 'skia' && _vmServiceUri != null) ...[
-          '--vm-service-url=$_vmServiceUri',
-          '--type=skia',
-        ] else ...[
-          '--type=device',
-        ],
-        if (deviceId != null && deviceId.isNotEmpty) ...[
-          '--device-id=$deviceId',
-        ],
-      ];
-
-      final result = await Process.run(executable, args);
-      if (result.exitCode != 0) {
-        return CallToolResult(
-          content: [
-            TextContent(
-              text: 'Failed to capture screenshot (Exit Code ${result.exitCode}):\n${result.stderr}',
-            )
-          ],
-          isError: true,
-        );
-      }
-
+      final actualType = await _captureDeviceScreenshot(
+        targetPath: targetPath,
+        screenshotType: screenshotType,
+        deviceId: deviceId,
+      );
+      final notice = (screenshotType == 'skia' && actualType == 'device')
+          ? '\n(Note: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported)'
+          : '';
       return CallToolResult(
         content: [
-          TextContent(text: 'Screenshot saved to $targetPath'),
+          TextContent(text: 'Screenshot saved to $targetPath$notice'),
         ],
       );
     } catch (e, st) {
@@ -285,5 +237,97 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
         isError: true,
       );
     }
+  }
+
+  Future<String> _captureDeviceScreenshot({
+    required String targetPath,
+    required String screenshotType,
+    required String? deviceId,
+  }) async {
+    // 1. Try direct ADB screencap for Android if type is device
+    if (screenshotType == 'device' && _vmService != null) {
+      try {
+        final vm = await _vmService!.getVM();
+        final os = vm.operatingSystem?.toLowerCase();
+        if (os == 'android') {
+          final adbPath = _findAdbExecutable();
+          final adbArgs = [
+            if (deviceId != null && deviceId.isNotEmpty) ...['-s', deviceId],
+            'shell',
+            'screencap',
+            '-p',
+          ];
+          stderr.writeln('[mcp:screenshot] Android target detected. Capturing via direct ADB: $adbPath ${adbArgs.join(" ")}');
+          final adbResult = await Process.run(adbPath, adbArgs, stdoutEncoding: null);
+          if (adbResult.exitCode == 0) {
+            final bytes = adbResult.stdout as List<int>;
+            if (bytes.isNotEmpty) {
+              await File(targetPath).writeAsBytes(bytes);
+              return 'device';
+            }
+          }
+          throw ProcessException(
+            adbPath,
+            adbArgs,
+            'Direct ADB screencap failed (Exit Code ${adbResult.exitCode}):\n${adbResult.stderr}',
+            adbResult.exitCode,
+          );
+        }
+      } catch (e) {
+        stderr.writeln('[mcp:screenshot] Direct ADB screencap failed: $e. Falling back to standard flutter screenshot.');
+      }
+    }
+
+    // 2. Standard fallback to flutter screenshot
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    final executable = flutterRoot != null
+        ? p.join(flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter')
+        : (Platform.isWindows ? 'flutter.bat' : 'flutter');
+
+    final args = [
+      'screenshot',
+      '--out=$targetPath',
+      if (screenshotType == 'skia' && _vmServiceUri != null) ...[
+        '--vm-service-url=$_vmServiceUri',
+        '--type=skia',
+      ] else ...[
+        '--type=device',
+      ],
+      if (deviceId != null && deviceId.isNotEmpty) ...[
+        '--device-id=$deviceId',
+      ],
+    ];
+
+    final result = await Process.run(executable, args);
+    if (result.exitCode != 0) {
+      final errorMsg = result.stderr.toString();
+      if (screenshotType == 'skia' && errorMsg.contains('Cannot capture SKP screenshot with Impeller enabled.')) {
+        stderr.writeln('[mcp:screenshot] Skia capture failed due to Impeller. Retrying with fallback "device" screenshot...');
+        return _captureDeviceScreenshot(
+          targetPath: targetPath,
+          screenshotType: 'device',
+          deviceId: deviceId,
+        );
+      }
+      throw ProcessException(
+        executable,
+        args,
+        'Failed to capture screenshot (Exit Code ${result.exitCode}):\n$errorMsg',
+        result.exitCode,
+      );
+    }
+
+    return screenshotType;
+  }
+
+  String _findAdbExecutable() {
+    final androidHome = Platform.environment['ANDROID_HOME'] ?? Platform.environment['ANDROID_SDK_ROOT'];
+    if (androidHome != null) {
+      final path = p.join(androidHome, 'platform-tools', Platform.isWindows ? 'adb.exe' : 'adb');
+      if (File(path).existsSync()) {
+        return path;
+      }
+    }
+    return Platform.isWindows ? 'adb.exe' : 'adb';
   }
 }
