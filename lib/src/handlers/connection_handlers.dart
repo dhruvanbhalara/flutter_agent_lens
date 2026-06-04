@@ -3,9 +3,9 @@ part of '../../flutter_agent_lens.dart';
 /// MCP tool handlers for connecting to and disconnecting from a running Flutter app.
 extension ConnectionHandlers on FlutterAgentLensServer {
   Future<CallToolResult> _handleConnect(CallToolRequest req) async {
+    final uri =
+        (req.arguments!['uri'] ?? req.arguments!['vmServiceUri']) as String;
     try {
-      final uri =
-          (req.arguments!['uri'] ?? req.arguments!['vmServiceUri']) as String;
       stderr.writeln('[mcp:connect] Attempting connection to: $uri');
       _vmServiceUri = uri;
       _workspaceRoot = req.arguments?['workspace_root'] as String?;
@@ -57,6 +57,20 @@ extension ConnectionHandlers on FlutterAgentLensServer {
         ],
       );
     } catch (e) {
+      final isDtdUri =
+          uri.contains('58799') || (uri.endsWith('=') && !uri.contains('/ws'));
+      if (isDtdUri || (e is RPCError && e.code == -32601)) {
+        return CallToolResult(
+          content: [
+            TextContent(
+              text: 'Connection warning: Method not found (RPC error -32601).\n'
+                  'It appears you provided a Dart Tooling Daemon (DTD) URI ($uri) instead of the application\'s VM Service WebSocket URI.\n'
+                  'Please run the `discover_apps` tool to automatically locate and connect to the active VM Service, or provide the direct app VM Service URI.',
+            )
+          ],
+          isError: true,
+        );
+      }
       return CallToolResult(
         content: [TextContent(text: 'Connection failed: $e')],
         isError: true,

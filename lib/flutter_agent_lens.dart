@@ -44,6 +44,26 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
   String? _cachedLibraryId;
   final Map<String, _MemorySnapshot> _memorySnapshots = {};
 
+  // Stateful Rebuild Tracking
+  bool _isTrackingRebuilds = false;
+  int? _rebuildStartTime;
+  final Map<String, int> _rebuildCounts = {};
+  final Map<String, String> _rebuildIdToName = {};
+  final Map<String, String> _rebuildIdToFile = {};
+  StreamSubscription? _rebuildSub;
+
+  // Stateful Profiling (CPU & Jank)
+  bool _isProfiling = false;
+  int? _profilingStartTime;
+  double? _targetFps;
+
+  // Stateful Network Capturing
+  bool _isCapturingNetwork = false;
+  int? _networkCaptureStartTime;
+  final Map<String, Map<String, dynamic>> _capturedRequests = {};
+  StreamSubscription? _networkExtensionSub;
+  StreamSubscription? _networkLoggingSub;
+
   final List<String> _logBuffer = [];
   StreamSubscription? _stdoutSub;
   StreamSubscription? _stderrSub;
@@ -53,11 +73,27 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     _stdoutSub?.cancel();
     _stderrSub?.cancel();
     _loggingSub?.cancel();
+    _rebuildSub?.cancel();
+    _networkExtensionSub?.cancel();
+    _networkLoggingSub?.cancel();
     _stdoutSub = null;
     _stderrSub = null;
     _loggingSub = null;
+    _rebuildSub = null;
+    _networkExtensionSub = null;
+    _networkLoggingSub = null;
     _cachedLibraryId = null;
     _memorySnapshots.clear();
+    _isTrackingRebuilds = false;
+    _rebuildCounts.clear();
+    _rebuildIdToName.clear();
+    _rebuildIdToFile.clear();
+    _isProfiling = false;
+    _profilingStartTime = null;
+    _targetFps = null;
+    _isCapturingNetwork = false;
+    _networkCaptureStartTime = null;
+    _capturedRequests.clear();
   }
 
   @override
@@ -126,7 +162,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Trigger a hot reload.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleHotReload,
+      handleHotReload,
     );
 
     // Hot Restart
@@ -136,7 +172,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Trigger a hot restart of the application.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleHotRestart,
+      handleHotRestart,
     );
 
     // Trigger Scroll Gesture
@@ -448,8 +484,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
                   'The VM Service HTTP or WS URI (e.g. http://127.0.0.1:8181/auth_token=/).',
             ),
             'vmServiceUri': StringSchema(
-              description:
-                  'Alias for the uri parameter.',
+              description: 'Alias for the uri parameter.',
             ),
             'workspace_root': StringSchema(
               description:
@@ -515,6 +550,10 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'expression': StringSchema(
               description: 'The Dart expression to evaluate.',
             ),
+            'frame_index': NumberSchema(
+              description:
+                  'Optional frame index to evaluate the expression in (if the app is paused at a breakpoint).',
+            ),
           },
           required: ['expression'],
         ),
@@ -544,23 +583,29 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     registerTool(
       Tool(
         name: 'compare_layout_screenshots',
-        description: 'Capture screenshots and perform pixel diff checks to find layout changes or bugs.',
+        description:
+            'Capture screenshots and perform pixel diff checks to find layout changes or bugs.',
         inputSchema: ObjectSchema(
           properties: {
             'baseline_name': StringSchema(
-              description: 'The filename prefix for the baseline screenshot (e.g. "home_screen").',
+              description:
+                  'The filename prefix for the baseline screenshot (e.g. "home_screen").',
             ),
             'action': StringSchema(
-              description: 'The visual operation to execute (capture_baseline, compare).',
+              description:
+                  'The visual operation to execute (capture_baseline, compare).',
             ),
             'threshold': NumberSchema(
-              description: 'The similarity pass threshold from 0.0 to 1.0 (default: 0.98).',
+              description:
+                  'The similarity pass threshold from 0.0 to 1.0 (default: 0.98).',
             ),
             'screenshot_type': StringSchema(
-              description: 'The format/method to capture (device = native screenshot, skia = Skia Picture via VM service; default: device).',
+              description:
+                  'The format/method to capture (device = native screenshot, skia = Skia Picture via VM service; default: device).',
             ),
             'device_id': StringSchema(
-              description: 'Target device ID or name if multiple devices are connected (prefixes allowed).',
+              description:
+                  'Target device ID or name if multiple devices are connected (prefixes allowed).',
             ),
           },
           required: ['baseline_name', 'action'],
@@ -573,17 +618,21 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     registerTool(
       Tool(
         name: 'take_screenshot',
-        description: 'Capture a standalone screenshot of the running Flutter application.',
+        description:
+            'Capture a standalone screenshot of the running Flutter application.',
         inputSchema: ObjectSchema(
           properties: {
             'screenshot_type': StringSchema(
-              description: 'The capture method (device = native screenshot, skia = Skia Picture via VM service; default: device).',
+              description:
+                  'The capture method (device = native screenshot, skia = Skia Picture via VM service; default: device).',
             ),
             'device_id': StringSchema(
-              description: 'Target device ID or name if multiple devices are connected.',
+              description:
+                  'Target device ID or name if multiple devices are connected.',
             ),
             'output_path': StringSchema(
-              description: 'Optional destination file path. If not specified, the screenshot will be saved to a default directory.',
+              description:
+                  'Optional destination file path. If not specified, the screenshot will be saved to a default directory.',
             ),
           },
         ),
@@ -595,14 +644,17 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     registerTool(
       Tool(
         name: 'get_widget_tree',
-        description: 'Get the current widget tree of the running Flutter application.',
+        description:
+            'Get the current widget tree of the running Flutter application.',
         inputSchema: ObjectSchema(
           properties: {
             'maxDepth': NumberSchema(
-              description: 'Maximum depth of the widget tree to return (default: 15).',
+              description:
+                  'Maximum depth of the widget tree to return (default: 15).',
             ),
             'projectOnly': BooleanSchema(
-              description: 'If true, only return widgets created by the local project code.',
+              description:
+                  'If true, only return widgets created by the local project code.',
             ),
           },
         ),
@@ -618,10 +670,12 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         inputSchema: ObjectSchema(
           properties: {
             'name': StringSchema(
-              description: 'A name for this snapshot (e.g., "before-fix", "after-optimization").',
+              description:
+                  'A name for this snapshot (e.g., "before-fix", "after-optimization").',
             ),
             'forceGC': BooleanSchema(
-              description: 'Force garbage collection before snapshot (default: true).',
+              description:
+                  'Force garbage collection before snapshot (default: true).',
             ),
           },
           required: ['name'],
@@ -634,7 +688,8 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     registerTool(
       Tool(
         name: 'compare_snapshots',
-        description: 'Compare two previously saved memory snapshots to see deltas.',
+        description:
+            'Compare two previously saved memory snapshots to see deltas.',
         inputSchema: ObjectSchema(
           properties: {
             'before': StringSchema(
@@ -654,10 +709,113 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     registerTool(
       Tool(
         name: 'list_snapshots',
-        description: 'List all saved memory snapshots available for comparison.',
+        description:
+            'List all saved memory snapshots available for comparison.',
         inputSchema: ObjectSchema(properties: {}),
       ),
       _handleListSnapshots,
+    );
+
+    // Start Tracking Rebuilds
+    registerTool(
+      Tool(
+        name: 'start_tracking_rebuilds',
+        description:
+            'Start a stateful session to track widget rebuild frequencies.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleStartTrackingRebuilds,
+    );
+
+    // Stop Tracking Rebuilds
+    registerTool(
+      Tool(
+        name: 'stop_tracking_rebuilds',
+        description:
+            'Stop the active widget rebuild tracking session and get the report.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'topN': NumberSchema(
+              description:
+                  'Number of top rebuilding widgets to list (default: 30).',
+            ),
+          },
+        ),
+      ),
+      _handleStopTrackingRebuilds,
+    );
+
+    // Start Profiling
+    registerTool(
+      Tool(
+        name: 'start_profiling',
+        description:
+            'Start a stateful performance profiling session (CPU & Jank).',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleStartProfiling,
+    );
+
+    // Stop Profiling
+    registerTool(
+      Tool(
+        name: 'stop_profiling',
+        description:
+            'Stop the active performance profiling session and get the analysis report.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleStopProfiling,
+    );
+
+    // Start Network Capture
+    registerTool(
+      Tool(
+        name: 'start_network_capture',
+        description:
+            'Start a stateful session to capture HTTP network traffic.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleStartNetworkCapture,
+    );
+
+    // Stop Network Capture
+    registerTool(
+      Tool(
+        name: 'stop_network_capture',
+        description:
+            'Stop the active network capture session and get the traffic report.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'sortBy': StringSchema(
+              description:
+                  'Sort requests by (time, duration, size; default: time).',
+            ),
+          },
+        ),
+      ),
+      _handleStopNetworkCapture,
+    );
+
+    // Get Memory Snapshot
+    registerTool(
+      Tool(
+        name: 'get_memory_snapshot',
+        description:
+            'Get a general snapshot overview of application and framework class allocations.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'forceGC': BooleanSchema(
+              description:
+                  'Force garbage collection before snapshot (default: false).',
+            ),
+            'topN': NumberSchema(
+              description:
+                  'Number of top allocation classes to show (default: 20).',
+            ),
+          },
+        ),
+      ),
+      _handleGetMemorySnapshot,
     );
   }
 
@@ -665,8 +823,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     return CallToolResult(
       content: [
         TextContent(
-            text:
-                'Not connected to a running application. Run connect first.')
+            text: 'Not connected to a running application. Run connect first.')
       ],
       isError: true,
     );
