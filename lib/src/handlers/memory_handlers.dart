@@ -81,6 +81,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
         structuredData: {
           'class_name': className,
           'total_instances': instances.length,
+          'instances': instances.map((i) => i.id).whereType<String>().toList(),
           'leaked_count': reports.length,
           'leaks': reports,
         },
