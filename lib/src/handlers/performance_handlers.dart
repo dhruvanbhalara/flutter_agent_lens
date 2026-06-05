@@ -97,7 +97,10 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       if (success) {
         return CallToolResult(content: [
           TextContent(
-              text: 'Hot reload completed successfully via reloadSources.')
+              text: 'Hot reload completed successfully via reloadSources.\n'
+                  'Note: Hot reload applies changes only if they were compiled by a compiler '
+                  'host (like an active "flutter run" session or your IDE). If you edited files '
+                  'but do not see changes, ensure the compiler is active.')
         ]);
       } else {
         final notices = report.json?['notices'] as List<dynamic>? ?? [];
@@ -127,7 +130,9 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         content: [
           TextContent(
             text: '$originalFailureReason\n'
-                'Successfully fell back to triggering a widget tree reassemble (UI layout refreshed).',
+                'Fell back to rebuild the widget tree (reassemble).\n'
+                'Note: This refreshes the UI layout but does not load new code changes from disk '
+                'unless they were first compiled by a hot runner.',
           )
         ],
       );
@@ -175,7 +180,11 @@ extension PerformanceHandlers on FlutterAgentLensServer {
 
         return CallToolResult(
           content: [
-            TextContent(text: 'Web hot restart completed successfully.')
+            TextContent(
+              text: 'Web hot restart completed successfully.\n'
+                  'Note: Hot restart resets state but requires a compiler runner (like "flutter run") '
+                  'to load updated Dart files from disk.',
+            )
           ],
         );
       } else {
@@ -204,7 +213,13 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         }
 
         return CallToolResult(
-          content: [TextContent(text: 'Hot restart completed successfully.')],
+          content: [
+            TextContent(
+              text: 'Hot restart completed successfully.\n'
+                  'Note: Hot restart resets state but requires a compiler runner (like "flutter run") '
+                  'to load updated Dart files from disk.',
+            )
+          ],
         );
       }
     } catch (e) {
