@@ -234,15 +234,18 @@ extension WidgetHandlers on FlutterAgentLensServer {
     final frameIndex = (req.arguments?['frame_index'] as num?)?.toInt();
 
     if (frameIndex != null) {
-      stderr.writeln('[mcp:evaluate_expression] Evaluating in frame $frameIndex: $expression');
+      stderr.writeln(
+          '[mcp:evaluate_expression] Evaluating in frame $frameIndex: $expression');
     } else {
-      stderr.writeln('[mcp:evaluate_expression] Evaluating in library: $expression');
+      stderr.writeln(
+          '[mcp:evaluate_expression] Evaluating in library: $expression');
     }
 
     try {
       final dynamic res;
       if (frameIndex != null) {
-        res = await _vmService!.evaluateInFrame(_isolateId!, frameIndex, expression);
+        res = await _vmService!
+            .evaluateInFrame(_isolateId!, frameIndex, expression);
       } else {
         final libraryId = await _getEvaluationLibraryId();
         res = await _vmService!.evaluate(_isolateId!, libraryId, expression);
@@ -629,7 +632,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
     final projectOnly = (req.arguments?['projectOnly'] as bool?) ?? false;
 
     try {
-      final objectGroup = 'mcp_inspector_${DateTime.now().millisecondsSinceEpoch}';
+      final objectGroup =
+          'mcp_inspector_${DateTime.now().millisecondsSinceEpoch}';
 
       dynamic rootNode;
       try {
@@ -664,7 +668,10 @@ extension WidgetHandlers on FlutterAgentLensServer {
         rootMap = Map<String, dynamic>.from(rootNode);
       } else {
         return CallToolResult(
-          content: [TextContent(text: 'Unexpected response format for root widget node.')],
+          content: [
+            TextContent(
+                text: 'Unexpected response format for root widget node.')
+          ],
           isError: true,
         );
       }
@@ -682,7 +689,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
       return _serializeDualFormat(
         title: '### Widget Tree Summary',
-        markdownBody: 'Widget Tree ($totalWidgets widgets, $projectWidgets from project, depth: $maxDepthReached)\n\n$text',
+        markdownBody:
+            'Widget Tree ($totalWidgets widgets, $projectWidgets from project, depth: $maxDepthReached)\n\n$text',
         structuredData: {
           'total_widgets': totalWidgets,
           'project_widgets': projectWidgets,
@@ -775,7 +783,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
       for (final child in children) {
         if (child is Map) {
           childResults.addAll(
-            _flattenWidgetTree(Map<String, dynamic>.from(child), depth, maxDepth, projectOnly),
+            _flattenWidgetTree(
+                Map<String, dynamic>.from(child), depth, maxDepth, projectOnly),
           );
         }
       }
@@ -788,7 +797,11 @@ extension WidgetHandlers on FlutterAgentLensServer {
     final description = node['description'] as String?;
     final typeStr = node['type'] as String?;
 
-    final widgetName = creationName ?? widgetRuntimeType ?? description ?? typeStr ?? 'Unknown';
+    final widgetName = creationName ??
+        widgetRuntimeType ??
+        description ??
+        typeStr ??
+        'Unknown';
 
     String? sourceFile;
     int? sourceLine;
@@ -814,7 +827,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
       for (final prop in rawProperties) {
         if (prop is Map) {
           final propName = prop['name']?.toString();
-          final propDesc = prop['description']?.toString() ?? prop['value']?.toString();
+          final propDesc =
+              prop['description']?.toString() ?? prop['value']?.toString();
           if (propName != null && propDesc != null && propDesc != 'null') {
             properties.add({
               'name': propName,
@@ -843,7 +857,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
     for (final child in children) {
       if (child is Map) {
         results.addAll(
-          _flattenWidgetTree(Map<String, dynamic>.from(child), depth + 1, maxDepth, projectOnly),
+          _flattenWidgetTree(Map<String, dynamic>.from(child), depth + 1,
+              maxDepth, projectOnly),
         );
       }
     }
@@ -857,18 +872,312 @@ extension WidgetHandlers on FlutterAgentLensServer {
       final indent = '  ' * w.depth;
       final projectMarker = w.isProjectWidget ? ' ★' : '';
       final childInfo = w.childCount > 0 ? ' (${w.childCount} children)' : '';
-      final sourceInfo = w.sourceFile != null ? ' [${w.sourceFile}:${w.sourceLine}]' : '';
+      final sourceInfo =
+          w.sourceFile != null ? ' [${w.sourceFile}:${w.sourceLine}]' : '';
 
       buffer.write('$indent${w.type}$projectMarker$childInfo$sourceInfo');
 
       final props = w.properties;
       if (props != null && props.isNotEmpty) {
-        final propsStr = props.map((p) => '${p['name']}: ${p['value']}').join(', ');
+        final propsStr =
+            props.map((p) => '${p['name']}: ${p['value']}').join(', ');
         buffer.write(' [$propsStr]');
       }
       buffer.writeln();
     }
     return buffer.toString();
+  }
+
+  Future<CallToolResult> _handleStartTrackingRebuilds(
+      CallToolRequest req) async {
+    if (_vmService == null || _isolateId == null) return _notConnected();
+    if (_isTrackingRebuilds) {
+      return CallToolResult(
+        content: [
+          TextContent(
+              text:
+                  'Already tracking rebuilds. Call stop_tracking_rebuilds first.')
+        ],
+        isError: true,
+      );
+    }
+
+    try {
+      stderr.writeln(
+          '[mcp:widget_rebuild_counts] Starting rebuild tracking session...');
+
+      final isolate = await _vmService!.getIsolate(_isolateId!);
+      final extensions = isolate.extensionRPCs ?? [];
+
+      if (!extensions
+          .contains('ext.flutter.inspector.trackRebuildDirtyWidgets')) {
+        return CallToolResult(
+          content: [
+            TextContent(
+              text: 'Widget rebuild tracking is not available.\n'
+                  'This extension requires a debug-mode Flutter app.',
+            )
+          ],
+          isError: true,
+        );
+      }
+
+      _isTrackingRebuilds = true;
+      _rebuildStartTime = DateTime.now().millisecondsSinceEpoch;
+      _rebuildCounts.clear();
+      _rebuildIdToName.clear();
+      _rebuildIdToFile.clear();
+
+      // Enable rebuild tracking
+      await _vmService!.callServiceExtension(
+        'ext.flutter.inspector.trackRebuildDirtyWidgets',
+        isolateId: _isolateId,
+        args: {'enabled': 'true'},
+      );
+
+      // Pre-seed location lookup map
+      try {
+        final locationResponse = await _vmService!.callServiceExtension(
+          'ext.flutter.inspector.widgetLocationIdMap',
+          isolateId: _isolateId,
+        );
+        final rawLocationResult = locationResponse.json?['result'];
+        if (rawLocationResult is String) {
+          final decoded = jsonDecode(rawLocationResult);
+          _parseLocationsMap(decoded);
+        } else if (rawLocationResult is Map) {
+          _parseLocationsMap(rawLocationResult);
+        }
+      } catch (_) {}
+
+      try {
+        await _vmService!.streamListen(EventStreams.kExtension);
+      } catch (_) {}
+
+      _rebuildSub = _vmService!.onExtensionEvent.listen((Event event) {
+        if (event.extensionKind == 'Flutter.RebuiltWidgets') {
+          final data = event.extensionData?.data;
+          if (data != null) {
+            _parseLocationsMap(data['locations']);
+            _parseNewLocationsMap(data['newLocations']);
+
+            final events = data['events'] as List<dynamic>?;
+            if (events != null) {
+              for (var i = 0; i + 1 < events.length; i += 2) {
+                final locId = events[i].toString();
+                final count = events[i + 1] is int ? events[i + 1] as int : 1;
+                _rebuildCounts[locId] = (_rebuildCounts[locId] ?? 0) + count;
+              }
+            }
+          }
+        }
+      });
+
+      return CallToolResult(
+        content: [
+          TextContent(
+            text:
+                'Rebuild tracking started. Interact with the app now, then call `stop_tracking_rebuilds` to see the report.',
+          )
+        ],
+      );
+    } catch (e) {
+      _isTrackingRebuilds = false;
+      return CallToolResult(
+        content: [TextContent(text: 'Failed to start rebuild tracking: $e')],
+        isError: true,
+      );
+    }
+  }
+
+  Future<CallToolResult> _handleStopTrackingRebuilds(
+      CallToolRequest req) async {
+    if (_vmService == null || _isolateId == null) return _notConnected();
+    if (!_isTrackingRebuilds) {
+      return CallToolResult(
+        content: [
+          TextContent(
+              text:
+                  'Not tracking rebuilds. Call start_tracking_rebuilds first.')
+        ],
+        isError: true,
+      );
+    }
+
+    final topN = (req.arguments?['topN'] as num?)?.toInt() ?? 30;
+
+    try {
+      stderr.writeln(
+          '[mcp:widget_rebuild_counts] Stopping rebuild tracking session...');
+      _isTrackingRebuilds = false;
+      await _rebuildSub?.cancel();
+      _rebuildSub = null;
+
+      await _vmService!.callServiceExtension(
+        'ext.flutter.inspector.trackRebuildDirtyWidgets',
+        isolateId: _isolateId,
+        args: {'enabled': 'false'},
+      );
+
+      final durationSec = _rebuildStartTime != null
+          ? ((DateTime.now().millisecondsSinceEpoch - _rebuildStartTime!) /
+                  1000.0)
+              .toStringAsFixed(1)
+          : 'unknown';
+
+      // Refresh locations map one last time
+      try {
+        final locationResponse = await _vmService!.callServiceExtension(
+          'ext.flutter.inspector.widgetLocationIdMap',
+          isolateId: _isolateId,
+        );
+        final rawLocationResult = locationResponse.json?['result'];
+        if (rawLocationResult is String) {
+          final decoded = jsonDecode(rawLocationResult);
+          _parseLocationsMap(decoded);
+        } else if (rawLocationResult is Map) {
+          _parseLocationsMap(rawLocationResult);
+        }
+      } catch (_) {}
+
+      // Build results
+      final widgets = <Map<String, dynamic>>[];
+      var totalRebuilds = 0;
+
+      _rebuildCounts.forEach((locId, count) {
+        totalRebuilds += count;
+        final name = _rebuildIdToName[locId] ?? 'Widget#$locId';
+        final rawFile = _rebuildIdToFile[locId] ?? 'unknown';
+        final resolvedPath = _pathResolver != null
+            ? _pathResolver!.resolveToAbsolutePath(rawFile)
+            : rawFile;
+        widgets.add({
+          'widget': name,
+          'count': count,
+          'location': resolvedPath,
+          'id': locId,
+        });
+      });
+
+      widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+
+      final output = [
+        '═══════════════════════════════════════════════════════════',
+        '  WIDGET REBUILD REPORT',
+        '═══════════════════════════════════════════════════════════',
+        '',
+        '  SUMMARY',
+        '───────────────────────────────────────────────────────────',
+        'Tracked for ${durationSec}s',
+        'Total rebuilds: $totalRebuilds',
+        'Unique widgets rebuilt: ${widgets.length}',
+        '',
+      ];
+
+      if (widgets.isEmpty) {
+        output.add(
+            'No rebuilds captured. Make sure you interacted with the app while tracking.');
+      } else {
+        output.add(
+            'TOP ${widgets.length < topN ? widgets.length : topN} REBUILDING WIDGETS');
+        output
+            .add('───────────────────────────────────────────────────────────');
+        for (final w in widgets.take(topN)) {
+          final count = w['count'] as int;
+          final name = w['widget'] as String;
+          final fileLoc = w['location'] as String;
+          final shortFile = fileLoc.split('/lib/').last;
+          final severity = count > 100
+              ? '[HIGH]  '
+              : count > 30
+                  ? '[MEDIUM]'
+                  : count > 10
+                      ? '[LOW]   '
+                      : '[OK]    ';
+          output.add(
+              '$severity ${count.toString().padLeft(6)}x | $name [$shortFile]');
+        }
+
+        final excessive =
+            widgets.where((w) => (w['count'] as int) > 50).toList();
+        if (excessive.isNotEmpty) {
+          output.add('');
+          output.add('RECOMMENDATIONS');
+          output.add(
+              '───────────────────────────────────────────────────────────');
+          for (final w in excessive.take(5)) {
+            final count = w['count'] as int;
+            final name = w['widget'] as String;
+            final fileLoc = w['location'] as String;
+            final shortFile = fileLoc.split('/lib/').last;
+            output.add('• $name rebuilt ${count}x [$shortFile]');
+            if (count > 100) {
+              output.add(
+                  '  → Wrap in a const constructor, or extract to limit rebuild scope.');
+            } else {
+              output.add(
+                  '  → Consider optimizing state dependencies or using context.select().');
+            }
+          }
+        }
+      }
+
+      return _serializeDualFormat(
+        title: '### Widget Rebuild Analysis',
+        markdownBody: output.join('\n'),
+        structuredData: {
+          'duration_seconds': double.tryParse(durationSec) ?? 0.0,
+          'total_recorded_widgets': widgets.length,
+          'total_rebuilds': totalRebuilds,
+          'rebuilds': widgets,
+        },
+      );
+    } catch (e) {
+      return CallToolResult(
+        content: [TextContent(text: 'Failed to stop rebuild tracking: $e')],
+        isError: true,
+      );
+    }
+  }
+
+  void _parseLocationsMap(dynamic locationsObj) {
+    if (locationsObj is! Map) return;
+    locationsObj.forEach((key, value) {
+      final filePath = key.toString();
+      if (value is Map) {
+        final ids = value['ids'];
+        final lines = value['lines'];
+        final names = value['names'];
+        if (ids is List) {
+          for (var i = 0; i < ids.length; i++) {
+            final id = ids[i].toString();
+            final line =
+                (lines is List && i < lines.length) ? lines[i].toString() : '?';
+            final name = (names is List && i < names.length && names[i] != null)
+                ? names[i].toString()
+                : null;
+            if (name != null && name.isNotEmpty) {
+              _rebuildIdToName[id] = name;
+            }
+            _rebuildIdToFile[id] = '$filePath:$line';
+          }
+        }
+      }
+    });
+  }
+
+  void _parseNewLocationsMap(dynamic newLocationsObj) {
+    if (newLocationsObj is! Map) return;
+    newLocationsObj.forEach((key, value) {
+      final filePath = key.toString();
+      if (value is List) {
+        for (var i = 0; i + 2 < value.length; i += 3) {
+          final id = value[i].toString();
+          final line = value[i + 1].toString();
+          _rebuildIdToFile.putIfAbsent(id, () => '$filePath:$line');
+        }
+      }
+    });
   }
 }
 

@@ -2,11 +2,16 @@ part of '../../flutter_agent_lens.dart';
 
 /// Extension containing handlers for capturing and comparing layout screenshots.
 extension ScreenshotHandlers on FlutterAgentLensServer {
-  Future<CallToolResult> _handleCompareLayoutScreenshots(CallToolRequest req) async {
+  Future<CallToolResult> _handleCompareLayoutScreenshots(
+      CallToolRequest req) async {
     final root = _workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
-        content: [TextContent(text: 'Workspace root is not configured. Run connect first to set it.')],
+        content: [
+          TextContent(
+              text:
+                  'Workspace root is not configured. Run connect first to set it.')
+        ],
         isError: true,
       );
     }
@@ -14,18 +19,26 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
     final baselineName = req.arguments!['baseline_name'] as String;
     final action = req.arguments!['action'] as String;
     final threshold = (req.arguments?['threshold'] as num?)?.toDouble() ?? 0.98;
-    final screenshotType = req.arguments?['screenshot_type'] as String? ?? 'device';
+    final screenshotType =
+        req.arguments?['screenshot_type'] as String? ?? 'device';
     final deviceId = req.arguments?['device_id'] as String?;
 
     if (action != 'capture_baseline' && action != 'compare') {
       return CallToolResult(
-        content: [TextContent(text: 'Invalid action. Supported actions: capture_baseline, compare.')],
+        content: [
+          TextContent(
+              text:
+                  'Invalid action. Supported actions: capture_baseline, compare.')
+        ],
         isError: true,
       );
     }
     if (screenshotType != 'device' && screenshotType != 'skia') {
       return CallToolResult(
-        content: [TextContent(text: 'Invalid screenshot_type. Supported values: device, skia.')],
+        content: [
+          TextContent(
+              text: 'Invalid screenshot_type. Supported values: device, skia.')
+        ],
         isError: true,
       );
     }
@@ -40,7 +53,8 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
       }
 
       if (action == 'capture_baseline') {
-        final baselinePath = p.join(screenshotDir.path, '${baselineName}_baseline.png');
+        final baselinePath =
+            p.join(screenshotDir.path, '${baselineName}_baseline.png');
         stderr.writeln('[mcp:screenshot] Capturing baseline to $baselinePath');
 
         try {
@@ -54,7 +68,9 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
               : '';
           return CallToolResult(
             content: [
-              TextContent(text: 'Successfully captured and saved baseline screenshot to $baselinePath$notice')
+              TextContent(
+                  text:
+                      'Successfully captured and saved baseline screenshot to $baselinePath$notice')
             ],
           );
         } catch (e) {
@@ -65,20 +81,25 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
         }
       } else {
         // Compare action
-        final baselinePath = p.join(screenshotDir.path, '${baselineName}_baseline.png');
-        final currentPath = p.join(screenshotDir.path, '${baselineName}_current.png');
+        final baselinePath =
+            p.join(screenshotDir.path, '${baselineName}_baseline.png');
+        final currentPath =
+            p.join(screenshotDir.path, '${baselineName}_current.png');
         final diffPath = p.join(screenshotDir.path, '${baselineName}_diff.png');
 
         if (!File(baselinePath).existsSync()) {
           return CallToolResult(
             content: [
-              TextContent(text: 'Baseline screenshot not found for "$baselineName". Run capture_baseline first.')
+              TextContent(
+                  text:
+                      'Baseline screenshot not found for "$baselineName". Run capture_baseline first.')
             ],
             isError: true,
           );
         }
 
-        stderr.writeln('[mcp:screenshot] Capturing current screen to $currentPath');
+        stderr.writeln(
+            '[mcp:screenshot] Capturing current screen to $currentPath');
         String actualType;
         try {
           actualType = await _captureDeviceScreenshot(
@@ -102,7 +123,11 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
 
         if (img1 == null || img2 == null) {
           return CallToolResult(
-            content: [TextContent(text: 'Failed to decode screenshots. Ensure the captured files are valid PNGs.')],
+            content: [
+              TextContent(
+                  text:
+                      'Failed to decode screenshots. Ensure the captured files are valid PNGs.')
+            ],
             isError: true,
           );
         }
@@ -111,7 +136,8 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
           return CallToolResult(
             content: [
               TextContent(
-                text: 'Layout size mismatch: Baseline is ${img1.width}x${img1.height}, '
+                text:
+                    'Layout size mismatch: Baseline is ${img1.width}x${img1.height}, '
                     'but current screen is ${img2.width}x${img2.height}.',
               )
             ],
@@ -144,12 +170,15 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
         stderr.writeln('[mcp:screenshot] Saving diff image to $diffPath');
         await File(diffPath).writeAsBytes(img.encodePng(diffImage));
 
-        final md = StringBuffer('### Layout Screenshot Comparison: `$baselineName`\n\n');
-        md.writeln('- **Status**: ${passed ? "✅ PASS" : "❌ FAIL"}');
-        md.writeln('- **Similarity Score**: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)');
+        final md = StringBuffer(
+            '### Layout Screenshot Comparison: `$baselineName`\n\n');
+        md.writeln('- **Status**: ${passed ? "PASS" : "FAIL"}');
+        md.writeln(
+            '- **Similarity Score**: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)');
         md.writeln('- **Matching Pixels**: $matchingPixels / $totalPixels');
         if (screenshotType == 'skia' && actualType == 'device') {
-          md.writeln('- **Notice**: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.');
+          md.writeln(
+              '- **Notice**: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.');
         }
         md.writeln();
         md.writeln('#### Files Generated:');
@@ -187,18 +216,25 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
     final root = _workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
-        content: [TextContent(text: 'Workspace root is not configured. Run connect first.')],
+        content: [
+          TextContent(
+              text: 'Workspace root is not configured. Run connect first.')
+        ],
         isError: true,
       );
     }
 
-    final screenshotType = req.arguments?['screenshot_type'] as String? ?? 'device';
+    final screenshotType =
+        req.arguments?['screenshot_type'] as String? ?? 'device';
     final deviceId = req.arguments?['device_id'] as String?;
     final outputPath = req.arguments?['output_path'] as String?;
 
     if (screenshotType != 'device' && screenshotType != 'skia') {
       return CallToolResult(
-        content: [TextContent(text: 'Invalid screenshot_type. Supported values: device, skia.')],
+        content: [
+          TextContent(
+              text: 'Invalid screenshot_type. Supported values: device, skia.')
+        ],
         isError: true,
       );
     }
@@ -257,8 +293,10 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
             'screencap',
             '-p',
           ];
-          stderr.writeln('[mcp:screenshot] Android target detected. Capturing via direct ADB: $adbPath ${adbArgs.join(" ")}');
-          final adbResult = await Process.run(adbPath, adbArgs, stdoutEncoding: null);
+          stderr.writeln(
+              '[mcp:screenshot] Android target detected. Capturing via direct ADB: $adbPath ${adbArgs.join(" ")}');
+          final adbResult =
+              await Process.run(adbPath, adbArgs, stdoutEncoding: null);
           if (adbResult.exitCode == 0) {
             final bytes = adbResult.stdout as List<int>;
             if (bytes.isNotEmpty) {
@@ -274,14 +312,16 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
           );
         }
       } catch (e) {
-        stderr.writeln('[mcp:screenshot] Direct ADB screencap failed: $e. Falling back to standard flutter screenshot.');
+        stderr.writeln(
+            '[mcp:screenshot] Direct ADB screencap failed: $e. Falling back to standard flutter screenshot.');
       }
     }
 
     // 2. Standard fallback to flutter screenshot
     final flutterRoot = Platform.environment['FLUTTER_ROOT'];
     final executable = flutterRoot != null
-        ? p.join(flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter')
+        ? p.join(
+            flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter')
         : (Platform.isWindows ? 'flutter.bat' : 'flutter');
 
     final args = [
@@ -301,8 +341,11 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
     final result = await Process.run(executable, args);
     if (result.exitCode != 0) {
       final errorMsg = result.stderr.toString();
-      if (screenshotType == 'skia' && errorMsg.contains('Cannot capture SKP screenshot with Impeller enabled.')) {
-        stderr.writeln('[mcp:screenshot] Skia capture failed due to Impeller. Retrying with fallback "device" screenshot...');
+      if (screenshotType == 'skia' &&
+          errorMsg.contains(
+              'Cannot capture SKP screenshot with Impeller enabled.')) {
+        stderr.writeln(
+            '[mcp:screenshot] Skia capture failed due to Impeller. Retrying with fallback "device" screenshot...');
         return _captureDeviceScreenshot(
           targetPath: targetPath,
           screenshotType: 'device',
@@ -321,9 +364,11 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
   }
 
   String _findAdbExecutable() {
-    final androidHome = Platform.environment['ANDROID_HOME'] ?? Platform.environment['ANDROID_SDK_ROOT'];
+    final androidHome = Platform.environment['ANDROID_HOME'] ??
+        Platform.environment['ANDROID_SDK_ROOT'];
     if (androidHome != null) {
-      final path = p.join(androidHome, 'platform-tools', Platform.isWindows ? 'adb.exe' : 'adb');
+      final path = p.join(androidHome, 'platform-tools',
+          Platform.isWindows ? 'adb.exe' : 'adb');
       if (File(path).existsSync()) {
         return path;
       }
