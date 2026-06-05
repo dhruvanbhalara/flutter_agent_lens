@@ -85,62 +85,121 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     }
   }
 
-  Future<CallToolResult> _handleHotReload(CallToolRequest req) async {
+  Future<CallToolResult> handleHotReload(CallToolRequest req) async {
     if (_vmService == null || _isolateId == null) return _notConnected();
 
     try {
-      stderr.writeln('[mcp:hot_reload] Triggering hot reload...');
+      stderr.writeln('[mcp:hot_reload] Triggering hot reload via reloadSources...');
       final report = await _vmService!.reloadSources(_isolateId!, force: false);
       final success = report.success ?? false;
 
       if (success) {
         return CallToolResult(
-            content: [TextContent(text: 'Hot reload completed successfully.')]);
+            content: [TextContent(text: 'Hot reload completed successfully via reloadSources.')]);
       } else {
         final notices = report.json?['notices'] as List<dynamic>? ?? [];
         final errors = notices
             .map((n) => n['message']?.toString() ?? n.toString())
             .join('\n');
-        return CallToolResult(
-          content: [TextContent(text: 'Hot reload failed:\n$errors')],
-          isError: true,
-        );
+        stderr.writeln('[mcp:hot_reload] reloadSources failed: $errors. Falling back to reassemble.');
+        return _fallbackReassemble('Hot reload sources failed:\n$errors');
       }
     } catch (e) {
-      stderr.writeln('[mcp:hot_reload] ERROR: $e');
-      return CallToolResult(
-          content: [TextContent(text: 'Hot reload error: $e')], isError: true);
+      stderr.writeln('[mcp:hot_reload] reloadSources threw exception: $e. Falling back to reassemble.');
+      return _fallbackReassemble('Hot reload via reloadSources failed ($e).');
     }
   }
 
-  Future<CallToolResult> _handleHotRestart(CallToolRequest req) async {
+  Future<CallToolResult> _fallbackReassemble(String originalFailureReason) async {
+    try {
+      stderr.writeln('[mcp:hot_reload] Attempting fallback UI reassemble...');
+      await _vmService!.callServiceExtension(
+        'ext.flutter.reassemble',
+        isolateId: _isolateId!,
+      );
+      return CallToolResult(
+        content: [
+          TextContent(
+            text: '$originalFailureReason\n'
+                'Successfully fell back to triggering a widget tree reassemble (UI layout refreshed).',
+          )
+        ],
+      );
+    } catch (fallbackError) {
+      stderr.writeln('[mcp:hot_reload] Fallback reassemble failed: $fallbackError');
+      return CallToolResult(
+        content: [
+          TextContent(
+            text: '$originalFailureReason\n'
+                'Fallback to widget tree reassemble also failed: $fallbackError',
+          )
+        ],
+        isError: true,
+      );
+    }
+  }
+
+  Future<CallToolResult> handleHotRestart(CallToolRequest req) async {
     if (_vmService == null || _isolateId == null) return _notConnected();
 
     try {
-      stderr.writeln('[mcp:hot_restart] Triggering hot restart...');
-      final response = await _vmService!.callServiceExtension(
-        'ext.flutter.restart',
-        isolateId: _isolateId,
-      );
+      stderr.writeln('[mcp:hot_restart] Fetching isolate information to check extensions...');
+      final isolate = await _vmService!.getIsolate(_isolateId!);
+      final extensions = isolate.extensionRPCs ?? [];
+      final hasWebRestart = extensions.contains('ext.flutter.restart');
 
-      final error = response.json?['error'];
-      if (error != null) {
+      if (hasWebRestart) {
+        stderr.writeln('[mcp:hot_restart] Web restart extension found. Triggering ext.flutter.restart...');
+        await _vmService!.callServiceExtension(
+          'ext.flutter.restart',
+          isolateId: _isolateId!,
+        );
+
+        // Refresh isolate ID and clear library cache
+        final vm = await _vmService!.getVM();
+        if (vm.isolates != null && vm.isolates!.isNotEmpty) {
+          _isolateId = vm.isolates!.first.id!;
+          _cachedLibraryId = null;
+          stderr.writeln('[mcp:hot_restart] Refreshed main isolate ID: $_isolateId');
+        }
+
         return CallToolResult(
-          content: [TextContent(text: 'Hot restart failed: $error')],
-          isError: true,
+          content: [TextContent(text: 'Web hot restart completed successfully.')],
+        );
+      } else {
+        stderr.writeln('[mcp:hot_restart] Web restart extension not found. Triggering host hotRestart...');
+        final response = await _vmService!.callMethod(
+          'hotRestart',
+          args: <String, Object?>{'pause': false},
+        );
+
+        final error = response.json?['error'];
+        if (error != null) {
+          return CallToolResult(
+            content: [TextContent(text: 'Hot restart failed: $error')],
+            isError: true,
+          );
+        }
+
+        // Refresh isolate ID and clear library cache
+        final vm = await _vmService!.getVM();
+        if (vm.isolates != null && vm.isolates!.isNotEmpty) {
+          _isolateId = vm.isolates!.first.id!;
+          _cachedLibraryId = null;
+          stderr.writeln('[mcp:hot_restart] Refreshed main isolate ID: $_isolateId');
+        }
+
+        return CallToolResult(
+          content: [TextContent(text: 'Hot restart completed successfully.')],
         );
       }
-
-      return CallToolResult(
-        content: [TextContent(text: 'Hot restart completed successfully.')],
-      );
     } catch (e) {
       stderr.writeln('[mcp:hot_restart] ERROR: $e');
       var message = 'Hot restart error: $e';
       if (e is RPCError && e.code == -32601) {
         message = 'Hot restart is not supported by the current connection. '
             'This typically happens if the application was not started using a Flutter tool runner (like "flutter run") '
-            'that registers the "ext.flutter.restart" service extension, or if the runner is disconnected.';
+            'that registers the "hotRestart" service, or if the runner is disconnected.';
       }
       return CallToolResult(
         content: [TextContent(text: message)],

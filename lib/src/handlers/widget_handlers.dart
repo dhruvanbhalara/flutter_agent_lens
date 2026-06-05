@@ -231,12 +231,23 @@ extension WidgetHandlers on FlutterAgentLensServer {
   Future<CallToolResult> _handleEvalExpression(CallToolRequest req) async {
     if (_vmService == null || _isolateId == null) return _notConnected();
     final expression = req.arguments!['expression'] as String;
-    stderr.writeln('[mcp:evaluate_expression] Evaluating: $expression');
+    final frameIndex = (req.arguments?['frame_index'] as num?)?.toInt();
+
+    if (frameIndex != null) {
+      stderr.writeln('[mcp:evaluate_expression] Evaluating in frame $frameIndex: $expression');
+    } else {
+      stderr.writeln('[mcp:evaluate_expression] Evaluating in library: $expression');
+    }
 
     try {
-      final libraryId = await _getEvaluationLibraryId();
-      final res =
-          await _vmService!.evaluate(_isolateId!, libraryId, expression);
+      final dynamic res;
+      if (frameIndex != null) {
+        res = await _vmService!.evaluateInFrame(_isolateId!, frameIndex, expression);
+      } else {
+        final libraryId = await _getEvaluationLibraryId();
+        res = await _vmService!.evaluate(_isolateId!, libraryId, expression);
+      }
+
       final valStr = res is InstanceRef ? res.valueAsString : res.toString();
       final kindStr = res is InstanceRef ? res.kind : 'Unknown';
       final classStr = res is InstanceRef ? res.classRef?.name : 'Unknown';

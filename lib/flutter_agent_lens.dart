@@ -126,7 +126,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Trigger a hot reload.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleHotReload,
+      handleHotReload,
     );
 
     // Hot Restart
@@ -136,7 +136,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Trigger a hot restart of the application.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleHotRestart,
+      handleHotRestart,
     );
 
     // Trigger Scroll Gesture
@@ -514,6 +514,9 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           properties: {
             'expression': StringSchema(
               description: 'The Dart expression to evaluate.',
+            ),
+            'frame_index': NumberSchema(
+              description: 'Optional frame index to evaluate the expression in (if the app is paused at a breakpoint).',
             ),
           },
           required: ['expression'],
