@@ -64,7 +64,14 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
   StreamSubscription? _networkExtensionSub;
   StreamSubscription? _networkLoggingSub;
 
+  // Tracks dynamically registered service methods (e.g. 'hotRestart' -> 's0.hotRestart')
+  // populated by listening to the VM Service 'Service' stream on connect.
+  final Map<String, String> _registeredMethodsForService = {};
+  StreamSubscription? _serviceStreamSub;
+
   final List<String> _logBuffer = [];
+  String? _lastLogLine;
+  int _duplicateLogCount = 0;
   StreamSubscription? _stdoutSub;
   StreamSubscription? _stderrSub;
   StreamSubscription? _loggingSub;
@@ -76,12 +83,15 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     _rebuildSub?.cancel();
     _networkExtensionSub?.cancel();
     _networkLoggingSub?.cancel();
+    _serviceStreamSub?.cancel();
     _stdoutSub = null;
     _stderrSub = null;
     _loggingSub = null;
     _rebuildSub = null;
     _networkExtensionSub = null;
     _networkLoggingSub = null;
+    _serviceStreamSub = null;
+    _registeredMethodsForService.clear();
     _cachedLibraryId = null;
     _memorySnapshots.clear();
     _isTrackingRebuilds = false;
@@ -94,6 +104,8 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     _isCapturingNetwork = false;
     _networkCaptureStartTime = null;
     _capturedRequests.clear();
+    _lastLogLine = null;
+    _duplicateLogCount = 0;
   }
 
   @override
@@ -118,7 +130,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleWidgetRebuildCounts,
+      _wrap('get_widget_rebuild_counts', _handleWidgetRebuildCounts),
     );
 
     // Diagnose Jank
@@ -134,7 +146,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleDiagnoseJank,
+      _wrap('diagnose_jank', _handleDiagnoseJank),
     );
 
     // Audit Memory Leaks
@@ -152,7 +164,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['class_name'],
         ),
       ),
-      _handleAuditClassMemoryLeak,
+      _wrap('audit_class_memory_leak', _handleAuditClassMemoryLeak),
     );
 
     // Hot Reload
@@ -162,7 +174,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Trigger a hot reload.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      handleHotReload,
+      _wrap('hot_reload', handleHotReload),
     );
 
     // Hot Restart
@@ -172,7 +184,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Trigger a hot restart of the application.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      handleHotRestart,
+      _wrap('hot_restart', handleHotRestart),
     );
 
     // Trigger Scroll Gesture
@@ -193,7 +205,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['scroll_controller_expression'],
         ),
       ),
-      _handleScrollGesture,
+      _wrap('trigger_scroll_gesture', _handleScrollGesture),
     );
 
     // Fetch Console Logs
@@ -211,7 +223,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleFetchConsoleLogs,
+      _wrap('fetch_console_logs', _handleFetchConsoleLogs),
     );
 
     // Get CPU Profile
@@ -228,7 +240,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleGetCpuProfile,
+      _wrap('get_cpu_profile', _handleGetCpuProfile),
     );
 
     // Get Network Profile
@@ -238,7 +250,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Fetch network profile request histories.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleGetNetworkProfile,
+      _wrap('get_network_profile', _handleGetNetworkProfile),
     );
 
     // Toggle Widget Selection Mode
@@ -257,7 +269,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['enabled'],
         ),
       ),
-      _handleToggleWidgetSelection,
+      _wrap('toggle_widget_selection', _handleToggleWidgetSelection),
     );
 
     // Toggle Package Widgets Visibility
@@ -275,7 +287,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['enabled'],
         ),
       ),
-      _handleTogglePackageWidgets,
+      _wrap('toggle_package_widgets', _handleTogglePackageWidgets),
     );
 
     // Memory Allocations Delta
@@ -300,7 +312,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleDiffHeapAllocations,
+      _wrap('diff_heap_allocations', _handleDiffHeapAllocations),
     );
 
     // Analyze Bundle Size
@@ -315,10 +327,15 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'Target format to inspect (e.g. apk, appbundle, ios, web; default: apk).',
             ),
+            'target_platform': StringSchema(
+              description:
+                  'Specific target platform (e.g. android-arm64, android-arm, android-x64). Only used for Android.',
+            ),
           },
         ),
       ),
-      _handleAnalyzeBundleSize,
+      _wrap('analyze_bundle_size', _handleAnalyzeBundleSize,
+          requiresConnection: false),
     );
 
     // Get Call Stack
@@ -335,7 +352,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleGetCallStack,
+      _wrap('get_call_stack', _handleGetCallStack),
     );
 
     // Set Exception Pause Mode
@@ -352,7 +369,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['mode'],
         ),
       ),
-      _handleSetExceptionPauseMode,
+      _wrap('set_exception_pause_mode', _handleSetExceptionPauseMode),
     );
 
     // Validate Deep Links
@@ -380,7 +397,8 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['platform'],
         ),
       ),
-      _handleValidateDeepLinks,
+      _wrap('validate_deep_links', _handleValidateDeepLinks,
+          requiresConnection: false),
     );
 
     // Toggle Debug Flag
@@ -408,7 +426,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['flag_name', 'value'],
         ),
       ),
-      _handleToggleDebugFlag,
+      _wrap('toggle_debug_flag', _handleToggleDebugFlag),
     );
 
     // Get Object Referrers
@@ -428,7 +446,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['object_id'],
         ),
       ),
-      _handleGetObjectReferrers,
+      _wrap('get_object_referrers', _handleGetObjectReferrers),
     );
 
     // Add Breakpoint
@@ -452,7 +470,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['file_path', 'line'],
         ),
       ),
-      _handleAddBreakpoint,
+      _wrap('add_breakpoint', _handleAddBreakpoint),
     );
 
     // Remove Breakpoint
@@ -469,7 +487,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['breakpoint_id'],
         ),
       ),
-      _handleRemoveBreakpoint,
+      _wrap('remove_breakpoint', _handleRemoveBreakpoint),
     );
 
     // Connect (Alias)
@@ -493,7 +511,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleConnect,
+      _wrap('connect', _handleConnect, requiresConnection: false),
     );
 
     // Disconnect (Alias)
@@ -503,7 +521,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Disconnect from the currently connected Flutter app.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleDisconnect,
+      _wrap('disconnect', _handleDisconnect),
     );
 
     // Get App Info (Alias)
@@ -514,7 +532,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Get detailed information about the connected Flutter app including VM info, isolates, and available extensions.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleGetAppInfo,
+      _wrap('get_app_info', _handleGetAppInfo),
     );
 
     // Discover Apps (Alias)
@@ -536,7 +554,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleAutodiscover,
+      _wrap('discover_apps', _handleAutodiscover, requiresConnection: false),
     );
 
     // Evaluate Expression (Alias)
@@ -558,7 +576,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['expression'],
         ),
       ),
-      _handleEvalExpression,
+      _wrap('evaluate_expression', _handleEvalExpression),
     );
 
     // Inspect Widget (Alias)
@@ -576,7 +594,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['widgetId'],
         ),
       ),
-      _handleInspectLayoutConstraints,
+      _wrap('inspect_widget', _handleInspectLayoutConstraints),
     );
 
     // Compare Layout Screenshots
@@ -611,7 +629,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['baseline_name', 'action'],
         ),
       ),
-      _handleCompareLayoutScreenshots,
+      _wrap('compare_layout_screenshots', _handleCompareLayoutScreenshots),
     );
 
     // Take Standalone Screenshot
@@ -637,7 +655,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleTakeScreenshot,
+      _wrap('take_screenshot', _handleTakeScreenshot),
     );
 
     // Get Widget Tree
@@ -659,7 +677,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleGetWidgetTree,
+      _wrap('get_widget_tree', _handleGetWidgetTree),
     );
 
     // Save Snapshot
@@ -681,7 +699,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['name'],
         ),
       ),
-      _handleSaveSnapshot,
+      _wrap('save_snapshot', _handleSaveSnapshot),
     );
 
     // Compare Snapshots
@@ -702,7 +720,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           required: ['before', 'after'],
         ),
       ),
-      _handleCompareSnapshots,
+      _wrap('compare_snapshots', _handleCompareSnapshots),
     );
 
     // List Snapshots
@@ -713,7 +731,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'List all saved memory snapshots available for comparison.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleListSnapshots,
+      _wrap('list_snapshots', _handleListSnapshots, requiresConnection: false),
     );
 
     // Start Tracking Rebuilds
@@ -724,7 +742,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Start a stateful session to track widget rebuild frequencies.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleStartTrackingRebuilds,
+      _wrap('start_tracking_rebuilds', _handleStartTrackingRebuilds),
     );
 
     // Stop Tracking Rebuilds
@@ -742,7 +760,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleStopTrackingRebuilds,
+      _wrap('stop_tracking_rebuilds', _handleStopTrackingRebuilds),
     );
 
     // Start Profiling
@@ -753,7 +771,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Start a stateful performance profiling session (CPU & Jank).',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleStartProfiling,
+      _wrap('start_profiling', _handleStartProfiling),
     );
 
     // Stop Profiling
@@ -764,7 +782,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Stop the active performance profiling session and get the analysis report.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleStopProfiling,
+      _wrap('stop_profiling', _handleStopProfiling),
     );
 
     // Start Network Capture
@@ -775,7 +793,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Start a stateful session to capture HTTP network traffic.',
         inputSchema: ObjectSchema(properties: {}),
       ),
-      _handleStartNetworkCapture,
+      _wrap('start_network_capture', _handleStartNetworkCapture),
     );
 
     // Stop Network Capture
@@ -793,7 +811,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleStopNetworkCapture,
+      _wrap('stop_network_capture', _handleStopNetworkCapture),
     );
 
     // Get Memory Snapshot
@@ -815,7 +833,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           },
         ),
       ),
-      _handleGetMemorySnapshot,
+      _wrap('get_memory_snapshot', _handleGetMemorySnapshot),
     );
   }
 
@@ -827,6 +845,28 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       ],
       isError: true,
     );
+  }
+
+  Future<CallToolResult> Function(CallToolRequest) _wrap(
+    String toolName,
+    FutureOr<CallToolResult> Function(CallToolRequest) handler, {
+    bool requiresConnection = true,
+  }) {
+    return (CallToolRequest req) async {
+      if (requiresConnection && (_vmService == null || _isolateId == null)) {
+        return _notConnected();
+      }
+      try {
+        return await handler(req);
+      } catch (e, st) {
+        stderr.writeln('[mcp:$toolName] ERROR: $e');
+        stderr.writeln('[mcp:$toolName] STACKTRACE: $st');
+        return CallToolResult(
+          content: [TextContent(text: '$toolName execution failed: $e')],
+          isError: true,
+        );
+      }
+    };
   }
 
   CallToolResult _serializeDualFormat({
@@ -850,6 +890,13 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     );
   }
 
+  bool _isDtdUri(String uri) {
+    final cleaned = uri.trim().toLowerCase();
+    return !cleaned.endsWith('/ws') &&
+        !cleaned.endsWith('/ws/') &&
+        !cleaned.contains('/ws?');
+  }
+
   String _normalizeToWsUri(String uri) {
     var ws = uri.trim();
     if (!ws.startsWith('ws')) {
@@ -857,10 +904,75 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           .replaceFirst('http://', 'ws://')
           .replaceFirst('https://', 'wss://');
     }
-    if (!ws.endsWith('/ws')) {
+    if (!_isDtdUri(uri) && !ws.endsWith('/ws')) {
       ws = ws.replaceAll(RegExp(r'/?$'), '/ws');
     }
     return ws;
+  }
+
+  Future<String> _resolveDtdToVmServiceUri(String dtdUri) async {
+    final wsDtd = _normalizeToWsUri(dtdUri);
+    stderr.writeln(
+        '[mcp:connect] Connecting to DTD WebSocket to resolve VM Service: $wsDtd');
+    WebSocket ws;
+    try {
+      ws = await WebSocket.connect(wsDtd).timeout(const Duration(seconds: 3));
+    } catch (e) {
+      throw StateError('Failed to connect to DTD at $wsDtd: $e');
+    }
+
+    final completer = Completer<String>();
+    ws.listen((message) {
+      try {
+        final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+        if (decoded['id'] == 1001) {
+          final result = decoded['result'] as Map<String, dynamic>?;
+          if (result != null) {
+            final services = result['vmServices'] as List?;
+            if (services != null && services.isNotEmpty) {
+              final firstService = services.first as Map<String, dynamic>;
+              final vmUri =
+                  (firstService['exposedUri'] ?? firstService['uri']) as String;
+              completer.complete(vmUri);
+            } else {
+              completer.completeError(
+                  StateError('DTD reports no running VM Services connected.'));
+            }
+          } else if (decoded['error'] != null) {
+            completer.completeError(
+                StateError('DTD returned RPC error: ${decoded['error']}'));
+          } else {
+            completer
+                .completeError(StateError('Invalid response format from DTD.'));
+          }
+          ws.close();
+        }
+      } catch (e) {
+        if (!completer.isCompleted) completer.completeError(e);
+        ws.close();
+      }
+    }, onError: (e) {
+      if (!completer.isCompleted) completer.completeError(e as Object);
+    }, onDone: () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+            StateError('DTD connection closed before response was received.'));
+      }
+    });
+
+    final request = {
+      'jsonrpc': '2.0',
+      'id': 1001,
+      'method': 'ConnectedApps.getVmServices',
+      'params': {},
+    };
+    ws.add(jsonEncode(request));
+
+    return completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+      ws.close();
+      throw TimeoutException(
+          'Timed out waiting for DTD getVmServices response.');
+    });
   }
 
   Future<String> _getEvaluationLibraryId() async {
