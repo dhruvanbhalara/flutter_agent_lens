@@ -86,14 +86,17 @@ All tools require an active connection to a running application, unless stated o
 | `get_cpu_profile` | `duration_seconds` (default: 3) | Sample CPU ticks to identify performance hotspots in Dart functions. |
 | `get_widget_rebuild_counts` | `duration_seconds` (default: 3) | Track widget rebuild counts to identify unnecessary layout updates. |
 | `hot_reload` | None | Trigger a hot reload on the connected main isolate. |
+| `hot_restart` | None | Trigger a hot restart of the running application. |
 | `analyze_bundle_size` | `build_target` (default: 'apk') | Parse local `code-size-details.json` maps to find bloated packages. |
 
 ### Layout Inspection
 
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
+| `get_widget_tree` | `maxDepth` (optional, default: 15), `projectOnly` (optional, default: false) | Retrieve the structured widget tree of the running Flutter application. |
 | `inspect_layout_constraints` / `inspect_widget` | `widget_id` (required, or `widgetId` for alias) | Inspect parent constraints, render size, and diagnostics of a widget. |
 | `compare_layout_screenshots` | `baseline_name` (required), `action` (required), `threshold` (optional) | Capture screenshots and run pixel diff comparison to detect visual changes. |
+| `take_screenshot` | `screenshot_type` (optional), `device_id` (optional), `output_path` (optional) | Capture a standalone screenshot of the running Flutter application. |
 | `toggle_widget_selection` | `enabled` (required) | Toggle the on-device widget selection overlay. |
 | `toggle_package_widgets` | `enabled` (required) | Configure whether third-party packages appear in the inspector tree. |
 | `toggle_layout_guidelines` / `toggle_debug_paint` | `enabled` (required) | Toggle layout guidelines (debug paint) on the device. |
@@ -107,6 +110,9 @@ All tools require an active connection to a running application, unless stated o
 
 | Tool Name | Parameters | Description |
 | :--- | :--- | :--- |
+| `save_snapshot` | `name` (required), `forceGC` (optional, default: true) | Save a named memory allocation profile snapshot for later comparison. |
+| `compare_snapshots` | `before` (required), `after` (required) | Compare two saved memory snapshots to calculate instance and byte differences. |
+| `list_snapshots` | None | List saved memory snapshots available for comparison. |
 | `audit_class_memory_leak` | `class_name` (required) | Scan heap instances of a class to verify if disposed objects are leaking. |
 | `diff_heap_allocations` | `duration_seconds` (default: 3), `expression` (optional), `force_gc` (default: true) | Calculate memory growth and instance delta metrics over a window. |
 | `get_object_referrers` | `object_id` (required), `limit` (default: 15) | Trace reference paths keeping an object alive in the heap. |

@@ -664,4 +664,287 @@ extension WidgetHandlers on FlutterAgentLensServer {
     );
     return _handleToggleDebugFlag(request);
   }
+
+  Future<CallToolResult> _handleGetWidgetTree(CallToolRequest req) async {
+    if (_vmService == null || _isolateId == null) return _notConnected();
+    final maxDepth = (req.arguments?['maxDepth'] as num?)?.toInt() ?? 15;
+    final projectOnly = (req.arguments?['projectOnly'] as bool?) ?? false;
+
+    try {
+      final objectGroup = 'mcp_inspector_${DateTime.now().millisecondsSinceEpoch}';
+
+      dynamic rootNode;
+      try {
+        final response = await _vmService!.callServiceExtension(
+          'ext.flutter.inspector.getRootWidgetSummaryTree',
+          isolateId: _isolateId,
+          args: {'objectGroup': objectGroup},
+        );
+        rootNode = _parseExtensionResult(response);
+      } catch (e) {
+        final response = await _vmService!.callServiceExtension(
+          'ext.flutter.inspector.getRootWidgetTree',
+          isolateId: _isolateId,
+          args: {
+            'groupName': objectGroup,
+            'isSummaryTree': 'true',
+            'withPreviews': 'false',
+          },
+        );
+        rootNode = _parseExtensionResult(response);
+      }
+
+      if (rootNode == null) {
+        return CallToolResult(
+          content: [TextContent(text: 'Failed to retrieve root widget node.')],
+          isError: true,
+        );
+      }
+
+      final Map<String, dynamic> rootMap;
+      if (rootNode is Map) {
+        rootMap = Map<String, dynamic>.from(rootNode);
+      } else {
+        return CallToolResult(
+          content: [TextContent(text: 'Unexpected response format for root widget node.')],
+          isError: true,
+        );
+      }
+
+      await _expandWidgetChildren(rootMap, objectGroup, 0, maxDepth);
+
+      final flattened = _flattenWidgetTree(rootMap, 0, maxDepth, projectOnly);
+      final text = _formatTreeAsText(flattened);
+
+      final totalWidgets = flattened.length;
+      final projectWidgets = flattened.where((w) => w.isProjectWidget).length;
+      final maxDepthReached = flattened.isEmpty
+          ? 0
+          : flattened.map((w) => w.depth).reduce((a, b) => a > b ? a : b);
+
+      return _serializeDualFormat(
+        title: '### Widget Tree Summary',
+        markdownBody: 'Widget Tree ($totalWidgets widgets, $projectWidgets from project, depth: $maxDepthReached)\n\n$text',
+        structuredData: {
+          'total_widgets': totalWidgets,
+          'project_widgets': projectWidgets,
+          'max_depth_reached': maxDepthReached,
+          'widgets': flattened.map((w) => w.toMap()).toList(),
+        },
+      );
+    } catch (e, st) {
+      stderr.writeln('[mcp:get_widget_tree] ERROR: $e');
+      stderr.writeln('[mcp:get_widget_tree] STACKTRACE: $st');
+      return CallToolResult(
+        content: [TextContent(text: 'Failed to get widget tree: $e')],
+        isError: true,
+      );
+    }
+  }
+
+  dynamic _parseExtensionResult(Response response) {
+    final result = response.json?['result'];
+    if (result is String) {
+      return jsonDecode(result);
+    }
+    return result;
+  }
+
+  Future<void> _expandWidgetChildren(
+    Map<String, dynamic> node,
+    String objectGroup,
+    int depth,
+    int maxDepth,
+  ) async {
+    if (depth >= maxDepth) return;
+
+    final hasChildren = node['hasChildren'] as bool? ?? false;
+    var childrenList = node['children'] as List<dynamic>?;
+
+    if (hasChildren && (childrenList == null || childrenList.isEmpty)) {
+      final valueId = node['valueId'] as String?;
+      if (valueId != null) {
+        try {
+          final response = await _vmService!.callServiceExtension(
+            'ext.flutter.inspector.getChildrenSummaryTree',
+            isolateId: _isolateId,
+            args: {
+              'arg': valueId,
+              'objectGroup': objectGroup,
+            },
+          );
+          final result = _parseExtensionResult(response);
+          if (result is List) {
+            node['children'] = result;
+            childrenList = result;
+          }
+        } catch (_) {
+          // Ignore child fetch failures
+        }
+      }
+    }
+
+    if (childrenList != null) {
+      for (var i = 0; i < childrenList.length; i++) {
+        final child = childrenList[i];
+        if (child is Map) {
+          final childMap = Map<String, dynamic>.from(child);
+          childrenList[i] = childMap;
+          await _expandWidgetChildren(
+            childMap,
+            objectGroup,
+            depth + 1,
+            maxDepth,
+          );
+        }
+      }
+    }
+  }
+
+  List<_FlatWidget> _flattenWidgetTree(
+    Map<String, dynamic> node,
+    int depth,
+    int maxDepth,
+    bool projectOnly,
+  ) {
+    if (depth > maxDepth) return [];
+
+    final isProjectWidget = node['createdByLocalProject'] as bool? ?? false;
+    final children = node['children'] as List<dynamic>? ?? [];
+
+    if (projectOnly && !isProjectWidget && depth > 2) {
+      final childResults = <_FlatWidget>[];
+      for (final child in children) {
+        if (child is Map) {
+          childResults.addAll(
+            _flattenWidgetTree(Map<String, dynamic>.from(child), depth, maxDepth, projectOnly),
+          );
+        }
+      }
+      return childResults;
+    }
+
+    final creationLocation = node['creationLocation'] as Map<dynamic, dynamic>?;
+    final creationName = creationLocation?['name'] as String?;
+    final widgetRuntimeType = node['widgetRuntimeType'] as String?;
+    final description = node['description'] as String?;
+    final typeStr = node['type'] as String?;
+
+    final widgetName = creationName ?? widgetRuntimeType ?? description ?? typeStr ?? 'Unknown';
+
+    String? sourceFile;
+    int? sourceLine;
+
+    if (isProjectWidget && creationLocation != null) {
+      final fileUri = creationLocation['file'] as String?;
+      if (fileUri != null) {
+        final cleanFile = fileUri.replaceFirst(RegExp(r'^file://'), '');
+        final parts = cleanFile.split('/lib/');
+        if (parts.length > 1) {
+          sourceFile = parts.last;
+        } else {
+          sourceFile = cleanFile.split('/').last;
+        }
+      }
+      sourceLine = creationLocation['line'] as int?;
+    }
+
+    final rawProperties = node['properties'] as List<dynamic>?;
+    List<Map<String, String>>? properties;
+    if (rawProperties != null && rawProperties.isNotEmpty) {
+      properties = [];
+      for (final prop in rawProperties) {
+        if (prop is Map) {
+          final propName = prop['name']?.toString();
+          final propDesc = prop['description']?.toString() ?? prop['value']?.toString();
+          if (propName != null && propDesc != null && propDesc != 'null') {
+            properties.add({
+              'name': propName,
+              'value': propDesc,
+            });
+          }
+        }
+      }
+      if (properties.length > 10) {
+        properties = properties.sublist(0, 10);
+      }
+    }
+
+    final flat = _FlatWidget(
+      type: widgetName,
+      depth: depth,
+      id: node['valueId'] as String?,
+      isProjectWidget: isProjectWidget,
+      childCount: children.length,
+      sourceFile: sourceFile,
+      sourceLine: sourceLine,
+      properties: properties,
+    );
+
+    final results = [flat];
+    for (final child in children) {
+      if (child is Map) {
+        results.addAll(
+          _flattenWidgetTree(Map<String, dynamic>.from(child), depth + 1, maxDepth, projectOnly),
+        );
+      }
+    }
+
+    return results;
+  }
+
+  String _formatTreeAsText(List<_FlatWidget> widgets) {
+    final buffer = StringBuffer();
+    for (final w in widgets) {
+      final indent = '  ' * w.depth;
+      final projectMarker = w.isProjectWidget ? ' ★' : '';
+      final childInfo = w.childCount > 0 ? ' (${w.childCount} children)' : '';
+      final sourceInfo = w.sourceFile != null ? ' [${w.sourceFile}:${w.sourceLine}]' : '';
+
+      buffer.write('$indent${w.type}$projectMarker$childInfo$sourceInfo');
+
+      final props = w.properties;
+      if (props != null && props.isNotEmpty) {
+        final propsStr = props.map((p) => '${p['name']}: ${p['value']}').join(', ');
+        buffer.write(' [$propsStr]');
+      }
+      buffer.writeln();
+    }
+    return buffer.toString();
+  }
+}
+
+class _FlatWidget {
+  final String type;
+  final int depth;
+  final String? id;
+  final bool isProjectWidget;
+  final int childCount;
+  final String? sourceFile;
+  final int? sourceLine;
+  final List<Map<String, String>>? properties;
+
+  _FlatWidget({
+    required this.type,
+    required this.depth,
+    this.id,
+    required this.isProjectWidget,
+    required this.childCount,
+    this.sourceFile,
+    this.sourceLine,
+    this.properties,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'type': type,
+      'depth': depth,
+      if (id != null) 'id': id,
+      'isProjectWidget': isProjectWidget,
+      'childCount': childCount,
+      if (sourceFile != null) 'sourceFile': sourceFile,
+      if (sourceLine != null) 'sourceLine': sourceLine,
+      if (properties != null) 'properties': properties,
+    };
+  }
 }

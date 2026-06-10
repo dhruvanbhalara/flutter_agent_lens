@@ -113,6 +113,42 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     }
   }
 
+  Future<CallToolResult> _handleHotRestart(CallToolRequest req) async {
+    if (_vmService == null || _isolateId == null) return _notConnected();
+
+    try {
+      stderr.writeln('[mcp:hot_restart] Triggering hot restart...');
+      final response = await _vmService!.callServiceExtension(
+        'ext.flutter.restart',
+        isolateId: _isolateId,
+      );
+
+      final error = response.json?['error'];
+      if (error != null) {
+        return CallToolResult(
+          content: [TextContent(text: 'Hot restart failed: $error')],
+          isError: true,
+        );
+      }
+
+      return CallToolResult(
+        content: [TextContent(text: 'Hot restart completed successfully.')],
+      );
+    } catch (e) {
+      stderr.writeln('[mcp:hot_restart] ERROR: $e');
+      var message = 'Hot restart error: $e';
+      if (e is RPCError && e.code == -32601) {
+        message = 'Hot restart is not supported by the current connection. '
+            'This typically happens if the application was not started using a Flutter tool runner (like "flutter run") '
+            'that registers the "ext.flutter.restart" service extension, or if the runner is disconnected.';
+      }
+      return CallToolResult(
+        content: [TextContent(text: message)],
+        isError: true,
+      );
+    }
+  }
+
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
     if (_vmService == null || _isolateId == null) return _notConnected();
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;

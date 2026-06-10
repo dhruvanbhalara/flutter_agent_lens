@@ -30,7 +30,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
           channel,
           implementation: Implementation(
             name: 'flutter_agent_lens',
-            version: '1.1.0',
+            version: '1.2.0',
           ),
           instructions: 'A tool server to interact with running Flutter apps. '
               'Connect using the connect tool, or discover running apps with discover_apps.',
@@ -42,6 +42,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
   String? _workspaceRoot;
   PathResolver? _pathResolver;
   String? _cachedLibraryId;
+  final Map<String, _MemorySnapshot> _memorySnapshots = {};
 
   final List<String> _logBuffer = [];
   StreamSubscription? _stdoutSub;
@@ -56,6 +57,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     _stderrSub = null;
     _loggingSub = null;
     _cachedLibraryId = null;
+    _memorySnapshots.clear();
   }
 
   @override
@@ -193,6 +195,16 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         inputSchema: ObjectSchema(properties: {}),
       ),
       _handleHotReload,
+    );
+
+    // Hot Restart
+    registerTool(
+      Tool(
+        name: 'hot_restart',
+        description: 'Trigger a hot restart of the application.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleHotRestart,
     );
 
     // Trigger Scroll Gesture
@@ -740,6 +752,97 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         ),
       ),
       _handleCompareLayoutScreenshots,
+    );
+
+    // Take Standalone Screenshot
+    registerTool(
+      Tool(
+        name: 'take_screenshot',
+        description: 'Capture a standalone screenshot of the running Flutter application.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'screenshot_type': StringSchema(
+              description: 'The capture method (device = native screenshot, skia = Skia Picture via VM service; default: device).',
+            ),
+            'device_id': StringSchema(
+              description: 'Target device ID or name if multiple devices are connected.',
+            ),
+            'output_path': StringSchema(
+              description: 'Optional destination file path. If not specified, the screenshot will be saved to a default directory.',
+            ),
+          },
+        ),
+      ),
+      _handleTakeScreenshot,
+    );
+
+    // Get Widget Tree
+    registerTool(
+      Tool(
+        name: 'get_widget_tree',
+        description: 'Get the current widget tree of the running Flutter application.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'maxDepth': NumberSchema(
+              description: 'Maximum depth of the widget tree to return (default: 15).',
+            ),
+            'projectOnly': BooleanSchema(
+              description: 'If true, only return widgets created by the local project code.',
+            ),
+          },
+        ),
+      ),
+      _handleGetWidgetTree,
+    );
+
+    // Save Snapshot
+    registerTool(
+      Tool(
+        name: 'save_snapshot',
+        description: 'Save a named memory snapshot for later comparison.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'name': StringSchema(
+              description: 'A name for this snapshot (e.g., "before-fix", "after-optimization").',
+            ),
+            'forceGC': BooleanSchema(
+              description: 'Force garbage collection before snapshot (default: true).',
+            ),
+          },
+          required: ['name'],
+        ),
+      ),
+      _handleSaveSnapshot,
+    );
+
+    // Compare Snapshots
+    registerTool(
+      Tool(
+        name: 'compare_snapshots',
+        description: 'Compare two previously saved memory snapshots to see deltas.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'before': StringSchema(
+              description: 'Name of the before snapshot.',
+            ),
+            'after': StringSchema(
+              description: 'Name of the after snapshot.',
+            ),
+          },
+          required: ['before', 'after'],
+        ),
+      ),
+      _handleCompareSnapshots,
+    );
+
+    // List Snapshots
+    registerTool(
+      Tool(
+        name: 'list_snapshots',
+        description: 'List all saved memory snapshots available for comparison.',
+        inputSchema: ObjectSchema(properties: {}),
+      ),
+      _handleListSnapshots,
     );
   }
 
