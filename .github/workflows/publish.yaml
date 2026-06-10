@@ -1,0 +1,36 @@
+name: Publish to pub.dev
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC authentication
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        run: dart pub get --no-example
+
+      - name: Verify publishing eligibility
+        run: dart pub publish --dry-run
+
+      - name: Publish to pub.dev
+        run: dart pub publish --force
