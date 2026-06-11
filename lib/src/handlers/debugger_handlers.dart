@@ -41,6 +41,7 @@ extension DebuggerHandlers on FlutterAgentLensServer {
                 })
             .toList(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -95,6 +96,7 @@ extension DebuggerHandlers on FlutterAgentLensServer {
         'resolved': bp.resolved ?? false,
         'raw_response': bp.json,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 

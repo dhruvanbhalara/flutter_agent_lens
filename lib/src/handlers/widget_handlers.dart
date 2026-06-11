@@ -215,6 +215,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
         'raw_events_received': rebuildEvents.length,
         'rebuilds': widgets,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -365,6 +366,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
         'all_properties': properties,
         'raw_node': result,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -619,6 +621,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
         'max_depth_reached': maxDepthReached,
         'widgets': flattened.map((w) => w.toMap()).toList(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -1052,6 +1055,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
         'total_rebuilds': totalRebuilds,
         'rebuilds': widgets,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 

@@ -102,6 +102,7 @@ extension DeeplinkHandlers on FlutterAgentLensServer {
         'stdout': output,
         'stderr': result.stderr.toString(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

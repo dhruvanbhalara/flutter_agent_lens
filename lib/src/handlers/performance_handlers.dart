@@ -74,6 +74,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         'jank_percentage': jankPercentage,
         'critical_events': frameEvents,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -201,6 +202,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         'total_samples': cpuSamples.sampleCount ?? 0,
         'hotspots': hotspots,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -513,6 +515,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         'cpu_hotspots': cpuHotspots,
         'recommendations': recommendations,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

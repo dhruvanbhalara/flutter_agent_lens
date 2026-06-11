@@ -92,6 +92,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
         'requests': formattedRequests,
         'raw_response': result,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -368,6 +369,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
         'total_requests': allRequests.length,
         'requests': allRequests,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

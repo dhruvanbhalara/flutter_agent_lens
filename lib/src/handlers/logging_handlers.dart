@@ -31,6 +31,7 @@ extension LoggingHandlers on FlutterAgentLensServer {
         'returned_lines': recentLogs.length,
         'logs': recentLogs,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

@@ -83,6 +83,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
         'leaked_count': reports.length,
         'leaks': reports,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -197,6 +198,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
         'force_gc': forceGc,
         'deltas': deltas,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -241,6 +243,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
         'retaining_path': pathElements,
         'raw_response': retainingPath.json,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -677,8 +680,33 @@ extension MemoryHandlers on FlutterAgentLensServer {
           'WARNING: Heap utilization above 85%. The app may be at risk of OOM. Consider reducing memory footprint.');
     }
 
-    return CallToolResult(
-      content: [TextContent(text: output.join('\n'))],
+    final structuredData = {
+      'heapUsage': heapUsage,
+      'heapCapacity': heapCapacity,
+      'externalUsage': externalUsage,
+      'heapUtilization': heapUtilization,
+      'top_classes': sortedBySizeFiltered.take(topN).map((m) => {
+        'class': m.classRef!.name!,
+        'bytes': m.bytesCurrent ?? 0,
+        'instances': m.instancesCurrent ?? 0,
+      }).toList(),
+      'top_instances': sortedByInstancesFiltered.take(10).map((m) => {
+        'class': m.classRef!.name!,
+        'bytes': m.bytesCurrent ?? 0,
+        'instances': m.instancesCurrent ?? 0,
+      }).toList(),
+      'app_classes': appClasses.take(20).map((m) => {
+        'class': m.classRef!.name!,
+        'bytes': m.bytesCurrent ?? 0,
+        'instances': m.instancesCurrent ?? 0,
+      }).toList(),
+    };
+
+    return _serializeDualFormat(
+      title: '### Memory Snapshot Summary',
+      markdownBody: output.join('\n'),
+      structuredData: structuredData,
+      format: req.arguments?['format'] as String?,
     );
   }
 }

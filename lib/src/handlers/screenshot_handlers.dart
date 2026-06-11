@@ -199,6 +199,7 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
           'current_path': currentPath,
           'diff_path': diffPath,
         },
+        format: req.arguments?['format'] as String?,
       );
     }
   }
