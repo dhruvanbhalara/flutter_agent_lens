@@ -212,10 +212,10 @@ extension NetworkHandlers on FlutterAgentLensServer {
         content: [
           TextContent(
             text:
-                'Captured for ${(durationMs / 1000.0).toStringAsFixed(1)}s — no HTTP requests detected.\n\n'
+                'Captured for ${(durationMs / 1000.0).toStringAsFixed(1)}s - no HTTP requests detected.\n\n'
                 'This can happen if:\n'
-                '• The app didn\'t make any network calls during capture\n'
-                '• HTTP timeline logging is not supported in this Flutter version\n\n'
+                '- The app didn\'t make any network calls during capture\n'
+                '- HTTP timeline logging is not supported in this Flutter version\n\n'
                 'Try making the app load data (e.g. pull to refresh, navigate to a new screen).',
           ),
         ],
@@ -282,12 +282,12 @@ extension NetworkHandlers on FlutterAgentLensServer {
     }
 
     final output = [
-      '═══════════════════════════════════════════════════════════',
+      '===========================================================',
       '  NETWORK TRAFFIC REPORT',
-      '═══════════════════════════════════════════════════════════',
+      '===========================================================',
       '',
       '  SUMMARY',
-      '───────────────────────────────────────────────────────────',
+      '-----------------------------------------------------------',
       'Captured for ${(durationMs / 1000.0).toStringAsFixed(1)}s',
       'Total requests: ${allRequests.length}',
       'Completed: ${completedRequests.length} | Failed: ${failedRequests.length} | Pending: ${pendingRequests.length}',
@@ -296,7 +296,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
       'Slowest request: ${formatDuration(maxDuration.toDouble())}',
       '',
       '  REQUESTS',
-      '───────────────────────────────────────────────────────────',
+      '-----------------------------------------------------------',
     ];
 
     for (final reqMap in allRequests) {
@@ -344,19 +344,19 @@ extension NetworkHandlers on FlutterAgentLensServer {
         failedRequests.isNotEmpty) {
       output.add('');
       output.add('  CONCERNS');
-      output.add('───────────────────────────────────────────────────────────');
+      output.add('-----------------------------------------------------------');
       for (final r in slowRequests.take(3)) {
         final dur =
             ((r['endTime'] as int) - (r['startTime'] as int)).toDouble();
         output.add(
-            '• SLOW: ${r['method']} ${r['uri']} took ${formatDuration(dur)}');
+            '- SLOW: ${r['method']} ${r['uri']} took ${formatDuration(dur)}');
       }
       for (final r in largeResponses.take(3)) {
         output.add(
-            '• LARGE: ${r['method']} ${r['uri']} returned ${formatSize(r['responseSize'] as int)}');
+            '- LARGE: ${r['method']} ${r['uri']} returned ${formatSize(r['responseSize'] as int)}');
       }
       for (final r in failedRequests.take(3)) {
-        output.add('• ERROR: ${r['method']} ${r['uri']} — ${r['error']}');
+        output.add('- ERROR: ${r['method']} ${r['uri']} - ${r['error']}');
       }
     }
 

@@ -795,7 +795,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
     final buffer = StringBuffer();
     for (final w in widgets) {
       final indent = '  ' * w.depth;
-      final projectMarker = w.isProjectWidget ? ' ★' : '';
+      final projectMarker = w.isProjectWidget ? ' *' : '';
       final childInfo = w.childCount > 0 ? ' (${w.childCount} children)' : '';
       final sourceInfo =
           w.sourceFile != null ? ' [${w.sourceFile}:${w.sourceLine}]' : '';
@@ -976,12 +976,12 @@ extension WidgetHandlers on FlutterAgentLensServer {
     widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
     final output = [
-      '═══════════════════════════════════════════════════════════',
+      '===========================================================',
       '  WIDGET REBUILD REPORT',
-      '═══════════════════════════════════════════════════════════',
+      '===========================================================',
       '',
       '  SUMMARY',
-      '───────────────────────────────────────────────────────────',
+      '-----------------------------------------------------------',
       'Tracked for ${durationSec}s',
       'Total rebuilds: $totalRebuilds',
       'Unique widgets rebuilt: ${widgets.length}',
@@ -994,7 +994,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
     } else {
       output.add(
           'TOP ${widgets.length < topN ? widgets.length : topN} REBUILDING WIDGETS');
-      output.add('───────────────────────────────────────────────────────────');
+      output.add('-----------------------------------------------------------');
       String getShortFile(String fileLoc) {
         final pathParts = p.split(fileLoc);
         final libIdx = pathParts.indexOf('lib');
@@ -1025,19 +1025,19 @@ extension WidgetHandlers on FlutterAgentLensServer {
         output.add('');
         output.add('RECOMMENDATIONS');
         output
-            .add('───────────────────────────────────────────────────────────');
+            .add('-----------------------------------------------------------');
         for (final w in excessive.take(5)) {
           final count = w['count'] as int;
           final name = w['widget'] as String;
           final fileLoc = w['location'] as String;
           final shortFile = getShortFile(fileLoc);
-          output.add('• $name rebuilt ${count}x [$shortFile]');
+          output.add('- $name rebuilt ${count}x [$shortFile]');
           if (count > 100) {
             output.add(
-                '  → Wrap in a const constructor, or extract to limit rebuild scope.');
+                '  -> Wrap in a const constructor, or extract to limit rebuild scope.');
           } else {
             output.add(
-                '  → Consider optimizing state dependencies or using context.select().');
+                '  -> Consider optimizing state dependencies or using context.select().');
           }
         }
       }

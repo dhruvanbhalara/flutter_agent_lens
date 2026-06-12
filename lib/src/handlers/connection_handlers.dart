@@ -57,7 +57,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
       // VM's replayed ServiceRegistered burst is received synchronously.
       // The VM Protocol guarantees that when a client calls streamListen('Service')
       // it immediately receives a ServiceRegistered event for every service that
-      // is already registered — this is how DevTools seeds its own map.
+      // is already registered - this is how DevTools seeds its own map.
       // We await the subscription, attach the listener, then wait a short drain
       // window so the replay events populate _registeredMethodsForService before
       // connect() returns and the caller invokes hot_restart / hot_reload.
@@ -82,7 +82,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
         stderr.writeln(
             '[mcp:connect] Service stream seeded: ${_registeredMethodsForService.keys.toList()}');
       } catch (_) {
-        // Service stream unavailable — continue without registered method lookup.
+        // Service stream unavailable - continue without registered method lookup.
       }
 
       // Clear existing I/O subscriptions and start buffering streams

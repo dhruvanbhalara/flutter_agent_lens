@@ -398,12 +398,12 @@ extension PerformanceHandlers on FlutterAgentLensServer {
 
     // Generate output report
     final output = [
-      '═══════════════════════════════════════════════════════════',
+      '===========================================================',
       '  FLUTTER PERFORMANCE ANALYSIS REPORT',
-      '═══════════════════════════════════════════════════════════',
+      '===========================================================',
       '',
       '  SUMMARY',
-      '───────────────────────────────────────────────────────────',
+      '-----------------------------------------------------------',
       'Profiled for ${(durationMs / 1000.0).toStringAsFixed(1)}s, captured $totalFrames frames (${events.length} raw events)',
       'Average frame time: ${avgFrameTime.toStringAsFixed(2)}ms (target: ${targetFrameTimeMs.toStringAsFixed(1)}ms)',
       if (jankyFrames > 0)
@@ -413,7 +413,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       'Worst frame: ${maxFrameTimeMs.toStringAsFixed(2)}ms (${(maxFrameTimeMs / targetFrameTimeMs).toStringAsFixed(1)}x target)',
       '',
       '  FRAME ANALYSIS',
-      '───────────────────────────────────────────────────────────',
+      '-----------------------------------------------------------',
       'Total frames: $totalFrames',
       'Average frame time: ${avgFrameTime.toStringAsFixed(2)}ms',
       'P90 frame time: ${p90.toStringAsFixed(2)}ms',
@@ -423,7 +423,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       'Target: ${targetFrameTimeMs.toStringAsFixed(1)}ms (${targetFps.round()}fps)',
       '',
       '  PHASE BREAKDOWN',
-      '───────────────────────────────────────────────────────────',
+      '-----------------------------------------------------------',
       'Build:  avg ${buildPhase['avgTimeMs']}ms | max ${buildPhase['maxTimeMs']}ms | ${buildPhase['count']} calls',
       'Layout: avg ${layoutPhase['avgTimeMs']}ms | max ${layoutPhase['maxTimeMs']}ms | ${layoutPhase['count']} calls',
       'Paint:  avg ${paintPhase['avgTimeMs']}ms | max ${paintPhase['maxTimeMs']}ms | ${paintPhase['count']} calls',
@@ -432,7 +432,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
 
     if (cpuHotspots.isNotEmpty) {
       output.add('CPU HOTSPOTS');
-      output.add('───────────────────────────────────────────────────────────');
+      output.add('-----------------------------------------------------------');
       for (final h in cpuHotspots.take(10)) {
         final severity = h['severity'] as String;
         final severityLabel = severity == 'critical'
@@ -487,9 +487,9 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     }
 
     output.add('RECOMMENDATIONS');
-    output.add('───────────────────────────────────────────────────────────');
+    output.add('-----------------------------------------------------------');
     for (final rec in recommendations) {
-      output.add('• $rec');
+      output.add('- $rec');
     }
 
     return _serializeDualFormat(
