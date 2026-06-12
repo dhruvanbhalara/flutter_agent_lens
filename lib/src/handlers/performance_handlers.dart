@@ -74,6 +74,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         'jank_percentage': jankPercentage,
         'critical_events': frameEvents,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -153,25 +154,29 @@ extension PerformanceHandlers on FlutterAgentLensServer {
 
     for (final dynamic f in functions) {
       if (f is ProfileFunction) {
-        final func = f.function;
-        final String name;
-        if (func is FuncRef) {
-          name = func.name ?? 'unknown';
-        } else {
-          name = func?.toString() ?? 'unknown';
+        final exclusive = f.exclusiveTicks ?? 0;
+        final inclusive = f.inclusiveTicks ?? 0;
+        if (exclusive > 0 || inclusive > 0) {
+          final func = f.function;
+          final String name;
+          if (func is FuncRef) {
+            name = func.name ?? 'unknown';
+          } else {
+            name = func?.toString() ?? 'unknown';
+          }
+
+          final url = f.resolvedUrl ?? '';
+          final resolvedPath = _pathResolver != null
+              ? _pathResolver!.resolveToAbsolutePath(url)
+              : url;
+
+          hotspots.add({
+            'name': name,
+            'exclusive_ticks': exclusive,
+            'inclusive_ticks': inclusive,
+            'location': resolvedPath,
+          });
         }
-
-        final url = f.resolvedUrl ?? '';
-        final resolvedPath = _pathResolver != null
-            ? _pathResolver!.resolveToAbsolutePath(url)
-            : url;
-
-        hotspots.add({
-          'name': name,
-          'exclusive_ticks': f.exclusiveTicks ?? 0,
-          'inclusive_ticks': f.inclusiveTicks ?? 0,
-          'location': resolvedPath,
-        });
       }
     }
 
@@ -179,7 +184,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     hotspots.sort((a, b) =>
         (b['exclusive_ticks'] as int).compareTo(a['exclusive_ticks'] as int));
     stderr.writeln(
-        '[mcp:cpu_profile] Collected ${cpuSamples.sampleCount} samples, ${hotspots.length} functions');
+        '[mcp:cpu_profile] Collected ${cpuSamples.sampleCount} samples, ${hotspots.length} active functions');
 
     if (hotspots.isEmpty) {
       mdBuffer.writeln('No CPU sampling ticks recorded in the window.');
@@ -199,8 +204,9 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       structuredData: {
         'duration_seconds': duration,
         'total_samples': cpuSamples.sampleCount ?? 0,
-        'hotspots': hotspots,
+        'hotspots': hotspots.take(100).toList(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -513,6 +519,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         'cpu_hotspots': cpuHotspots,
         'recommendations': recommendations,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

@@ -83,6 +83,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
         'leaked_count': reports.length,
         'leaks': reports,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -195,14 +196,16 @@ extension MemoryHandlers on FlutterAgentLensServer {
         'duration_seconds': duration,
         'expression_run': expression,
         'force_gc': forceGc,
-        'deltas': deltas,
+        'deltas': deltas.take(50).toList(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
   Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
     final objectId = req.arguments!['object_id'] as String;
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 15;
+    final includeRawResponse = req.arguments?['includeRawResponse'] as bool? ?? false;
     stderr.writeln(
         '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit');
 
@@ -239,8 +242,9 @@ extension MemoryHandlers on FlutterAgentLensServer {
         'object_id': objectId,
         'path_length': pathElements.length,
         'retaining_path': pathElements,
-        'raw_response': retainingPath.json,
+        if (includeRawResponse) 'raw_response': retainingPath.json,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -677,8 +681,33 @@ extension MemoryHandlers on FlutterAgentLensServer {
           'WARNING: Heap utilization above 85%. The app may be at risk of OOM. Consider reducing memory footprint.');
     }
 
-    return CallToolResult(
-      content: [TextContent(text: output.join('\n'))],
+    final structuredData = {
+      'heapUsage': heapUsage,
+      'heapCapacity': heapCapacity,
+      'externalUsage': externalUsage,
+      'heapUtilization': heapUtilization,
+      'top_classes': sortedBySizeFiltered.take(topN).map((m) => {
+        'class': m.classRef!.name!,
+        'bytes': m.bytesCurrent ?? 0,
+        'instances': m.instancesCurrent ?? 0,
+      }).toList(),
+      'top_instances': sortedByInstancesFiltered.take(10).map((m) => {
+        'class': m.classRef!.name!,
+        'bytes': m.bytesCurrent ?? 0,
+        'instances': m.instancesCurrent ?? 0,
+      }).toList(),
+      'app_classes': appClasses.take(20).map((m) => {
+        'class': m.classRef!.name!,
+        'bytes': m.bytesCurrent ?? 0,
+        'instances': m.instancesCurrent ?? 0,
+      }).toList(),
+    };
+
+    return _serializeDualFormat(
+      title: '### Memory Snapshot Summary',
+      markdownBody: output.join('\n'),
+      structuredData: structuredData,
+      format: req.arguments?['format'] as String?,
     );
   }
 }

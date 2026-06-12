@@ -337,6 +337,8 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     final flutterExtensions =
         extensionRPCs.where((e) => e.startsWith('ext.flutter.')).toList();
 
+    final includeExtensions = req.arguments?['includeExtensions'] as bool? ?? false;
+
     final appInfo = {
       'vm': {
         'name': vm.name,
@@ -353,7 +355,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
         'pauseState': isolate.pauseEvent?.kind ?? 'unknown',
         'displayRefreshRate': fpsVal,
       },
-      'flutterExtensions': flutterExtensions,
+      if (includeExtensions) 'flutterExtensions': flutterExtensions,
       'isolates': (vm.isolates ?? [])
           .map((i) => {
                 'id': i.id,
@@ -363,10 +365,42 @@ extension ConnectionHandlers on FlutterAgentLensServer {
           .toList(),
     };
 
-    return CallToolResult(
-      content: [
-        TextContent(text: const JsonEncoder.withIndent('  ').convert(appInfo))
-      ],
+    final md = StringBuffer()
+      ..writeln('### VM Information')
+      ..writeln('- **Name**: ${vm.name}')
+      ..writeln('- **OS**: ${vm.operatingSystem}')
+      ..writeln('- **CPU**: ${vm.hostCPU} (target: ${vm.targetCPU})')
+      ..writeln('- **Version**: ${vm.version}')
+      ..writeln('- **PID**: ${vm.pid}')
+      ..writeln()
+      ..writeln('### Application Information')
+      ..writeln('- **Root Library**: `${isolate.rootLib?.uri}`')
+      ..writeln('- **Library Count**: ${isolate.libraries?.length}')
+      ..writeln('- **Pause State**: ${isolate.pauseEvent?.kind}')
+      ..writeln('- **Display Refresh Rate**: ${fpsVal.toStringAsFixed(1)} Hz')
+      ..writeln();
+
+    if (includeExtensions) {
+      md
+        ..writeln('### Flutter Extensions')
+        ..writeln(flutterExtensions.isEmpty
+            ? 'None'
+            : flutterExtensions.map((e) => '- `$e`').join('\n'))
+        ..writeln();
+    }
+
+    md
+      ..writeln('### Isolates')
+      ..writeln((vm.isolates ?? [])
+          .map((i) =>
+              '- **${i.name}** (`${i.id}`, system: ${i.isSystemIsolate ?? false})')
+          .join('\n'));
+
+    return _serializeDualFormat(
+      title: '### App Information Details',
+      markdownBody: md.toString(),
+      structuredData: appInfo,
+      format: req.arguments?['format'] as String?,
     );
   }
 }

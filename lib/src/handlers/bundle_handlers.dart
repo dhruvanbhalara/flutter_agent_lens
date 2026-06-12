@@ -174,6 +174,7 @@ extension BundleHandlers on FlutterAgentLensServer {
         'total_bytes': totalSizeBytes,
         'components': leafComponents,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

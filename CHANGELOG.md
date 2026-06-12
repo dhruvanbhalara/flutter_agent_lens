@@ -1,3 +1,12 @@
+## 1.4.0
+
+- Added a `format` parameter (`markdown`, `json`, `dual`) to verbose tools so clients can drop JSON and base64 payloads when they're not needed.
+- `get_cpu_profile` now filters out functions with 0 ticks before returning results — cuts payload size by ~99% on typical profiles.
+- Added `includeRawNode` to `inspect_widget` and `includeRawResponse` to `get_object_referrers` and `stop_network_capture`. Both default to false, skipping the large raw VM payloads unless you ask for them.
+- `diff_heap_allocations` now returns only the top 50 classes with allocation changes instead of the full list.
+- `stop_tracking_rebuilds` and `get_widget_rebuild_counts` cap rebuild lists to the top N active widgets.
+- Added `includeExtensions` to `get_app_info` (defaults to false). Omits the 60+ registered Flutter service extensions, saving ~3–4 KB per call.
+
 ## 1.3.0
 
 - Added stateful tracking tools: `start_tracking_rebuilds` / `stop_tracking_rebuilds`, `start_profiling` / `stop_profiling`, and `start_network_capture` / `stop_network_capture`.

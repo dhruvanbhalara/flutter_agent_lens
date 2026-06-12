@@ -116,6 +116,10 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
   }
 
   void _registerTools() {
+    final formatSchema = StringSchema(
+      description: 'Response format: markdown, json, or dual (default: markdown).',
+    );
+
     // Get Widget Rebuild Counts
     registerTool(
       Tool(
@@ -127,6 +131,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'duration_seconds': NumberSchema(
               description: 'Duration to watch and count rebuilds (default: 3).',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -143,6 +148,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'duration_seconds': NumberSchema(
               description: 'Sampling window in seconds (default: 3).',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -160,6 +166,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'Name of the class to inspect (e.g. _MyHomePageState).',
             ),
+            'format': formatSchema,
           },
           required: ['class_name'],
         ),
@@ -220,6 +227,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'Maximum log lines to return (default: 50, max: 200).',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -237,6 +245,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'duration_seconds': NumberSchema(
               description: 'Profile sampling window in seconds (default: 3).',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -248,7 +257,11 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       Tool(
         name: 'get_network_profile',
         description: 'Fetch network profile request histories.',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: ObjectSchema(
+          properties: {
+            'format': formatSchema,
+          },
+        ),
       ),
       _wrap('get_network_profile', _handleGetNetworkProfile),
     );
@@ -309,6 +322,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'Force garbage collection before capturing snapshots to clear dead references (default: true).',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -331,6 +345,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'Specific target platform (e.g. android-arm64, android-arm, android-x64). Only used for Android.',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -349,6 +364,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'limit': NumberSchema(
               description: 'Maximum frame depth to return (default: 20).',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -393,6 +409,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'target': StringSchema(
               description: 'The target name for iOS (default: Runner).',
             ),
+            'format': formatSchema,
           },
           required: ['platform'],
         ),
@@ -442,6 +459,11 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'limit': NumberSchema(
               description: 'Maximum depth for reference search (default: 15).',
             ),
+            'includeRawResponse': BooleanSchema(
+              description:
+                  'Whether to include the full raw VM Service retaining path response in the structured data (default: false).',
+            ),
+            'format': formatSchema,
           },
           required: ['object_id'],
         ),
@@ -466,6 +488,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'column': NumberSchema(
               description: 'The optional 1-based column number.',
             ),
+            'format': formatSchema,
           },
           required: ['file_path', 'line'],
         ),
@@ -530,7 +553,15 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         name: 'get_app_info',
         description:
             'Get detailed information about the connected Flutter app including VM info, isolates, and available extensions.',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: ObjectSchema(
+          properties: {
+            'includeExtensions': BooleanSchema(
+              description:
+                  'Whether to include the full list of registered Flutter service extensions (default: false).',
+            ),
+            'format': formatSchema,
+          },
+        ),
       ),
       _wrap('get_app_info', _handleGetAppInfo),
     );
@@ -590,6 +621,11 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'widgetId': StringSchema(
               description: 'The unique widget details ID.',
             ),
+            'includeRawNode': BooleanSchema(
+              description:
+                  'Whether to include the full raw widget node representation in the structured data (default: false).',
+            ),
+            'format': formatSchema,
           },
           required: ['widgetId'],
         ),
@@ -625,6 +661,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'Target device ID or name if multiple devices are connected (prefixes allowed).',
             ),
+            'format': formatSchema,
           },
           required: ['baseline_name', 'action'],
         ),
@@ -674,6 +711,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'If true, only return widgets created by the local project code.',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -757,6 +795,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'Number of top rebuilding widgets to list (default: 30).',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -780,7 +819,11 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         name: 'stop_profiling',
         description:
             'Stop the active performance profiling session and get the analysis report.',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: ObjectSchema(
+          properties: {
+            'format': formatSchema,
+          },
+        ),
       ),
       _wrap('stop_profiling', _handleStopProfiling),
     );
@@ -808,6 +851,11 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'Sort requests by (time, duration, size; default: time).',
             ),
+            'includeRawResponse': BooleanSchema(
+              description:
+                  'Whether to include the full raw network requests response in the structured data (default: false).',
+            ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -830,6 +878,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
               description:
                   'Number of top allocation classes to show (default: 20).',
             ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -873,19 +922,30 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     required String title,
     required String markdownBody,
     required Map<String, dynamic> structuredData,
+    String? format,
   }) {
-    final contentBuffer = StringBuffer()
-      ..writeln(title)
-      ..writeln()
-      ..writeln(markdownBody)
-      ..writeln()
-      ..writeln('```json')
-      ..writeln(const JsonEncoder.withIndent('  ').convert(structuredData))
-      ..writeln('```');
+    final fmt = format ?? Platform.environment['MCP_RESPONSE_FORMAT'] ?? 'markdown';
+    final contentBuffer = StringBuffer();
+
+    if (fmt == 'markdown' || fmt == 'dual') {
+      contentBuffer
+        ..writeln(title)
+        ..writeln()
+        ..writeln(markdownBody);
+    }
+    if (fmt == 'dual') {
+      contentBuffer.writeln();
+    }
+    if (fmt == 'json' || fmt == 'dual') {
+      contentBuffer
+        ..writeln('```json')
+        ..writeln(const JsonEncoder.withIndent('  ').convert(structuredData))
+        ..writeln('```');
+    }
 
     return CallToolResult(
       content: [
-        TextContent(text: contentBuffer.toString()),
+        TextContent(text: contentBuffer.toString().trim()),
       ],
     );
   }

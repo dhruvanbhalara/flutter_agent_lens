@@ -84,14 +84,16 @@ extension NetworkHandlers on FlutterAgentLensServer {
       }
     }
 
+    final includeRawResponse = req.arguments?['includeRawResponse'] as bool? ?? false;
     return _serializeDualFormat(
       title: '### Network Diagnostics Report',
       markdownBody: md.toString(),
       structuredData: {
         'total_requests': requestsList.length,
         'requests': formattedRequests,
-        'raw_response': result,
+        if (includeRawResponse) 'raw_response': result,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -368,6 +370,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
         'total_requests': allRequests.length,
         'requests': allRequests,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

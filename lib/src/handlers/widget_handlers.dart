@@ -213,8 +213,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
         'duration_seconds': duration,
         'total_recorded_widgets': widgets.length,
         'raw_events_received': rebuildEvents.length,
-        'rebuilds': widgets,
+        'rebuilds': widgets.take(30).toList(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -354,6 +355,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
       });
     }
 
+    final includeRawNode = req.arguments?['includeRawNode'] as bool? ?? false;
     return _serializeDualFormat(
       title: '### Layout Diagnostics Report',
       markdownBody: md.toString(),
@@ -363,8 +365,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
         'constraints': constraints,
         'size': size,
         'all_properties': properties,
-        'raw_node': result,
+        if (includeRawNode) 'raw_node': result,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -619,6 +622,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
         'max_depth_reached': maxDepthReached,
         'widgets': flattened.map((w) => w.toMap()).toList(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -1050,8 +1054,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
         'duration_seconds': double.tryParse(durationSec) ?? 0.0,
         'total_recorded_widgets': widgets.length,
         'total_rebuilds': totalRebuilds,
-        'rebuilds': widgets,
+        'rebuilds': widgets.take(topN).toList(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
