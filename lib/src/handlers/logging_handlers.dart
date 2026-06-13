@@ -3,7 +3,6 @@ part of '../../flutter_agent_lens.dart';
 /// MCP tool handlers for capturing console, stdout, stderr, and logging streams.
 extension LoggingHandlers on FlutterAgentLensServer {
   Future<CallToolResult> _handleFetchConsoleLogs(CallToolRequest req) async {
-    if (_vmService == null) return _notConnected();
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 50;
     final maxLimit = limit > 200 ? 200 : (limit < 1 ? 1 : limit);
     stderr.writeln(

@@ -1,3 +1,11 @@
+## 1.3.0
+
+- Added stateful tracking tools: `start_tracking_rebuilds` / `stop_tracking_rebuilds`, `start_profiling` / `stop_profiling`, and `start_network_capture` / `stop_network_capture`.
+- Added the `get_memory_snapshot` tool to list active class allocations.
+- Added connection warnings when a Dart Tooling Daemon (DTD) URI is passed to `connect`.
+- Fixed hot reload and hot restart hangs by dynamically checking service namespaces.
+- Fixed isolate ID and library cache clearing after a hot restart.
+
 ## 1.2.0
 
 - Added `take_screenshot` tool to capture native or Skia device screenshots, with automatic fallback to native captures when Impeller is active.

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 class PathResolver {
   final String workspaceRoot;
   final Map<String, String> _pathCache = {};
+  Map<String, String>? _allWorkspaceFiles;
 
   PathResolver(this.workspaceRoot);
 
@@ -14,6 +15,17 @@ class PathResolver {
       return _pathCache[vmUri]!;
     }
 
+    // Skip fallback search for known system, internal or non-path URIs
+    if (vmUri.startsWith('dart:') ||
+        vmUri.startsWith('org-dartlang-') ||
+        vmUri.startsWith('native') ||
+        (!vmUri.startsWith('package:') &&
+            !vmUri.startsWith('file://') &&
+            !vmUri.contains('/'))) {
+      _pathCache[vmUri] = vmUri;
+      return vmUri;
+    }
+
     String relativePath = vmUri;
 
     // 1. Convert package URIs: package:my_app/src/home.dart -> lib/src/home.dart
@@ -21,7 +33,7 @@ class PathResolver {
       final parts = vmUri.replaceFirst('package:', '').split('/');
       if (parts.length > 1) {
         parts.removeAt(0); // Remove package namespace
-        relativePath = p.join('lib', parts.join('/'));
+        relativePath = p.joinAll(['lib', ...parts]);
       }
     }
     // 2. Convert standard file:// URIs
@@ -38,25 +50,34 @@ class PathResolver {
       return resolvedPath;
     }
 
-    // 4. Fallback search (For complex layouts / multi-module monorepos)
+    // 4. Fallback search (For complex layouts / multi-module monorepos) using lazy cached files
     final fileName = p.basename(relativePath);
-    try {
-      final directory = Directory(workspaceRoot);
-      if (directory.existsSync()) {
-        final matches = directory
-            .listSync(recursive: true, followLinks: false)
-            .whereType<File>()
-            .where((file) => p.basename(file.path) == fileName);
-
-        if (matches.isNotEmpty) {
-          final absolutePath = p.canonicalize(matches.first.path);
-          _pathCache[vmUri] = absolutePath;
-          return absolutePath;
+    if (_allWorkspaceFiles == null) {
+      _allWorkspaceFiles = {};
+      try {
+        final directory = Directory(workspaceRoot);
+        if (directory.existsSync()) {
+          final entities =
+              directory.listSync(recursive: true, followLinks: false);
+          for (final entity in entities) {
+            if (entity is File) {
+              final name = p.basename(entity.path);
+              _allWorkspaceFiles!
+                  .putIfAbsent(name, () => p.canonicalize(entity.path));
+            }
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
+
+    final matchedPath = _allWorkspaceFiles![fileName];
+    if (matchedPath != null) {
+      _pathCache[vmUri] = matchedPath;
+      return matchedPath;
+    }
 
     // Return original URI as fallback if unmapped
+    _pathCache[vmUri] = vmUri;
     return vmUri;
   }
 }
