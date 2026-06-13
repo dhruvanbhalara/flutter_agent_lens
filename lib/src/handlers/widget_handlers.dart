@@ -111,8 +111,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
       mdBuffer.writeln('| Widget | Rebuild Count | Source Location |');
       mdBuffer.writeln('| :--- | :--- | :--- |');
       for (final w in widgets.take(20)) {
-        mdBuffer.writeln(
-            '| ${w['widget']} | ${w['count']} | `${w['location']}` |');
+        mdBuffer
+            .writeln('| ${w['widget']} | ${w['count']} | `${w['location']}` |');
       }
       if (widgets.length > 20) {
         mdBuffer.writeln('\n_...and ${widgets.length - 20} more widgets._');
@@ -254,8 +254,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
     extract(result);
 
-    final md =
-        StringBuffer('Layout Constraints for Widget: $widgetId\n\n');
+    final md = StringBuffer('Layout Constraints for Widget: $widgetId\n\n');
     md.writeln('- Widget Type: ${result['description'] ?? 'Unknown'}');
     md.writeln('- Constraints: ${constraints ?? 'Not found'}');
     md.writeln('- Size: ${size ?? 'Not found'}');
@@ -772,7 +771,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
       if (event.extensionKind == 'Flutter.RebuiltWidgets') {
         final data = event.extensionData?.data;
         if (data != null) {
-          _parseLocationsMap(data['locations'], _rebuildIdToName, _rebuildIdToFile);
+          _parseLocationsMap(
+              data['locations'], _rebuildIdToName, _rebuildIdToFile);
           _parseNewLocationsMap(data['newLocations'], _rebuildIdToFile);
 
           final events = data['events'] as List<dynamic>?;
@@ -841,7 +841,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
         final decoded = jsonDecode(rawLocationResult);
         _parseLocationsMap(decoded, _rebuildIdToName, _rebuildIdToFile);
       } else if (rawLocationResult is Map) {
-        _parseLocationsMap(rawLocationResult, _rebuildIdToName, _rebuildIdToFile);
+        _parseLocationsMap(
+            rawLocationResult, _rebuildIdToName, _rebuildIdToFile);
       }
     } catch (_) {}
 
@@ -990,7 +991,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
   Future<bool> _isTrackRebuildSupported() async {
     final isolate = await _vmService!.getIsolate(_isolateId!);
     final extensions = isolate.extensionRPCs ?? [];
-    return extensions.contains('ext.flutter.inspector.trackRebuildDirtyWidgets');
+    return extensions
+        .contains('ext.flutter.inspector.trackRebuildDirtyWidgets');
   }
 
   Future<void> _enableRebuildTracking(

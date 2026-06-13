@@ -443,7 +443,8 @@ extension PerformanceHandlers on FlutterAgentLensServer {
                     ? '[MEDIUM]'
                     : '[LOW]';
         output.add('$severityLabel ${h['name']}');
-        output.add('Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}');
+        output.add(
+            'Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}');
       }
       output.add('');
     }

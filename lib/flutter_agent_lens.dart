@@ -10,6 +10,7 @@ import 'package:image/image.dart' as img;
 
 import 'src/path_resolver.dart';
 import 'src/port_discovery.dart';
+import 'src/skills_data.dart';
 
 part 'src/handlers/connection_handlers.dart';
 part 'src/handlers/widget_handlers.dart';
@@ -24,7 +25,8 @@ part 'src/handlers/deeplink_handlers.dart';
 part 'src/handlers/screenshot_handlers.dart';
 
 /// Flutter Agent Lens MCP Server.
-final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
+final class FlutterAgentLensServer extends MCPServer
+    with ToolsSupport, ResourcesSupport, PromptsSupport {
   FlutterAgentLensServer({required StreamChannel<String> channel})
       : super.fromStreamChannel(
           channel,
@@ -76,6 +78,9 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
   StreamSubscription? _stderrSub;
   StreamSubscription? _loggingSub;
 
+  StreamSubscription<FileSystemEvent>? _skillsWatcherSubscription;
+  final Map<String, SkillInfo> _activeSkills = {};
+
   void _cleanupStreams() {
     _stdoutSub?.cancel();
     _stderrSub?.cancel();
@@ -112,12 +117,222 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
   FutureOr<InitializeResult> initialize(InitializeRequest request) async {
     final result = await super.initialize(request);
     _registerTools();
+    _registerResourcesAndPrompts();
     return result;
+  }
+
+  void _registerResourcesAndPrompts() {
+    mcpSkillsData.forEach((category, content) {
+      final skill = _parseSkill(category, content);
+      _activeSkills[category] = skill;
+      _registerSkill(skill);
+    });
+    _registerCombinedPrompt();
+  }
+
+  void _registerSkill(SkillInfo skill) {
+    final uri = 'skills://${skill.category}/SKILL.md';
+    removeResource(uri);
+    removePrompt('use-${skill.category}-skill');
+
+    addResource(
+      Resource(
+        uri: uri,
+        name: '${skill.name} Skill Instructions',
+        mimeType: 'text/markdown',
+        description: skill.description,
+      ),
+      (req) => ReadResourceResult(
+        contents: [
+          TextResourceContents(
+            uri: req.uri,
+            text: _activeSkills[skill.category]?.body ?? skill.body,
+            mimeType: 'text/markdown',
+          ),
+        ],
+      ),
+    );
+
+    addPrompt(
+      Prompt(
+        name: 'use-${skill.category}-skill',
+        description:
+            'Load the system instructions for the ${skill.name} skill category.',
+      ),
+      (req) => GetPromptResult(
+        description: 'System instructions for ${skill.name}',
+        messages: [
+          PromptMessage(
+            role: Role.user,
+            content: TextContent(
+              text:
+                  'Please execute the task by adhering to the following guidelines and instructions for the ${skill.name} tools:\n\n'
+                  '${_activeSkills[skill.category]?.body ?? skill.body}',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _registerCombinedPrompt() {
+    removePrompt('load-all-mcp-skills');
+    addPrompt(
+      Prompt(
+        name: 'load-all-mcp-skills',
+        description:
+            'Load all custom instructions for the Flutter Agent Lens MCP server.',
+      ),
+      (req) {
+        final body = _activeSkills.values
+            .map((s) => '## Skill: ${s.name}\n${s.body}')
+            .join('\n\n');
+        return GetPromptResult(
+          description: 'Combined system instructions for all tools',
+          messages: [
+            PromptMessage(
+              role: Role.user,
+              content: TextContent(
+                text:
+                    'Here are the custom instructions for all tools in Flutter Agent Lens:\n\n$body',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void initWorkspaceSkills(String workspacePath) {
+    _skillsWatcherSubscription?.cancel();
+    _skillsWatcherSubscription = null;
+
+    final skillsDir = Directory(p.join(workspacePath, 'skills'));
+    if (!skillsDir.existsSync()) return;
+
+    stderr.writeln(
+        '[mcp:skills] Initializing workspace skills from ${skillsDir.path}');
+    _loadSkillsFromDirectory(skillsDir);
+
+    try {
+      _skillsWatcherSubscription = skillsDir.watch(recursive: true).listen(
+          (event) {
+        final path = event.path;
+        if (p.basename(path) == 'SKILL.md') {
+          final category = p.basename(p.dirname(path)).replaceAll('-', '_');
+          if (event.type == FileSystemEvent.delete) {
+            if (_activeSkills.remove(category) != null) {
+              removeResource('skills://$category/SKILL.md');
+              removePrompt('use-$category-skill');
+              _registerCombinedPrompt();
+              stderr.writeln('[mcp:skills] Removed skill: $category');
+            }
+          } else {
+            final file = File(path);
+            if (file.existsSync()) {
+              try {
+                final skill = _parseSkill(
+                    category, file.readAsStringSync(encoding: utf8));
+                _activeSkills[category] = skill;
+                _registerSkill(skill);
+                _registerCombinedPrompt();
+
+                try {
+                  updateResource(Resource(
+                    uri: 'skills://$category/SKILL.md',
+                    name: '${skill.name} Skill Instructions',
+                    mimeType: 'text/markdown',
+                    description: skill.description,
+                  ));
+                } catch (_) {}
+                stderr.writeln('[mcp:skills] Hot reloaded skill: $category');
+              } catch (e) {
+                stderr
+                    .writeln('[mcp:skills] Error reloading skill at $path: $e');
+              }
+            }
+          }
+        }
+      },
+          onError: (e) =>
+              stderr.writeln('[mcp:skills] Directory watcher error: $e'));
+    } catch (e) {
+      stderr.writeln('[mcp:skills] Could not start directory watcher: $e');
+    }
+  }
+
+  void _loadSkillsFromDirectory(Directory skillsDir) {
+    try {
+      final files = skillsDir
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => p.basename(f.path) == 'SKILL.md');
+
+      for (final file in files) {
+        try {
+          final category =
+              p.basename(p.dirname(file.path)).replaceAll('-', '_');
+          final skill =
+              _parseSkill(category, file.readAsStringSync(encoding: utf8));
+          _activeSkills[category] = skill;
+          _registerSkill(skill);
+        } catch (e) {
+          stderr
+              .writeln('[mcp:skills] Error reading skill at ${file.path}: $e');
+        }
+      }
+      if (_activeSkills.isNotEmpty) {
+        _registerCombinedPrompt();
+        stderr.writeln(
+            '[mcp:skills] Loaded ${_activeSkills.length} dynamic skills');
+      }
+    } catch (e) {
+      stderr.writeln('[mcp:skills] Error listing skills: $e');
+    }
+  }
+
+  SkillInfo _parseSkill(String category, String content) {
+    final lines = content.split('\n');
+    var name = category.replaceAll('_', '-');
+    var description =
+        'Custom instructions and workflows for the $category tools.';
+    var body = content;
+
+    if (lines.isNotEmpty && lines.first.trim() == '---') {
+      final endIdx =
+          lines.skip(1).toList().indexWhere((l) => l.trim() == '---') + 1;
+      if (endIdx > 0) {
+        final yamlMap = <String, String>{};
+        for (final line in lines.sublist(1, endIdx)) {
+          final colonIdx = line.indexOf(':');
+          if (colonIdx != -1) {
+            final key = line.substring(0, colonIdx).trim();
+            var value = line.substring(colonIdx + 1).trim();
+            if ((value.startsWith('"') && value.endsWith('"')) ||
+                (value.startsWith("'") && value.endsWith("'"))) {
+              value = value.substring(1, value.length - 1);
+            }
+            yamlMap[key] = value;
+          }
+        }
+        name = yamlMap['name'] ?? name;
+        description = yamlMap['description'] ?? description;
+        body = lines.sublist(endIdx + 1).join('\n');
+      }
+    }
+
+    return SkillInfo(
+      category: category,
+      name: name,
+      description: description,
+      body: body,
+    );
   }
 
   void _registerTools() {
     final formatSchema = StringSchema(
-      description: 'Response format: markdown, json, or dual (default: markdown).',
+      description:
+          'Response format: markdown, json, or dual (default: markdown).',
     );
 
     // Get Widget Rebuild Counts
@@ -873,13 +1088,15 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
 
   NumberSchema _durationSchema({double defaultValue = 3.0}) {
     return NumberSchema(
-      description: 'Duration to watch/profile in seconds (default: $defaultValue).',
+      description:
+          'Duration to watch/profile in seconds (default: $defaultValue).',
     );
   }
 
   NumberSchema _limitSchema({double defaultValue = 20.0, double max = 200.0}) {
     return NumberSchema(
-      description: 'Maximum elements to return (default: $defaultValue, max: $max).',
+      description:
+          'Maximum elements to return (default: $defaultValue, max: $max).',
     );
   }
 
@@ -923,7 +1140,8 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     required Map<String, dynamic> structuredData,
     String? format,
   }) {
-    final fmt = format ?? Platform.environment['MCP_RESPONSE_FORMAT'] ?? 'markdown';
+    final fmt =
+        format ?? Platform.environment['MCP_RESPONSE_FORMAT'] ?? 'markdown';
     final contentBuffer = StringBuffer();
 
     if (fmt == 'markdown' || fmt == 'dual') {
@@ -1073,4 +1291,25 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     }
     return '$sign${absVal.toStringAsFixed(2)} ${units[i]}';
   }
+
+  @override
+  Future<void> shutdown() async {
+    await _skillsWatcherSubscription?.cancel();
+    _skillsWatcherSubscription = null;
+    await super.shutdown();
+  }
+}
+
+class SkillInfo {
+  final String category;
+  final String name;
+  final String description;
+  final String body;
+
+  SkillInfo({
+    required this.category,
+    required this.name,
+    required this.description,
+    required this.body,
+  });
 }

@@ -144,8 +144,8 @@ extension BundleHandlers on FlutterAgentLensServer {
     final totalSizeBytes = leafComponents.fold<int>(
         0, (sum, item) => sum + (item['size_bytes'] as int));
 
-    final md = StringBuffer(
-        'Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
+    final md =
+        StringBuffer('Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
     md.writeln(
         '- Total Calculated Size: ${(totalSizeBytes / 1024 / 1024).toStringAsFixed(2)} MB ($totalSizeBytes Bytes)');
     md.writeln();

@@ -84,7 +84,8 @@ extension NetworkHandlers on FlutterAgentLensServer {
       }
     }
 
-    final includeRawResponse = req.arguments?['includeRawResponse'] as bool? ?? false;
+    final includeRawResponse =
+        req.arguments?['includeRawResponse'] as bool? ?? false;
     return _serializeDualFormat(
       title: 'Network Diagnostics Report',
       markdownBody: md.toString(),

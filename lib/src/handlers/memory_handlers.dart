@@ -173,7 +173,8 @@ extension MemoryHandlers on FlutterAgentLensServer {
   Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
     final objectId = req.arguments!['object_id'] as String;
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 15;
-    final includeRawResponse = req.arguments?['includeRawResponse'] as bool? ?? false;
+    final includeRawResponse =
+        req.arguments?['includeRawResponse'] as bool? ?? false;
     stderr.writeln(
         '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit');
 
@@ -321,8 +322,10 @@ extension MemoryHandlers on FlutterAgentLensServer {
     md.writeln('SNAPSHOT COMPARISON: "$before" -> "$after"');
     md.writeln();
     md.writeln('HEAP OVERVIEW');
-    md.writeln('$heapIcon Heap usage: ${_formatBytes(snap1.heapUsage)} -> ${_formatBytes(snap2.heapUsage)} (${heapDiff <= 0 ? "" : "+"}${_formatBytes(heapDiff)}, ${_pctChange(snap1.heapUsage, snap2.heapUsage)})');
-    md.writeln('Capacity: ${_formatBytes(snap1.heapCapacity)} -> ${_formatBytes(snap2.heapCapacity)} (${capacityDiff <= 0 ? "" : "+"}${_formatBytes(capacityDiff)})');
+    md.writeln(
+        '$heapIcon Heap usage: ${_formatBytes(snap1.heapUsage)} -> ${_formatBytes(snap2.heapUsage)} (${heapDiff <= 0 ? "" : "+"}${_formatBytes(heapDiff)}, ${_pctChange(snap1.heapUsage, snap2.heapUsage)})');
+    md.writeln(
+        'Capacity: ${_formatBytes(snap1.heapCapacity)} -> ${_formatBytes(snap2.heapCapacity)} (${capacityDiff <= 0 ? "" : "+"}${_formatBytes(capacityDiff)})');
     md.writeln('Time between snapshots: ${timeDiffS}s');
 
     if (grew.isNotEmpty) {
@@ -331,7 +334,8 @@ extension MemoryHandlers on FlutterAgentLensServer {
       for (final d in grew.take(10)) {
         final instDiffVal = d['instancesDiff'] as int;
         final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
-        md.writeln('+${_formatBytes(d['bytesDiff'] as int)} | $instDiff inst | ${d['name']}');
+        md.writeln(
+            '+${_formatBytes(d['bytesDiff'] as int)} | $instDiff inst | ${d['name']}');
       }
     }
 
@@ -341,16 +345,19 @@ extension MemoryHandlers on FlutterAgentLensServer {
       for (final d in shrank.take(10)) {
         final instDiffVal = d['instancesDiff'] as int;
         final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
-        md.writeln('-${_formatBytes((d['bytesDiff'] as int).abs())} | $instDiff inst | ${d['name']}');
+        md.writeln(
+            '-${_formatBytes((d['bytesDiff'] as int).abs())} | $instDiff inst | ${d['name']}');
       }
     }
 
     md.writeln();
     md.writeln('VERDICT');
     if (heapDiff < -1000000) {
-      md.writeln('Memory improved by ${_formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}).');
+      md.writeln(
+          'Memory improved by ${_formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}).');
     } else if (heapDiff > 1000000) {
-      md.writeln('Warning: Memory increased by ${_formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.');
+      md.writeln(
+          'Warning: Memory increased by ${_formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.');
     } else {
       md.writeln('No significant change in memory usage between snapshots.');
     }
@@ -490,7 +497,8 @@ extension MemoryHandlers on FlutterAgentLensServer {
       final pct = heapUsage > 0
           ? ((bytesCurrent / heapUsage) * 100).toStringAsFixed(1)
           : '0.0';
-      output.add('${_formatBytes(bytesCurrent)} ($pct%) | $instancesCurrent instances | $className');
+      output.add(
+          '${_formatBytes(bytesCurrent)} ($pct%) | $instancesCurrent instances | $className');
     }
 
     output.add('');
@@ -500,7 +508,8 @@ extension MemoryHandlers on FlutterAgentLensServer {
       final bytesCurrent = member.bytesCurrent ?? 0;
       final instancesCurrent = member.instancesCurrent ?? 0;
       final className = member.classRef!.name!;
-      output.add('$instancesCurrent instances | ${_formatBytes(bytesCurrent)} | $className');
+      output.add(
+          '$instancesCurrent instances | ${_formatBytes(bytesCurrent)} | $className');
     }
 
     const vmInternalClasses = {
@@ -595,7 +604,8 @@ extension MemoryHandlers on FlutterAgentLensServer {
         final bytesCurrent = cls.bytesCurrent ?? 0;
         final instancesCurrent = cls.instancesCurrent ?? 0;
         final className = cls.classRef!.name!;
-        output.add('$instancesCurrent instances | ${_formatBytes(bytesCurrent)} | $className');
+        output.add(
+            '$instancesCurrent instances | ${_formatBytes(bytesCurrent)} | $className');
       }
     }
 
@@ -609,7 +619,8 @@ extension MemoryHandlers on FlutterAgentLensServer {
         final bytesCurrent = cls.bytesCurrent ?? 0;
         final instancesCurrent = cls.instancesCurrent ?? 0;
         final className = cls.classRef!.name!;
-        output.add('- $className: $instancesCurrent instances (${_formatBytes(bytesCurrent)}) - check for leaks or excessive allocations');
+        output.add(
+            '- $className: $instancesCurrent instances (${_formatBytes(bytesCurrent)}) - check for leaks or excessive allocations');
       }
     }
 
@@ -624,21 +635,30 @@ extension MemoryHandlers on FlutterAgentLensServer {
       'heapCapacity': heapCapacity,
       'externalUsage': externalUsage,
       'heapUtilization': heapUtilization,
-      'top_classes': sortedBySizeFiltered.take(topN).map((m) => {
-        'class': m.classRef!.name!,
-        'bytes': m.bytesCurrent ?? 0,
-        'instances': m.instancesCurrent ?? 0,
-      }).toList(),
-      'top_instances': sortedByInstancesFiltered.take(10).map((m) => {
-        'class': m.classRef!.name!,
-        'bytes': m.bytesCurrent ?? 0,
-        'instances': m.instancesCurrent ?? 0,
-      }).toList(),
-      'app_classes': appClasses.take(20).map((m) => {
-        'class': m.classRef!.name!,
-        'bytes': m.bytesCurrent ?? 0,
-        'instances': m.instancesCurrent ?? 0,
-      }).toList(),
+      'top_classes': sortedBySizeFiltered
+          .take(topN)
+          .map((m) => {
+                'class': m.classRef!.name!,
+                'bytes': m.bytesCurrent ?? 0,
+                'instances': m.instancesCurrent ?? 0,
+              })
+          .toList(),
+      'top_instances': sortedByInstancesFiltered
+          .take(10)
+          .map((m) => {
+                'class': m.classRef!.name!,
+                'bytes': m.bytesCurrent ?? 0,
+                'instances': m.instancesCurrent ?? 0,
+              })
+          .toList(),
+      'app_classes': appClasses
+          .take(20)
+          .map((m) => {
+                'class': m.classRef!.name!,
+                'bytes': m.bytesCurrent ?? 0,
+                'instances': m.instancesCurrent ?? 0,
+              })
+          .toList(),
     };
 
     return _serializeDualFormat(
@@ -649,7 +669,8 @@ extension MemoryHandlers on FlutterAgentLensServer {
     );
   }
 
-  void _sortDeltas(List<Map<String, dynamic>> deltas, String instDeltaKey, String bytesDeltaKey) {
+  void _sortDeltas(List<Map<String, dynamic>> deltas, String instDeltaKey,
+      String bytesDeltaKey) {
     deltas.sort((a, b) {
       final cmp = (b[instDeltaKey] as int)
           .abs()
@@ -661,7 +682,8 @@ extension MemoryHandlers on FlutterAgentLensServer {
     });
   }
 
-  String _formatAllocationDiffTable(List<Map<String, dynamic>> deltas, {int limit = 20}) {
+  String _formatAllocationDiffTable(List<Map<String, dynamic>> deltas,
+      {int limit = 20}) {
     if (deltas.isEmpty) {
       return 'No heap allocation changes recorded during the profiling window.\n';
     }
@@ -673,8 +695,10 @@ extension MemoryHandlers on FlutterAgentLensServer {
       final instDelta = d['instances_delta'] as int;
       final bytesDelta = d['bytes_delta'] as int;
       final instDeltaStr = instDelta > 0 ? '+$instDelta' : '$instDelta';
-      final byteDeltaStr = bytesDelta > 0 ? '+${_formatBytes(bytesDelta)}' : _formatBytes(bytesDelta);
-      
+      final byteDeltaStr = bytesDelta > 0
+          ? '+${_formatBytes(bytesDelta)}'
+          : _formatBytes(bytesDelta);
+
       md.writeln(
         '| ${d['class']} | $instDeltaStr | $byteDeltaStr | '
         '${d['instances_before']} / ${_formatBytes(d['bytes_before'] as int)} | '

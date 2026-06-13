@@ -1,3 +1,11 @@
+## 1.5.0
+
+- Added custom instructions (skills) natively served via MCP Prompts and Resources APIs (Method 1).
+- Integrated `PromptsSupport` and `ResourcesSupport` mixins in `FlutterAgentLensServer`.
+- Exposed 7 logical skill categories (`widget_inspection_and_layout`, `performance_and_rebuilds`, `memory_analysis`, `debugging_and_execution`, `app_lifecycle_and_connection`, `network_and_deep_links`, `bundle_analysis`) as both read-only markdown resources (`skills://{category}/SKILL.md`) and select-to-load prompts (`use-{category}-skill`).
+- Added a `load-all-mcp-skills` combined prompt to bootstrap AI hosts with full developer guidelines.
+- Pre-compiled skill documents into the Dart executable, ensuring dependency-free runtime distribution.
+
 ## 1.4.1
 
 - Refactored and optimized internal MCP tool handlers for widget tracking, memory diffing, and network capturing.

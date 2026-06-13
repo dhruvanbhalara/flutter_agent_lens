@@ -11,6 +11,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
 
       if (_workspaceRoot != null) {
         _pathResolver = PathResolver(_workspaceRoot!);
+        initWorkspaceSkills(_workspaceRoot!);
       }
 
       String uriToConnect = rawUri;
@@ -134,9 +135,11 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     _logBuffer.clear();
 
     // Subscribe to stdout and stderr streams using helper
-    _listenToByteStream(EventStreams.kStdout, '[STDOUT]', _vmService!.onStdoutEvent)
+    _listenToByteStream(
+            EventStreams.kStdout, '[STDOUT]', _vmService!.onStdoutEvent)
         .then((sub) => _stdoutSub = sub);
-    _listenToByteStream(EventStreams.kStderr, '[STDERR]', _vmService!.onStderrEvent)
+    _listenToByteStream(
+            EventStreams.kStderr, '[STDERR]', _vmService!.onStderrEvent)
         .then((sub) => _stderrSub = sub);
 
     // Subscribe to developer logs stream
@@ -313,7 +316,8 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     final flutterExtensions =
         extensionRPCs.where((e) => e.startsWith('ext.flutter.')).toList();
 
-    final includeExtensions = req.arguments?['includeExtensions'] as bool? ?? false;
+    final includeExtensions =
+        req.arguments?['includeExtensions'] as bool? ?? false;
 
     final appInfo = {
       'vm': {
