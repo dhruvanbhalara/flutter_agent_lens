@@ -128,9 +128,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Find widgets that rebuild frequently by tracking rebuild counts.',
         inputSchema: ObjectSchema(
           properties: {
-            'duration_seconds': NumberSchema(
-              description: 'Duration to watch and count rebuilds (default: 3).',
-            ),
+            'duration_seconds': _durationSchema(),
             'format': formatSchema,
           },
         ),
@@ -145,9 +143,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         description: 'Check frame times to find rendering slowdowns (jank).',
         inputSchema: ObjectSchema(
           properties: {
-            'duration_seconds': NumberSchema(
-              description: 'Sampling window in seconds (default: 3).',
-            ),
+            'duration_seconds': _durationSchema(),
             'format': formatSchema,
           },
         ),
@@ -179,7 +175,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       Tool(
         name: 'hot_reload',
         description: 'Trigger a hot reload.',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: _emptySchema(),
       ),
       _wrap('hot_reload', handleHotReload),
     );
@@ -189,7 +185,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       Tool(
         name: 'hot_restart',
         description: 'Trigger a hot restart of the application.',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: _emptySchema(),
       ),
       _wrap('hot_restart', handleHotRestart),
     );
@@ -223,10 +219,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Read recent console logs from stdout, stderr, and developer streams.',
         inputSchema: ObjectSchema(
           properties: {
-            'limit': NumberSchema(
-              description:
-                  'Maximum log lines to return (default: 50, max: 200).',
-            ),
+            'limit': _limitSchema(defaultValue: 50.0),
             'format': formatSchema,
           },
         ),
@@ -242,9 +235,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Sample CPU usage and find execution hotspots in Dart functions.',
         inputSchema: ObjectSchema(
           properties: {
-            'duration_seconds': NumberSchema(
-              description: 'Profile sampling window in seconds (default: 3).',
-            ),
+            'duration_seconds': _durationSchema(),
             'format': formatSchema,
           },
         ),
@@ -311,9 +302,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Calculate class instance count and size deltas over a sampling window.',
         inputSchema: ObjectSchema(
           properties: {
-            'duration_seconds': NumberSchema(
-              description: 'Sampling window duration in seconds (default: 3).',
-            ),
+            'duration_seconds': _durationSchema(),
             'expression': StringSchema(
               description:
                   'An optional Dart expression to evaluate during the window to trigger state modifications.',
@@ -361,9 +350,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'Retrieve stack frames of running or paused isolates for debugger inspection.',
         inputSchema: ObjectSchema(
           properties: {
-            'limit': NumberSchema(
-              description: 'Maximum frame depth to return (default: 20).',
-            ),
+            'limit': _limitSchema(),
             'format': formatSchema,
           },
         ),
@@ -456,9 +443,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
             'object_id': StringSchema(
               description: 'The unique ID of the object.',
             ),
-            'limit': NumberSchema(
-              description: 'Maximum depth for reference search (default: 15).',
-            ),
+            'limit': _limitSchema(defaultValue: 15.0),
             'includeRawResponse': BooleanSchema(
               description:
                   'Whether to include the full raw VM Service retaining path response in the structured data (default: false).',
@@ -542,7 +527,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       Tool(
         name: 'disconnect',
         description: 'Disconnect from the currently connected Flutter app.',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: _emptySchema(),
       ),
       _wrap('disconnect', _handleDisconnect),
     );
@@ -767,7 +752,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         name: 'list_snapshots',
         description:
             'List all saved memory snapshots available for comparison.',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: _emptySchema(),
       ),
       _wrap('list_snapshots', _handleListSnapshots, requiresConnection: false),
     );
@@ -778,7 +763,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         name: 'start_tracking_rebuilds',
         description:
             'Start a stateful session to track widget rebuild frequencies.',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: _emptySchema(),
       ),
       _wrap('start_tracking_rebuilds', _handleStartTrackingRebuilds),
     );
@@ -808,7 +793,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         name: 'start_profiling',
         description:
             'Start a stateful performance profiling session (CPU & Jank).',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: _emptySchema(),
       ),
       _wrap('start_profiling', _handleStartProfiling),
     );
@@ -834,7 +819,7 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
         name: 'start_network_capture',
         description:
             'Start a stateful session to capture HTTP network traffic.',
-        inputSchema: ObjectSchema(properties: {}),
+        inputSchema: _emptySchema(),
       ),
       _wrap('start_network_capture', _handleStartNetworkCapture),
     );
@@ -885,6 +870,20 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
       _wrap('get_memory_snapshot', _handleGetMemorySnapshot),
     );
   }
+
+  NumberSchema _durationSchema({double defaultValue = 3.0}) {
+    return NumberSchema(
+      description: 'Duration to watch/profile in seconds (default: $defaultValue).',
+    );
+  }
+
+  NumberSchema _limitSchema({double defaultValue = 20.0, double max = 200.0}) {
+    return NumberSchema(
+      description: 'Maximum elements to return (default: $defaultValue, max: $max).',
+    );
+  }
+
+  ObjectSchema _emptySchema() => ObjectSchema(properties: {});
 
   CallToolResult _notConnected() {
     return CallToolResult(
@@ -1060,5 +1059,18 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
 
     _cachedLibraryId = libraries.first.id;
     return libraries.first.id!;
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes == 0) return '0 B';
+    final sign = bytes < 0 ? '-' : '';
+    var absVal = bytes.abs().toDouble();
+    final units = ['B', 'KB', 'MB', 'GB'];
+    var i = 0;
+    while (absVal >= 1024.0 && i < units.length - 1) {
+      absVal /= 1024.0;
+      i++;
+    }
+    return '$sign${absVal.toStringAsFixed(2)} ${units[i]}';
   }
 }

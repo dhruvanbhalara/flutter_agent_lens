@@ -66,7 +66,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
               uri.length > 50 ? '${uri.substring(0, 47)}...' : uri;
 
           md.writeln(
-              '| `$id` | **$method** | `$displayUri` | `$statusCode` | $durationStr | $reqSize B | $resSize B | $startTimeStr |');
+              '| `$id` | $method | `$displayUri` | `$statusCode` | $durationStr | $reqSize B | $resSize B | $startTimeStr |');
 
           formattedRequests.add({
             'id': id,
@@ -270,19 +270,6 @@ extension NetworkHandlers on FlutterAgentLensServer {
       return '${(ms / 1000.0).toStringAsFixed(2)}s';
     }
 
-    String formatSize(int bytes) {
-      if (bytes == 0) return '0 B';
-      final k = 1024;
-      final sizes = ['B', 'KB', 'MB'];
-      var i = 0;
-      var val = bytes.toDouble();
-      while (val >= k && i < sizes.length - 1) {
-        val /= k;
-        i++;
-      }
-      return '${val.toStringAsFixed(1)} ${sizes[i]}';
-    }
-
     final output = [
       'NETWORK TRAFFIC REPORT',
       '',
@@ -290,7 +277,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
       'Captured for ${(durationMs / 1000.0).toStringAsFixed(1)}s',
       'Total requests: ${allRequests.length}',
       'Completed: ${completedRequests.length} | Failed: ${failedRequests.length} | Pending: ${pendingRequests.length}',
-      'Total response size: ${formatSize(totalSize)}',
+      'Total response size: ${_formatBytes(totalSize)}',
       'Average response time: ${formatDuration(avgDuration)}',
       'Slowest request: ${formatDuration(maxDuration.toDouble())}',
       '',
@@ -320,7 +307,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
       }
 
       final sizeStr = reqMap['responseSize'] != null
-          ? formatSize(reqMap['responseSize'] as int)
+          ? _formatBytes(reqMap['responseSize'] as int)
           : '-';
       final method = reqMap['method'] as String? ?? 'GET';
       final uri = reqMap['uri'] as String? ?? 'unknown';
@@ -349,7 +336,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
       }
       for (final r in largeResponses.take(3)) {
         output.add(
-            '- LARGE: ${r['method']} ${r['uri']} returned ${formatSize(r['responseSize'] as int)}');
+            '- LARGE: ${r['method']} ${r['uri']} returned ${_formatBytes(r['responseSize'] as int)}');
       }
       for (final r in failedRequests.take(3)) {
         output.add('- ERROR: ${r['method']} ${r['uri']} - ${r['error']}');
