@@ -88,79 +88,16 @@ extension BundleHandlers on FlutterAgentLensServer {
     }
 
     if (sizeFile == null || !sizeFile.existsSync()) {
-      stderr.writeln(
-          '[mcp:bundle_size] No size file found. Running: flutter build $target --analyze-size ${targetPlatform.isNotEmpty ? "--target-platform=$targetPlatform" : ""}');
-
-      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
-      final flutterExe = flutterRoot != null
-          ? p.join(flutterRoot, 'bin',
-              Platform.isWindows ? 'flutter.bat' : 'flutter')
-          : (Platform.isWindows ? 'flutter.bat' : 'flutter');
-
-      final buildResult = await Process.run(
-        flutterExe,
-        [
-          'build',
-          target,
-          '--analyze-size',
-          if (targetPlatform.isNotEmpty) '--target-platform=$targetPlatform',
+      return CallToolResult(
+        content: [
+          TextContent(
+            text: 'No size analysis file found in the build directory.\n\n'
+                'Please run the following command manually to generate the size analysis file, then try again:\n\n'
+                '  flutter build $target --analyze-size ${targetPlatform.isNotEmpty ? "--target-platform=$targetPlatform" : ""}',
+          )
         ],
-        workingDirectory: root,
+        isError: true,
       );
-
-      if (buildResult.exitCode != 0) {
-        final buildErr = buildResult.stderr.toString().trim();
-        return CallToolResult(
-          content: [
-            TextContent(
-              text:
-                  'No size analysis file found and the automatic build failed.\n\n'
-                  'Run this command manually, then call analyze_bundle_size again:\n\n'
-                  '  flutter build $target --analyze-size ${targetPlatform.isNotEmpty ? "--target-platform=$targetPlatform" : ""}\n\n'
-                  'Build error:\n$buildErr',
-            )
-          ],
-          isError: true,
-        );
-      }
-
-      // Re-scan after successful build.
-      final refreshed = buildDir.listSync(recursive: true);
-      for (final entity in refreshed) {
-        if (entity is File && isSizeFile(entity.path)) {
-          sizeFile = entity;
-          break;
-        }
-      }
-
-      if (sizeFile == null) {
-        for (final entity in refreshed) {
-          if (entity is File) {
-            final name = p.basename(entity.path).toLowerCase();
-            if (name.contains('code-size-details') ||
-                name.contains('code-size-analysis')) {
-              sizeFile = entity;
-              break;
-            }
-          }
-        }
-      }
-
-      if (sizeFile == null || !sizeFile.existsSync()) {
-        return CallToolResult(
-          content: [
-            TextContent(
-              text: 'Build completed but size analysis file was not found.\n'
-                  'Run manually to confirm output location:\n\n'
-                  '  flutter build $target --analyze-size ${targetPlatform.isNotEmpty ? "--target-platform=$targetPlatform" : ""}',
-            )
-          ],
-          isError: true,
-        );
-      }
-
-      stderr.writeln(
-          '[mcp:bundle_size] Build produced size file: ${sizeFile.path}');
     }
 
     stderr.writeln(
