@@ -240,11 +240,11 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     }
 
     if (!autoConnect) {
-      final reportBuffer = StringBuffer('### Discovered Active Apps\n');
+      final reportBuffer = StringBuffer('Discovered Active Apps\n');
       for (final app in runningApps) {
-        reportBuffer.writeln('- **Project**: ${app.projectName}');
-        reportBuffer.writeln('  - **URI**: `${app.serviceUri}`');
-        reportBuffer.writeln('  - **Config Path**: `${app.configPath}`');
+        reportBuffer.writeln('- Project: ${app.projectName}');
+        reportBuffer.writeln('  - URI: ${app.serviceUri}');
+        reportBuffer.writeln('  - Config Path: ${app.configPath}');
       }
       return CallToolResult(
         content: [TextContent(text: reportBuffer.toString())],
@@ -291,8 +291,8 @@ extension ConnectionHandlers on FlutterAgentLensServer {
         'Multiple active Flutter applications were discovered. '
         'Please connect explicitly using the connect tool with one of the URIs below:\n\n');
     for (final app in runningApps) {
-      report.writeln('- **Project**: ${app.projectName}');
-      report.writeln('  - **URI**: `${app.serviceUri}`');
+      report.writeln('- Project: ${app.projectName}');
+      report.writeln('  - URI: ${app.serviceUri}');
     }
 
     return CallToolResult(
@@ -366,38 +366,38 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     };
 
     final md = StringBuffer()
-      ..writeln('### VM Information')
-      ..writeln('- **Name**: ${vm.name}')
-      ..writeln('- **OS**: ${vm.operatingSystem}')
-      ..writeln('- **CPU**: ${vm.hostCPU} (target: ${vm.targetCPU})')
-      ..writeln('- **Version**: ${vm.version}')
-      ..writeln('- **PID**: ${vm.pid}')
+      ..writeln('VM INFORMATION')
+      ..writeln('Name: ${vm.name}')
+      ..writeln('OS: ${vm.operatingSystem}')
+      ..writeln('CPU: ${vm.hostCPU} (target: ${vm.targetCPU})')
+      ..writeln('Version: ${vm.version}')
+      ..writeln('PID: ${vm.pid}')
       ..writeln()
-      ..writeln('### Application Information')
-      ..writeln('- **Root Library**: `${isolate.rootLib?.uri}`')
-      ..writeln('- **Library Count**: ${isolate.libraries?.length}')
-      ..writeln('- **Pause State**: ${isolate.pauseEvent?.kind}')
-      ..writeln('- **Display Refresh Rate**: ${fpsVal.toStringAsFixed(1)} Hz')
+      ..writeln('APPLICATION INFORMATION')
+      ..writeln('Root Library: ${isolate.rootLib?.uri}')
+      ..writeln('Library Count: ${isolate.libraries?.length}')
+      ..writeln('Pause State: ${isolate.pauseEvent?.kind}')
+      ..writeln('Display Refresh Rate: ${fpsVal.toStringAsFixed(1)} Hz')
       ..writeln();
 
     if (includeExtensions) {
       md
-        ..writeln('### Flutter Extensions')
+        ..writeln('FLUTTER EXTENSIONS')
         ..writeln(flutterExtensions.isEmpty
             ? 'None'
-            : flutterExtensions.map((e) => '- `$e`').join('\n'))
+            : flutterExtensions.map((e) => '- $e').join('\n'))
         ..writeln();
     }
 
     md
-      ..writeln('### Isolates')
+      ..writeln('ISOLATES')
       ..writeln((vm.isolates ?? [])
           .map((i) =>
-              '- **${i.name}** (`${i.id}`, system: ${i.isSystemIsolate ?? false})')
+              '- ${i.name} (${i.id}, system: ${i.isSystemIsolate ?? false})')
           .join('\n'));
 
     return _serializeDualFormat(
-      title: '### App Information Details',
+      title: 'App Information Details',
       markdownBody: md.toString(),
       structuredData: appInfo,
       format: req.arguments?['format'] as String?,

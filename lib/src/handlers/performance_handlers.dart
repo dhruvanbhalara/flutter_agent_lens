@@ -45,10 +45,10 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         totalFrames > 0 ? (jankyFrames / totalFrames) * 100 : 0.0;
     stderr.writeln(
         '[mcp:diagnose_jank] Collected ${events.length} timeline events, $jankyFrames janky frames');
-    final mdBuffer = StringBuffer('### Jank Diagnostic Report\n\n')
-      ..writeln('- **Total Frame Events Sampled**: $totalFrames')
+    final mdBuffer = StringBuffer('Jank Diagnostic Report\n\n')
+      ..writeln('- Total Frame Events Sampled: $totalFrames')
       ..writeln(
-          '- **Janky Frame Events (> 16.6ms)**: $jankyFrames ($jankPercentage%)')
+          '- Janky Frame Events (> 16.6ms): $jankyFrames ($jankPercentage%)')
       ..writeln();
 
     if (jankyFrames > 0) {
@@ -66,7 +66,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     }
 
     return _serializeDualFormat(
-      title: '### Jank Diagnosis',
+      title: 'Jank Diagnosis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
         'total_frames': totalFrames,
@@ -150,7 +150,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
 
     final hotspots = <Map<String, dynamic>>[];
     final mdBuffer =
-        StringBuffer('### CPU Execution Hotspots (Exclusive Ticks)\n\n');
+        StringBuffer('CPU Execution Hotspots (Exclusive Ticks)\n\n');
 
     for (final dynamic f in functions) {
       if (f is ProfileFunction) {
@@ -199,7 +199,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     }
 
     return _serializeDualFormat(
-      title: '### CPU Profiler Diagnostic Report',
+      title: 'CPU Profiler Diagnostic Report',
       markdownBody: mdBuffer.toString(),
       structuredData: {
         'duration_seconds': duration,
@@ -404,12 +404,9 @@ extension PerformanceHandlers on FlutterAgentLensServer {
 
     // Generate output report
     final output = [
-      '===========================================================',
-      '  FLUTTER PERFORMANCE ANALYSIS REPORT',
-      '===========================================================',
+      'FLUTTER PERFORMANCE ANALYSIS',
       '',
-      '  SUMMARY',
-      '-----------------------------------------------------------',
+      'SUMMARY',
       'Profiled for ${(durationMs / 1000.0).toStringAsFixed(1)}s, captured $totalFrames frames (${events.length} raw events)',
       'Average frame time: ${avgFrameTime.toStringAsFixed(2)}ms (target: ${targetFrameTimeMs.toStringAsFixed(1)}ms)',
       if (jankyFrames > 0)
@@ -418,8 +415,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         'No jank detected - all frames within budget',
       'Worst frame: ${maxFrameTimeMs.toStringAsFixed(2)}ms (${(maxFrameTimeMs / targetFrameTimeMs).toStringAsFixed(1)}x target)',
       '',
-      '  FRAME ANALYSIS',
-      '-----------------------------------------------------------',
+      'FRAME ANALYSIS',
       'Total frames: $totalFrames',
       'Average frame time: ${avgFrameTime.toStringAsFixed(2)}ms',
       'P90 frame time: ${p90.toStringAsFixed(2)}ms',
@@ -428,8 +424,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       'Jank frames: $jankyFrames ($jankPct%)',
       'Target: ${targetFrameTimeMs.toStringAsFixed(1)}ms (${targetFps.round()}fps)',
       '',
-      '  PHASE BREAKDOWN',
-      '-----------------------------------------------------------',
+      'PHASE BREAKDOWN',
       'Build:  avg ${buildPhase['avgTimeMs']}ms | max ${buildPhase['maxTimeMs']}ms | ${buildPhase['count']} calls',
       'Layout: avg ${layoutPhase['avgTimeMs']}ms | max ${layoutPhase['maxTimeMs']}ms | ${layoutPhase['count']} calls',
       'Paint:  avg ${paintPhase['avgTimeMs']}ms | max ${paintPhase['maxTimeMs']}ms | ${paintPhase['count']} calls',
@@ -438,19 +433,17 @@ extension PerformanceHandlers on FlutterAgentLensServer {
 
     if (cpuHotspots.isNotEmpty) {
       output.add('CPU HOTSPOTS');
-      output.add('-----------------------------------------------------------');
       for (final h in cpuHotspots.take(10)) {
         final severity = h['severity'] as String;
         final severityLabel = severity == 'critical'
             ? '[CRITICAL]'
             : severity == 'high'
-                ? '[HIGH]    '
+                ? '[HIGH]'
                 : severity == 'medium'
-                    ? '[MEDIUM]  '
-                    : '[LOW]     ';
+                    ? '[MEDIUM]'
+                    : '[LOW]';
         output.add('$severityLabel ${h['name']}');
-        output.add(
-            '   Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}');
+        output.add('Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}');
       }
       output.add('');
     }
@@ -493,13 +486,12 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     }
 
     output.add('RECOMMENDATIONS');
-    output.add('-----------------------------------------------------------');
     for (final rec in recommendations) {
       output.add('- $rec');
     }
 
     return _serializeDualFormat(
-      title: '### Performance Profiling Analysis',
+      title: 'Performance Profiling Analysis',
       markdownBody: output.join('\n'),
       structuredData: {
         'duration_ms': durationMs,

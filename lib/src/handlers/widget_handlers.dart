@@ -180,7 +180,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
     // Sort by descending count.
     widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
-    final mdBuffer = StringBuffer('### Top Rebuilding Widgets\n\n');
+    final mdBuffer = StringBuffer('Top Rebuilding Widgets\n\n');
     if (widgets.isEmpty) {
       mdBuffer.writeln(
           'No widget rebuilds recorded during the ${duration}s tracking window.');
@@ -207,7 +207,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Done. ${widgets.length} widgets tracked.');
     return _serializeDualFormat(
-      title: '### Widget Rebuild Analysis',
+      title: 'Widget Rebuild Analysis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
         'duration_seconds': duration,
@@ -246,10 +246,10 @@ extension WidgetHandlers on FlutterAgentLensServer {
     return CallToolResult(
       content: [
         TextContent(
-            text: '### Evaluation Result\n'
-                '- **Kind**: $kindStr\n'
-                '- **Value**: `$valStr`\n'
-                '- **Class**: $classStr')
+            text: 'Evaluation Result\n'
+                '- Kind: $kindStr\n'
+                '- Value: $valStr\n'
+                '- Class: $classStr')
       ],
     );
   }
@@ -340,11 +340,11 @@ extension WidgetHandlers on FlutterAgentLensServer {
     extract(result);
 
     final md =
-        StringBuffer('### Layout Constraints for Widget: `$widgetId`\n\n');
-    md.writeln('- **Widget Type**: `${result['description'] ?? 'Unknown'}`');
-    md.writeln('- **Constraints**: `${constraints ?? 'Not found'}`');
-    md.writeln('- **Size**: `${size ?? 'Not found'}`');
-    md.writeln('\n#### Diagnostic Properties');
+        StringBuffer('Layout Constraints for Widget: $widgetId\n\n');
+    md.writeln('- Widget Type: ${result['description'] ?? 'Unknown'}');
+    md.writeln('- Constraints: ${constraints ?? 'Not found'}');
+    md.writeln('- Size: ${size ?? 'Not found'}');
+    md.writeln('\nDiagnostic Properties');
     if (properties.isEmpty) {
       md.writeln('No properties found.');
     } else {
@@ -357,7 +357,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
     final includeRawNode = req.arguments?['includeRawNode'] as bool? ?? false;
     return _serializeDualFormat(
-      title: '### Layout Diagnostics Report',
+      title: 'Layout Diagnostics Report',
       markdownBody: md.toString(),
       structuredData: {
         'widget_id': widgetId,
@@ -613,7 +613,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
         : flattened.map((w) => w.depth).reduce((a, b) => a > b ? a : b);
 
     return _serializeDualFormat(
-      title: '### Widget Tree Summary',
+      title: 'Widget Tree Summary',
       markdownBody:
           'Widget Tree ($totalWidgets widgets, $projectWidgets from project, depth: $maxDepthReached)\n\n$text',
       structuredData: {
@@ -980,12 +980,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
     widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
     final output = [
-      '===========================================================',
-      '  WIDGET REBUILD REPORT',
-      '===========================================================',
+      'WIDGET REBUILD REPORT',
       '',
-      '  SUMMARY',
-      '-----------------------------------------------------------',
+      'SUMMARY',
       'Tracked for ${durationSec}s',
       'Total rebuilds: $totalRebuilds',
       'Unique widgets rebuilt: ${widgets.length}',
@@ -998,7 +995,6 @@ extension WidgetHandlers on FlutterAgentLensServer {
     } else {
       output.add(
           'TOP ${widgets.length < topN ? widgets.length : topN} REBUILDING WIDGETS');
-      output.add('-----------------------------------------------------------');
       String getShortFile(String fileLoc) {
         final pathParts = p.split(fileLoc);
         final libIdx = pathParts.indexOf('lib');
@@ -1014,22 +1010,19 @@ extension WidgetHandlers on FlutterAgentLensServer {
         final fileLoc = w['location'] as String;
         final shortFile = getShortFile(fileLoc);
         final severity = count > 100
-            ? '[HIGH]  '
+            ? '[HIGH]'
             : count > 30
                 ? '[MEDIUM]'
                 : count > 10
-                    ? '[LOW]   '
-                    : '[OK]    ';
-        output.add(
-            '$severity ${count.toString().padLeft(6)}x | $name [$shortFile]');
+                    ? '[LOW]'
+                    : '[OK]';
+        output.add('$severity ${count}x | $name [$shortFile]');
       }
 
       final excessive = widgets.where((w) => (w['count'] as int) > 50).toList();
       if (excessive.isNotEmpty) {
         output.add('');
         output.add('RECOMMENDATIONS');
-        output
-            .add('-----------------------------------------------------------');
         for (final w in excessive.take(5)) {
           final count = w['count'] as int;
           final name = w['widget'] as String;
@@ -1048,7 +1041,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
     }
 
     return _serializeDualFormat(
-      title: '### Widget Rebuild Analysis',
+      title: 'Widget Rebuild Analysis',
       markdownBody: output.join('\n'),
       structuredData: {
         'duration_seconds': double.tryParse(durationSec) ?? 0.0,

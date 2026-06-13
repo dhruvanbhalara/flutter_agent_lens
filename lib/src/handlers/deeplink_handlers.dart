@@ -84,16 +84,14 @@ extension DeeplinkHandlers on FlutterAgentLensServer {
     }
 
     final output = result.stdout.toString();
-    final md = StringBuffer('### Deep Link Configuration Analysis\n\n');
-    md.writeln('- **Platform**: `$platform`');
-    md.writeln('- **Exit Code**: `${result.exitCode}`');
-    md.writeln('\n#### Console Output\n');
-    md.writeln('```');
+    final md = StringBuffer('Deep Link Configuration Analysis\n\n');
+    md.writeln('- Platform: $platform');
+    md.writeln('- Exit Code: ${result.exitCode}');
+    md.writeln('\nCONSOLE OUTPUT');
     md.writeln(output);
-    md.writeln('```');
 
     return _serializeDualFormat(
-      title: '### Deep Link Analysis Report',
+      title: 'Deep Link Analysis Report',
       markdownBody: md.toString(),
       structuredData: {
         'platform': platform,
