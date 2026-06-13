@@ -145,9 +145,9 @@ extension BundleHandlers on FlutterAgentLensServer {
         0, (sum, item) => sum + (item['size_bytes'] as int));
 
     final md = StringBuffer(
-        '### Code Size Analysis: `${p.basename(sizeFile.path)}`\n\n');
+        'Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
     md.writeln(
-        '- **Total Calculated Size**: ${(totalSizeBytes / 1024 / 1024).toStringAsFixed(2)} MB ($totalSizeBytes Bytes)');
+        '- Total Calculated Size: ${(totalSizeBytes / 1024 / 1024).toStringAsFixed(2)} MB ($totalSizeBytes Bytes)');
     md.writeln();
     md.writeln('| Component | Size | Percentage |');
     md.writeln('| :--- | :--- | :--- |');
@@ -167,13 +167,14 @@ extension BundleHandlers on FlutterAgentLensServer {
     }
 
     return _serializeDualFormat(
-      title: '### Application Bundle Size Details',
+      title: 'Application Bundle Size Details',
       markdownBody: md.toString(),
       structuredData: {
         'file_analyzed': sizeFile.path,
         'total_bytes': totalSizeBytes,
         'components': leafComponents,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

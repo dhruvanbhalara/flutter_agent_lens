@@ -170,23 +170,23 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
       await File(diffPath).writeAsBytes(img.encodePng(diffImage));
 
       final md =
-          StringBuffer('### Layout Screenshot Comparison: `$baselineName`\n\n');
-      md.writeln('- **Status**: ${passed ? "PASS" : "FAIL"}');
+          StringBuffer('Layout Screenshot Comparison: $baselineName\n\n');
+      md.writeln('- Status: ${passed ? "PASS" : "FAIL"}');
       md.writeln(
-          '- **Similarity Score**: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)');
-      md.writeln('- **Matching Pixels**: $matchingPixels / $totalPixels');
+          '- Similarity Score: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)');
+      md.writeln('- Matching Pixels: $matchingPixels / $totalPixels');
       if (screenshotType == 'skia' && actualType == 'device') {
         md.writeln(
-            '- **Notice**: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.');
+            '- Notice: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.');
       }
       md.writeln();
-      md.writeln('#### Files Generated:');
-      md.writeln('- Baseline: `$baselinePath`');
-      md.writeln('- Current: `$currentPath`');
-      md.writeln('- Visual Diff: `$diffPath`');
+      md.writeln('FILES GENERATED');
+      md.writeln('- Baseline: $baselinePath');
+      md.writeln('- Current: $currentPath');
+      md.writeln('- Visual Diff: $diffPath');
 
       return _serializeDualFormat(
-        title: '### Visual Layout Comparison Report',
+        title: 'Visual Layout Comparison Report',
         markdownBody: md.toString(),
         structuredData: {
           'baseline_name': baselineName,
@@ -199,6 +199,7 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
           'current_path': currentPath,
           'diff_path': diffPath,
         },
+        format: req.arguments?['format'] as String?,
       );
     }
   }

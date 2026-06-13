@@ -23,7 +23,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
     stderr
         .writeln('[mcp:network_profile] Found ${requestsList.length} requests');
     final formattedRequests = <Map<String, dynamic>>[];
-    final md = StringBuffer('### Network HTTP Profile History\n\n');
+    final md = StringBuffer('Network HTTP Profile History\n\n');
 
     if (requestsList.isEmpty) {
       md.writeln('No network requests recorded.');
@@ -84,14 +84,16 @@ extension NetworkHandlers on FlutterAgentLensServer {
       }
     }
 
+    final includeRawResponse = req.arguments?['includeRawResponse'] as bool? ?? false;
     return _serializeDualFormat(
-      title: '### Network Diagnostics Report',
+      title: 'Network Diagnostics Report',
       markdownBody: md.toString(),
       structuredData: {
         'total_requests': requestsList.length,
         'requests': formattedRequests,
-        'raw_response': result,
+        if (includeRawResponse) 'raw_response': result,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -282,12 +284,9 @@ extension NetworkHandlers on FlutterAgentLensServer {
     }
 
     final output = [
-      '===========================================================',
-      '  NETWORK TRAFFIC REPORT',
-      '===========================================================',
+      'NETWORK TRAFFIC REPORT',
       '',
-      '  SUMMARY',
-      '-----------------------------------------------------------',
+      'SUMMARY',
       'Captured for ${(durationMs / 1000.0).toStringAsFixed(1)}s',
       'Total requests: ${allRequests.length}',
       'Completed: ${completedRequests.length} | Failed: ${failedRequests.length} | Pending: ${pendingRequests.length}',
@@ -295,8 +294,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
       'Average response time: ${formatDuration(avgDuration)}',
       'Slowest request: ${formatDuration(maxDuration.toDouble())}',
       '',
-      '  REQUESTS',
-      '-----------------------------------------------------------',
+      'REQUESTS',
     ];
 
     for (final reqMap in allRequests) {
@@ -324,11 +322,10 @@ extension NetworkHandlers on FlutterAgentLensServer {
       final sizeStr = reqMap['responseSize'] != null
           ? formatSize(reqMap['responseSize'] as int)
           : '-';
-      final method = (reqMap['method'] as String? ?? 'GET').padRight(6);
+      final method = reqMap['method'] as String? ?? 'GET';
       final uri = reqMap['uri'] as String? ?? 'unknown';
 
-      output.add(
-          '$statusSymbol $method ${durationStr.padLeft(8)} | ${sizeStr.padLeft(8)} | $uri');
+      output.add('$statusSymbol $method $durationStr | $sizeStr | $uri');
     }
 
     // Potential concerns recommendations
@@ -343,8 +340,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
         largeResponses.isNotEmpty ||
         failedRequests.isNotEmpty) {
       output.add('');
-      output.add('  CONCERNS');
-      output.add('-----------------------------------------------------------');
+      output.add('CONCERNS');
       for (final r in slowRequests.take(3)) {
         final dur =
             ((r['endTime'] as int) - (r['startTime'] as int)).toDouble();
@@ -361,13 +357,14 @@ extension NetworkHandlers on FlutterAgentLensServer {
     }
 
     return _serializeDualFormat(
-      title: '### Network Traffic Report',
+      title: 'Network Traffic Report',
       markdownBody: output.join('\n'),
       structuredData: {
         'duration_ms': durationMs,
         'total_requests': allRequests.length,
         'requests': allRequests,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

@@ -8,7 +8,7 @@ extension DebuggerHandlers on FlutterAgentLensServer {
 
     final stack = await _vmService!.getStack(_isolateId!, limit: limit);
     final frames = stack.frames ?? [];
-    final md = StringBuffer('### Call Stack Frames\n\n');
+    final md = StringBuffer('Call Stack Frames\n\n');
 
     if (frames.isEmpty) {
       md.writeln('No call stack frames found. The isolate may not be paused.');
@@ -28,7 +28,7 @@ extension DebuggerHandlers on FlutterAgentLensServer {
     }
 
     return _serializeDualFormat(
-      title: '### Active Call Stack',
+      title: 'Active Call Stack',
       markdownBody: md.toString(),
       structuredData: {
         'frames': frames
@@ -41,6 +41,7 @@ extension DebuggerHandlers on FlutterAgentLensServer {
                 })
             .toList(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -80,13 +81,13 @@ extension DebuggerHandlers on FlutterAgentLensServer {
     );
 
     final bpId = bp.id ?? 'unknown';
-    final md = StringBuffer('### Breakpoint Installed\n\n')
-      ..writeln('- **Breakpoint ID**: `$bpId`')
-      ..writeln('- **Location**: `$filePath:$line`')
-      ..writeln('- **Resolved**: `${bp.resolved ?? false}`');
+    final md = StringBuffer('Breakpoint Installed\n\n')
+      ..writeln('- Breakpoint ID: $bpId')
+      ..writeln('- Location: $filePath:$line')
+      ..writeln('- Resolved: ${bp.resolved ?? false}');
 
     return _serializeDualFormat(
-      title: '### Breakpoint Set Successfully',
+      title: 'Breakpoint Set Successfully',
       markdownBody: md.toString(),
       structuredData: {
         'id': bpId,
@@ -95,6 +96,7 @@ extension DebuggerHandlers on FlutterAgentLensServer {
         'resolved': bp.resolved ?? false,
         'raw_response': bp.json,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 

@@ -12,25 +12,24 @@ extension LoggingHandlers on FlutterAgentLensServer {
     final startIndex = totalLines > maxLimit ? totalLines - maxLimit : 0;
     final recentLogs = _logBuffer.sublist(startIndex);
 
-    final mdBuffer = StringBuffer('### Recent Console Logs\n\n');
+    final mdBuffer = StringBuffer('Recent Console Logs\n\n');
     if (recentLogs.isEmpty) {
       mdBuffer.writeln('No console logs buffered yet.');
     } else {
-      mdBuffer.writeln('```text');
       for (final log in recentLogs) {
         mdBuffer.writeln(log);
       }
-      mdBuffer.writeln('```');
     }
 
     return _serializeDualFormat(
-      title: '### Console Log Cache',
+      title: 'Console Log Cache',
       markdownBody: mdBuffer.toString(),
       structuredData: {
         'total_buffered_lines': totalLines,
         'returned_lines': recentLogs.length,
         'logs': recentLogs,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 }

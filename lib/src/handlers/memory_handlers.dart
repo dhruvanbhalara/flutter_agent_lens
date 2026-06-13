@@ -74,7 +74,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
     }
 
     return _serializeDualFormat(
-      title: '### Memory Leak Audit: $className',
+      title: 'Memory Leak Audit: $className',
       markdownBody: mdBuffer.toString(),
       structuredData: {
         'class_name': className,
@@ -83,6 +83,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
         'leaked_count': reports.length,
         'leaks': reports,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -162,7 +163,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
           .compareTo((a['bytes_delta'] as int).abs());
     });
 
-    final md = StringBuffer('### Memory Allocations Delta\n\n');
+    final md = StringBuffer('Memory Allocations Delta\n\n');
     if (deltas.isEmpty) {
       md.writeln(
           'No heap allocation changes recorded during the profiling window.');
@@ -189,20 +190,22 @@ extension MemoryHandlers on FlutterAgentLensServer {
     }
 
     return _serializeDualFormat(
-      title: '### Allocation Snapshot Difference',
+      title: 'Allocation Snapshot Difference',
       markdownBody: md.toString(),
       structuredData: {
         'duration_seconds': duration,
         'expression_run': expression,
         'force_gc': forceGc,
-        'deltas': deltas,
+        'deltas': deltas.take(50).toList(),
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
   Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
     final objectId = req.arguments!['object_id'] as String;
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 15;
+    final includeRawResponse = req.arguments?['includeRawResponse'] as bool? ?? false;
     stderr.writeln(
         '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit');
 
@@ -219,7 +222,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
       }
     }
 
-    final md = StringBuffer('### Retaining Path for Object: `$objectId`\n\n');
+    final md = StringBuffer('Retaining Path for Object: $objectId\n\n');
     if (pathElements.isEmpty) {
       md.writeln(
           'No retaining path returned. The object might have been garbage collected or is a root.');
@@ -233,14 +236,15 @@ extension MemoryHandlers on FlutterAgentLensServer {
     }
 
     return _serializeDualFormat(
-      title: '### Retaining Path / Leak Trace Report',
+      title: 'Retaining Path / Leak Trace Report',
       markdownBody: md.toString(),
       structuredData: {
         'object_id': objectId,
         'path_length': pathElements.length,
         'retaining_path': pathElements,
-        'raw_response': retainingPath.json,
+        if (includeRawResponse) 'raw_response': retainingPath.json,
       },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -254,13 +258,11 @@ extension MemoryHandlers on FlutterAgentLensServer {
     final lines = [
       'Snapshot "$name" saved.',
       '',
-      '  Heap: ${_formatBytes(snapshot.heapUsage)} / ${_formatBytes(snapshot.heapCapacity)}',
-      '  Classes tracked: ${snapshot.topClasses.length}',
-      '  Time: ${DateTime.fromMillisecondsSinceEpoch(snapshot.timestamp).toLocal().toString().split(" ").last.split(".").first}',
+      'Heap: ${_formatBytes(snapshot.heapUsage)} / ${_formatBytes(snapshot.heapCapacity)}',
+      'Classes tracked: ${snapshot.topClasses.length}',
+      'Time: ${DateTime.fromMillisecondsSinceEpoch(snapshot.timestamp).toLocal().toString().split(" ").last.split(".").first}',
       '',
       'Saved snapshots: ${_memorySnapshots.keys.join(", ")}',
-      '',
-      'Take another snapshot after your change, then use `compare_snapshots` to see the diff.',
     ];
 
     return CallToolResult(
@@ -349,59 +351,57 @@ extension MemoryHandlers on FlutterAgentLensServer {
     final timeDiffS =
         ((snap2.timestamp - snap1.timestamp) / 1000).toStringAsFixed(1);
 
-    final output = [
-      '===========================================================',
-      '  SNAPSHOT COMPARISON',
-      '  "$before" -> "$after"',
-      '===========================================================',
-      '',
-      '  HEAP OVERVIEW',
-      '-----------------------------------------------------------',
-      '$heapIcon Heap usage: ${_formatBytes(snap1.heapUsage)} -> ${_formatBytes(snap2.heapUsage)} (${heapDiff <= 0 ? "" : "+"}${_formatBytes(heapDiff)}, ${_pctChange(snap1.heapUsage, snap2.heapUsage)})',
-      '  Capacity:   ${_formatBytes(snap1.heapCapacity)} -> ${_formatBytes(snap2.heapCapacity)} (${capacityDiff <= 0 ? "" : "+"}${_formatBytes(capacityDiff)})',
-      '  Time between snapshots: ${timeDiffS}s',
-      '',
-    ];
+    final md = StringBuffer();
+    md.writeln('SNAPSHOT COMPARISON: "$before" -> "$after"');
+    md.writeln();
+    md.writeln('HEAP OVERVIEW');
+    md.writeln('$heapIcon Heap usage: ${_formatBytes(snap1.heapUsage)} -> ${_formatBytes(snap2.heapUsage)} (${heapDiff <= 0 ? "" : "+"}${_formatBytes(heapDiff)}, ${_pctChange(snap1.heapUsage, snap2.heapUsage)})');
+    md.writeln('Capacity: ${_formatBytes(snap1.heapCapacity)} -> ${_formatBytes(snap2.heapCapacity)} (${capacityDiff <= 0 ? "" : "+"}${_formatBytes(capacityDiff)})');
+    md.writeln('Time between snapshots: ${timeDiffS}s');
 
     if (grew.isNotEmpty) {
-      output.add('  GREW (top 10)');
-      output.add('-----------------------------------------------------------');
+      md.writeln();
+      md.writeln('GREW (top 10)');
       for (final d in grew.take(10)) {
         final instDiffVal = d['instancesDiff'] as int;
         final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
-        output.add(
-            '  +${_formatBytes(d['bytesDiff'] as int).padLeft(10)} | ${instDiff.padLeft(8)} inst | ${d['name']}');
+        md.writeln('+${_formatBytes(d['bytesDiff'] as int)} | $instDiff inst | ${d['name']}');
       }
-      output.add('');
     }
 
     if (shrank.isNotEmpty) {
-      output.add('  SHRANK (top 10)');
-      output.add('-----------------------------------------------------------');
+      md.writeln();
+      md.writeln('SHRANK (top 10)');
       for (final d in shrank.take(10)) {
         final instDiffVal = d['instancesDiff'] as int;
         final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
-        output.add(
-            '  -${_formatBytes(d['bytesDiff'] as int).padLeft(10)} | ${instDiff.padLeft(8)} inst | ${d['name']}');
+        md.writeln('-${_formatBytes((d['bytesDiff'] as int).abs())} | $instDiff inst | ${d['name']}');
       }
-      output.add('');
     }
 
-    output.add('  VERDICT');
-    output.add('-----------------------------------------------------------');
-
+    md.writeln();
+    md.writeln('VERDICT');
     if (heapDiff < -1000000) {
-      output.add(
-          'Memory improved by ${_formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Nice work!');
+      md.writeln('Memory improved by ${_formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}).');
     } else if (heapDiff > 1000000) {
-      output.add(
-          'Warning: Memory increased by ${_formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.');
+      md.writeln('Warning: Memory increased by ${_formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.');
     } else {
-      output.add('No significant change in memory usage between snapshots.');
+      md.writeln('No significant change in memory usage between snapshots.');
     }
 
-    return CallToolResult(
-      content: [TextContent(text: output.join('\n'))],
+    return _serializeDualFormat(
+      title: 'Snapshot Comparison: "$before" -> "$after"',
+      markdownBody: md.toString(),
+      structuredData: {
+        'before': before,
+        'after': after,
+        'heap_diff_bytes': heapDiff,
+        'heap_pct_change': _pctChange(snap1.heapUsage, snap2.heapUsage),
+        'time_diff_seconds': double.tryParse(timeDiffS) ?? 0.0,
+        'grew': grew.take(10).toList(),
+        'shrank': shrank.take(10).toList(),
+      },
+      format: req.arguments?['format'] as String?,
     );
   }
 
@@ -425,7 +425,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
           .last
           .split('.')
           .first;
-      lines.add('  - "$name" - ${_formatBytes(snap.heapUsage)} heap, $timeStr');
+      lines.add('- "$name" - ${_formatBytes(snap.heapUsage)} heap, $timeStr');
     });
 
     return CallToolResult(
@@ -517,21 +517,17 @@ extension MemoryHandlers on FlutterAgentLensServer {
         sortedByInstances.where((m) => (m.instancesCurrent ?? 0) > 0).toList();
 
     final output = [
-      '===========================================================',
-      '  MEMORY SNAPSHOT',
-      '===========================================================',
+      'MEMORY SNAPSHOT',
       '',
-      '  HEAP OVERVIEW',
-      '-----------------------------------------------------------',
-      'Heap used:     ${_formatBytes(heapUsage)}',
+      'HEAP OVERVIEW',
+      'Heap used: ${_formatBytes(heapUsage)}',
       'Heap capacity: ${_formatBytes(heapCapacity)}',
-      'Utilization:   ${heapUtilization.toStringAsFixed(1)}%',
-      'External:      ${_formatBytes(externalUsage)}',
-      'Total:         ${_formatBytes(heapUsage + externalUsage)}',
+      'Utilization: ${heapUtilization.toStringAsFixed(1)}%',
+      'External: ${_formatBytes(externalUsage)}',
+      'Total: ${_formatBytes(heapUsage + externalUsage)}',
       if (forceGc) '(Snapshot taken after forced GC)',
       '',
-      '  TOP $topN CLASSES BY MEMORY',
-      '-----------------------------------------------------------',
+      'TOP $topN CLASSES BY MEMORY',
     ];
 
     for (final member in sortedBySizeFiltered.take(topN)) {
@@ -541,20 +537,17 @@ extension MemoryHandlers on FlutterAgentLensServer {
       final pct = heapUsage > 0
           ? ((bytesCurrent / heapUsage) * 100).toStringAsFixed(1)
           : '0.0';
-      output.add(
-          '${_formatBytes(bytesCurrent).padLeft(12)} ($pct%) | ${instancesCurrent.toString().padLeft(8)} instances | $className');
+      output.add('${_formatBytes(bytesCurrent)} ($pct%) | $instancesCurrent instances | $className');
     }
 
     output.add('');
-    output.add('  TOP 10 CLASSES BY INSTANCE COUNT');
-    output.add('-----------------------------------------------------------');
+    output.add('TOP 10 CLASSES BY INSTANCE COUNT');
 
     for (final member in sortedByInstancesFiltered.take(10)) {
       final bytesCurrent = member.bytesCurrent ?? 0;
       final instancesCurrent = member.instancesCurrent ?? 0;
       final className = member.classRef!.name!;
-      output.add(
-          '${instancesCurrent.toString().padLeft(12)} instances | ${_formatBytes(bytesCurrent).padLeft(12)} | $className');
+      output.add('$instancesCurrent instances | ${_formatBytes(bytesCurrent)} | $className');
     }
 
     const vmInternalClasses = {
@@ -644,14 +637,12 @@ extension MemoryHandlers on FlutterAgentLensServer {
 
     if (appClasses.isNotEmpty) {
       output.add('');
-      output.add('  APP & FRAMEWORK CLASSES');
-      output.add('-----------------------------------------------------------');
+      output.add('APP & FRAMEWORK CLASSES');
       for (final cls in appClasses.take(20)) {
         final bytesCurrent = cls.bytesCurrent ?? 0;
         final instancesCurrent = cls.instancesCurrent ?? 0;
         final className = cls.classRef!.name!;
-        output.add(
-            '${instancesCurrent.toString().padLeft(12)} instances | ${_formatBytes(bytesCurrent).padLeft(12)} | $className');
+        output.add('$instancesCurrent instances | ${_formatBytes(bytesCurrent)} | $className');
       }
     }
 
@@ -660,14 +651,12 @@ extension MemoryHandlers on FlutterAgentLensServer {
 
     if (suspiciousClasses.isNotEmpty) {
       output.add('');
-      output.add('  POTENTIAL CONCERNS');
-      output.add('-----------------------------------------------------------');
+      output.add('POTENTIAL CONCERNS');
       for (final cls in suspiciousClasses.take(5)) {
         final bytesCurrent = cls.bytesCurrent ?? 0;
         final instancesCurrent = cls.instancesCurrent ?? 0;
         final className = cls.classRef!.name!;
-        output.add(
-            '- $className: ${instancesCurrent.toString()} instances (${_formatBytes(bytesCurrent)}) - check for leaks or excessive allocations');
+        output.add('- $className: $instancesCurrent instances (${_formatBytes(bytesCurrent)}) - check for leaks or excessive allocations');
       }
     }
 
@@ -677,8 +666,33 @@ extension MemoryHandlers on FlutterAgentLensServer {
           'WARNING: Heap utilization above 85%. The app may be at risk of OOM. Consider reducing memory footprint.');
     }
 
-    return CallToolResult(
-      content: [TextContent(text: output.join('\n'))],
+    final structuredData = {
+      'heapUsage': heapUsage,
+      'heapCapacity': heapCapacity,
+      'externalUsage': externalUsage,
+      'heapUtilization': heapUtilization,
+      'top_classes': sortedBySizeFiltered.take(topN).map((m) => {
+        'class': m.classRef!.name!,
+        'bytes': m.bytesCurrent ?? 0,
+        'instances': m.instancesCurrent ?? 0,
+      }).toList(),
+      'top_instances': sortedByInstancesFiltered.take(10).map((m) => {
+        'class': m.classRef!.name!,
+        'bytes': m.bytesCurrent ?? 0,
+        'instances': m.instancesCurrent ?? 0,
+      }).toList(),
+      'app_classes': appClasses.take(20).map((m) => {
+        'class': m.classRef!.name!,
+        'bytes': m.bytesCurrent ?? 0,
+        'instances': m.instancesCurrent ?? 0,
+      }).toList(),
+    };
+
+    return _serializeDualFormat(
+      title: 'Memory Snapshot Summary',
+      markdownBody: output.join('\n'),
+      structuredData: structuredData,
+      format: req.arguments?['format'] as String?,
     );
   }
 }
