@@ -1,7 +1,198 @@
-part of '../../flutter_agent_lens.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:dart_mcp/server.dart';
+import 'package:vm_service/vm_service.dart';
+import 'package:path/path.dart' as p;
+import 'vm_connection_support.dart';
 
-/// MCP tool handlers for inspecting widget trees and tracking rebuild frequencies.
-extension WidgetHandlers on FlutterAgentLensServer {
+base mixin WidgetInspectionSupport
+    on MCPServer, ToolsSupport, VmConnectionSupport {
+  bool isTrackingRebuilds = false;
+  int? rebuildStartTime;
+  final Map<String, int> rebuildCounts = {};
+  final Map<String, String> rebuildIdToName = {};
+  final Map<String, String> rebuildIdToFile = {};
+  StreamSubscription? rebuildSub;
+
+  void registerWidgetTools() {
+    final formatSchema = StringSchema(
+      description:
+          'Response format: markdown, json, or dual (default: markdown).',
+    );
+
+    registerTool(
+      Tool(
+        name: 'get_widget_rebuild_counts',
+        description:
+            'Find widgets that rebuild frequently by tracking rebuild counts.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'duration_seconds': durationSchema(),
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('get_widget_rebuild_counts', _handleWidgetRebuildCounts),
+    );
+
+    registerTool(
+      Tool(
+        name: 'inspect_widget',
+        description:
+            'Retrieve layout constraints and details of a widget by its ID.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'widgetId': StringSchema(
+              description: 'The unique widget details ID.',
+            ),
+            'includeRawNode': BooleanSchema(
+              description:
+                  'Whether to include the full raw widget node representation in the structured data (default: false).',
+            ),
+            'format': formatSchema,
+          },
+          required: ['widgetId'],
+        ),
+      ),
+      wrapToolCall('inspect_widget', _handleInspectLayoutConstraints),
+    );
+
+    registerTool(
+      Tool(
+        name: 'toggle_widget_selection',
+        description: 'Toggle the tap-to-select widget inspection overlay.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'enabled': BooleanSchema(
+              description: 'Whether to enable the widget selection overlay.',
+            ),
+          },
+          required: ['enabled'],
+        ),
+      ),
+      wrapToolCall('toggle_widget_selection', _handleToggleWidgetSelection),
+    );
+
+    registerTool(
+      Tool(
+        name: 'toggle_package_widgets',
+        description:
+            'Toggle whether package widgets are shown in the widget tree.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'enabled': BooleanSchema(
+              description: 'Whether to enable showing package widgets.',
+            ),
+          },
+          required: ['enabled'],
+        ),
+      ),
+      wrapToolCall('toggle_package_widgets', _handleTogglePackageWidgets),
+    );
+
+    registerTool(
+      Tool(
+        name: 'toggle_debug_flag',
+        description:
+            'Toggle standard Flutter debug paint/overlay flags (e.g. paintBorder, timeDilation).',
+        inputSchema: ObjectSchema(
+          properties: {
+            'flag_name': StringSchema(
+              description:
+                  'Flag name: debugPaintSizeEnabled, debugPaintBaselinesEnabled, debugPaintForceRequests, timeDilation.',
+            ),
+            'value': StringSchema(
+              description:
+                  'Value to set: "true"/"false" or number string for timeDilation.',
+            ),
+          },
+          required: ['flag_name', 'value'],
+        ),
+      ),
+      wrapToolCall('toggle_debug_flag', _handleToggleDebugFlag),
+    );
+
+    registerTool(
+      Tool(
+        name: 'get_widget_tree',
+        description:
+            'Get the current widget tree of the running Flutter application.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'maxDepth': NumberSchema(
+              description:
+                  'Maximum depth of the widget tree to return (default: 15).',
+            ),
+            'projectOnly': BooleanSchema(
+              description:
+                  'If true, only return widgets created by the local project code.',
+            ),
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('get_widget_tree', _handleGetWidgetTree),
+    );
+
+    registerTool(
+      Tool(
+        name: 'start_tracking_rebuilds',
+        description:
+            'Start a stateful session to track widget rebuild frequencies.',
+        inputSchema: emptySchema(),
+      ),
+      wrapToolCall('start_tracking_rebuilds', _handleStartTrackingRebuilds),
+    );
+
+    registerTool(
+      Tool(
+        name: 'stop_tracking_rebuilds',
+        description:
+            'Stop the active widget rebuild tracking session and get the report.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'topN': NumberSchema(
+              description:
+                  'Number of top rebuilding widgets to list (default: 30).',
+            ),
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('stop_tracking_rebuilds', _handleStopTrackingRebuilds),
+    );
+
+    registerTool(
+      Tool(
+        name: 'trigger_scroll_gesture',
+        description: 'Simulate user scrolling by animating a ScrollController.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'scroll_controller_expression': StringSchema(
+              description:
+                  'Dart expression that evaluates to the ScrollController (e.g., PrimaryScrollController.of(primaryFocus!.context)).',
+            ),
+            'offset': NumberSchema(
+              description: 'Pixel offset to scroll to (default: 500.0).',
+            ),
+          },
+          required: ['scroll_controller_expression'],
+        ),
+      ),
+      wrapToolCall('trigger_scroll_gesture', _handleScrollGesture),
+    );
+  }
+
+  void cleanupWidgetInspection() {
+    rebuildSub?.cancel();
+    rebuildSub = null;
+    isTrackingRebuilds = false;
+    rebuildCounts.clear();
+    rebuildIdToName.clear();
+    rebuildIdToFile.clear();
+  }
+
   Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
     stderr.writeln(
@@ -21,18 +212,15 @@ extension WidgetHandlers on FlutterAgentLensServer {
       );
     }
 
-    // Maps location ID -> widget name
     final idToName = <String, String>{};
-    // Maps location ID -> "file:line"
     final idToFile = <String, String>{};
 
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Enabling trackRebuildDirtyWidgets...');
     await _enableRebuildTracking(idToName, idToFile);
 
-    // Listen for Extension events that carry rebuild data
     final rebuildEvents = <Map<String, dynamic>>[];
-    final extSub = _vmService!.onExtensionEvent.listen((Event event) {
+    final extSub = vmService!.onExtensionEvent.listen((Event event) {
       if (event.extensionKind == 'Flutter.RebuiltWidgets') {
         final data = event.extensionData?.data;
         if (data != null) {
@@ -45,11 +233,10 @@ extension WidgetHandlers on FlutterAgentLensServer {
         '[mcp:widget_rebuild_counts] Collecting rebuild events for ${duration}s...');
     await Future.delayed(Duration(seconds: duration));
 
-    // Stop listening and disable tracking
     await extSub.cancel();
-    await _vmService!.callServiceExtension(
+    await vmService!.callServiceExtension(
       'ext.flutter.inspector.trackRebuildDirtyWidgets',
-      isolateId: _isolateId,
+      isolateId: isolateId,
       args: {'enabled': 'false'},
     );
 
@@ -58,11 +245,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
     final widgetCounts = <String, int>{};
     for (final event in rebuildEvents) {
-      // Parse locations and newLocations to update lookup maps
       _parseLocationsMap(event['locations'], idToName, idToFile);
       _parseNewLocationsMap(event['newLocations'], idToFile);
 
-      // Count rebuilds per location ID.
       final events = event['events'] as List<dynamic>?;
       if (events != null) {
         for (var i = 0; i + 1 < events.length; i += 2) {
@@ -76,13 +261,12 @@ extension WidgetHandlers on FlutterAgentLensServer {
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Location map: ${idToName.length} named, ${idToFile.length} with files');
 
-    // Build results.
     final widgets = <Map<String, dynamic>>[];
     widgetCounts.forEach((locId, count) {
       final name = idToName[locId] ?? 'Widget#$locId';
       final rawFile = idToFile[locId] ?? 'unknown';
-      final resolvedPath = _pathResolver != null
-          ? _pathResolver!.resolveToAbsolutePath(rawFile)
+      final resolvedPath = pathResolver != null
+          ? pathResolver!.resolveToAbsolutePath(rawFile)
           : rawFile;
       widgets.add({
         'widget': name,
@@ -92,104 +276,28 @@ extension WidgetHandlers on FlutterAgentLensServer {
       });
     });
 
-    // Sort by descending count.
     widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
     final mdBuffer = StringBuffer('Top Rebuilding Widgets\n\n');
     if (widgets.isEmpty) {
       mdBuffer.writeln(
-          'No widget rebuilds recorded during the ${duration}s tracking window.');
-      mdBuffer.writeln('');
-      mdBuffer.writeln('This can happen if:');
-      mdBuffer
-          .writeln('- The app UI was idle (no user interaction or animations)');
-      mdBuffer.writeln(
-          '- The app is in release mode (tracking only works in debug mode)');
-      mdBuffer.writeln('');
-      mdBuffer.writeln('Raw rebuild events received: ${rebuildEvents.length}');
+          'No rebuilds captured. Make sure you interacted with the app while tracking.');
     } else {
-      mdBuffer.writeln('| Widget | Rebuild Count | Source Location |');
+      mdBuffer.writeln('| Widget | Count | Location |');
       mdBuffer.writeln('| :--- | :--- | :--- |');
-      for (final w in widgets.take(20)) {
+      for (final w in widgets) {
         mdBuffer.writeln(
-            '| ${w['widget']} | ${w['count']} | `${w['location']}` |');
-      }
-      if (widgets.length > 20) {
-        mdBuffer.writeln('\n_...and ${widgets.length - 20} more widgets._');
+            '| `${w['widget']}` | `${w['count']}x` | `${w['location']}` |');
       }
     }
 
-    stderr.writeln(
-        '[mcp:widget_rebuild_counts] Done. ${widgets.length} widgets tracked.');
-    return _serializeDualFormat(
-      title: 'Widget Rebuild Analysis',
+    return serializeDualFormat(
+      title: 'Widget Rebuilt Counts Analysis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'duration_seconds': duration,
-        'total_recorded_widgets': widgets.length,
-        'raw_events_received': rebuildEvents.length,
-        'rebuilds': widgets.take(30).toList(),
+        'widgets': widgets,
       },
       format: req.arguments?['format'] as String?,
-    );
-  }
-
-  Future<CallToolResult> _handleEvalExpression(CallToolRequest req) async {
-    final expression = req.arguments!['expression'] as String;
-    final frameIndex = (req.arguments?['frame_index'] as num?)?.toInt();
-
-    if (frameIndex != null) {
-      stderr.writeln(
-          '[mcp:evaluate_expression] Evaluating in frame $frameIndex: $expression');
-    } else {
-      stderr.writeln(
-          '[mcp:evaluate_expression] Evaluating in library: $expression');
-    }
-
-    final dynamic res;
-    if (frameIndex != null) {
-      res = await _vmService!
-          .evaluateInFrame(_isolateId!, frameIndex, expression);
-    } else {
-      final libraryId = await _getEvaluationLibraryId();
-      res = await _vmService!.evaluate(_isolateId!, libraryId, expression);
-    }
-
-    final valStr = res is InstanceRef ? res.valueAsString : res.toString();
-    final kindStr = res is InstanceRef ? res.kind : 'Unknown';
-    final classStr = res is InstanceRef ? res.classRef?.name : 'Unknown';
-    return CallToolResult(
-      content: [
-        TextContent(
-            text: 'Evaluation Result\n'
-                '- Kind: $kindStr\n'
-                '- Value: $valStr\n'
-                '- Class: $classStr')
-      ],
-    );
-  }
-
-  Future<CallToolResult> _handleScrollGesture(CallToolRequest req) async {
-    final controller = req.arguments!['scroll_controller_expression'] as String;
-    final offset = (req.arguments?['offset'] as num?)?.toDouble() ?? 500.0;
-    stderr.writeln(
-        '[mcp:scroll_gesture] Controller: $controller, offset: $offset');
-
-    final script = '$controller.animateTo('
-        '$offset,'
-        'duration: const Duration(milliseconds: 300),'
-        'curve: Curves.easeInOut,'
-        ')';
-
-    final libraryId = await _getEvaluationLibraryId();
-    final eval = await _vmService!.evaluate(_isolateId!, libraryId, script);
-    final evalStr = eval is InstanceRef ? eval.valueAsString : eval.toString();
-    return CallToolResult(
-      content: [
-        TextContent(
-            text:
-                'Scroll gesture driven successfully. Evaluation result: `$evalStr`')
-      ],
     );
   }
 
@@ -199,9 +307,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
         (req.arguments!['widget_id'] ?? req.arguments!['widgetId']) as String;
     stderr.writeln('[mcp:inspect_layout] Inspecting widget: $widgetId');
 
-    final response = await _vmService!.callServiceExtension(
+    final response = await vmService!.callServiceExtension(
       'ext.flutter.inspector.getDetailsSubtree',
-      isolateId: _isolateId,
+      isolateId: isolateId,
       args: {
         'id': widgetId,
         'arg': widgetId,
@@ -254,8 +362,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
     extract(result);
 
-    final md =
-        StringBuffer('Layout Constraints for Widget: $widgetId\n\n');
+    final md = StringBuffer('Layout Constraints for Widget: $widgetId\n\n');
     md.writeln('- Widget Type: ${result['description'] ?? 'Unknown'}');
     md.writeln('- Constraints: ${constraints ?? 'Not found'}');
     md.writeln('- Size: ${size ?? 'Not found'}');
@@ -271,7 +378,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
     }
 
     final includeRawNode = req.arguments?['includeRawNode'] as bool? ?? false;
-    return _serializeDualFormat(
+    return serializeDualFormat(
       title: 'Layout Diagnostics Report',
       markdownBody: md.toString(),
       structuredData: {
@@ -291,9 +398,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
     final enabled = req.arguments!['enabled'] as bool;
     stderr.writeln('[mcp:toggle_widget_selection] Setting enabled = $enabled');
 
-    await _vmService!.callServiceExtension(
+    await vmService!.callServiceExtension(
       'ext.flutter.inspector.show',
-      isolateId: _isolateId,
+      isolateId: isolateId,
       args: {'enabled': enabled ? 'true' : 'false'},
     );
     return CallToolResult(
@@ -310,7 +417,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
     final enabled = req.arguments!['enabled'] as bool;
     stderr.writeln('[mcp:toggle_package_widgets] Setting enabled = $enabled');
 
-    final root = _workspaceRoot;
+    final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
         content: [
@@ -323,7 +430,6 @@ extension WidgetHandlers on FlutterAgentLensServer {
       );
     }
 
-    // 1. Get package paths from package_config.json
     final packagePaths = _getPackageDirectories(root);
     if (packagePaths.isEmpty) {
       return CallToolResult(
@@ -337,13 +443,11 @@ extension WidgetHandlers on FlutterAgentLensServer {
       );
     }
 
-    // Also add the workspace root itself to be safe
     if (!packagePaths.contains(root)) {
       packagePaths.insert(0, root);
     }
 
-    // 2. Find WidgetInspectorService library
-    final isolate = await _vmService!.getIsolate(_isolateId!);
+    final isolate = await vmService!.getIsolate(isolateId!);
     final widgetInspectorLib = isolate.libraries?.firstWhere(
       (lib) => lib.uri == 'package:flutter/src/widgets/widget_inspector.dart',
       orElse: () => throw StateError(
@@ -351,8 +455,6 @@ extension WidgetHandlers on FlutterAgentLensServer {
     );
 
     final libId = widgetInspectorLib!.id!;
-
-    // 3. Format paths literal for Dart array: ['path1', 'path2', ...]
     final pathsLiteral = packagePaths
         .map((p) => "'${p.replaceAll("'", "\\'")}'")
         .toList()
@@ -361,26 +463,25 @@ extension WidgetHandlers on FlutterAgentLensServer {
     if (enabled) {
       stderr.writeln(
           '[mcp:toggle_package_widgets] Adding ${packagePaths.length} pub root directories');
-      await _vmService!.evaluate(
-        _isolateId!,
+      await vmService!.evaluate(
+        isolateId!,
         libId,
         'WidgetInspectorService.instance.addPubRootDirectories($pathsLiteral)',
       );
     } else {
       stderr.writeln(
           '[mcp:toggle_package_widgets] Removing ${packagePaths.length} pub root directories');
-      await _vmService!.evaluate(
-        _isolateId!,
+      await vmService!.evaluate(
+        isolateId!,
         libId,
         'WidgetInspectorService.instance.removePubRootDirectories($pathsLiteral)',
       );
     }
 
-    // Read current pub root directories if possible using evaluate
     var currentDirs = 'unknown';
     try {
-      final res = await _vmService!.evaluate(
-        _isolateId!,
+      final res = await vmService!.evaluate(
+        isolateId!,
         libId,
         'WidgetInspectorService.instance.pubRootDirectories',
       );
@@ -427,7 +528,6 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
       var uri = Uri.parse(rootUriStr);
       if (!uri.isAbsolute) {
-        // Resolve relative to .dart_tool/ directory
         final absolutePath =
             p.canonicalize(p.join(configDir.path, uri.toFilePath()));
         directories.add(absolutePath);
@@ -455,9 +555,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
       args = {'enabled': boolVal ? 'true' : 'false'};
     }
 
-    await _vmService!.callServiceExtension(
+    await vmService!.callServiceExtension(
       extensionName,
-      isolateId: _isolateId,
+      isolateId: isolateId,
       args: args,
     );
 
@@ -478,16 +578,16 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
     dynamic rootNode;
     try {
-      final response = await _vmService!.callServiceExtension(
+      final response = await vmService!.callServiceExtension(
         'ext.flutter.inspector.getRootWidgetSummaryTree',
-        isolateId: _isolateId,
+        isolateId: isolateId,
         args: {'objectGroup': objectGroup},
       );
       rootNode = _parseExtensionResult(response);
     } catch (e) {
-      final response = await _vmService!.callServiceExtension(
+      final response = await vmService!.callServiceExtension(
         'ext.flutter.inspector.getRootWidgetTree',
-        isolateId: _isolateId,
+        isolateId: isolateId,
         args: {
           'groupName': objectGroup,
           'isSummaryTree': 'true',
@@ -527,7 +627,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
         ? 0
         : flattened.map((w) => w.depth).reduce((a, b) => a > b ? a : b);
 
-    return _serializeDualFormat(
+    return serializeDualFormat(
       title: 'Widget Tree Summary',
       markdownBody:
           'Widget Tree ($totalWidgets widgets, $projectWidgets from project, depth: $maxDepthReached)\n\n$text',
@@ -564,9 +664,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
       final valueId = node['valueId'] as String?;
       if (valueId != null) {
         try {
-          final response = await _vmService!.callServiceExtension(
+          final response = await vmService!.callServiceExtension(
             'ext.flutter.inspector.getChildrenSummaryTree',
-            isolateId: _isolateId,
+            isolateId: isolateId,
             args: {
               'arg': valueId,
               'objectGroup': objectGroup,
@@ -577,9 +677,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
             node['children'] = result;
             childrenList = result;
           }
-        } catch (_) {
-          // Ignore child fetch failures
-        }
+        } catch (_) {}
       }
     }
 
@@ -590,11 +688,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
           final childMap = Map<String, dynamic>.from(child);
           childrenList[i] = childMap;
           await _expandWidgetChildren(
-            childMap,
-            objectGroup,
-            depth + 1,
-            maxDepth,
-          );
+              childMap, objectGroup, depth + 1, maxDepth);
         }
       }
     }
@@ -734,7 +828,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
   Future<CallToolResult> _handleStartTrackingRebuilds(
       CallToolRequest req) async {
-    if (_isTrackingRebuilds) {
+    if (isTrackingRebuilds) {
       return CallToolResult(
         content: [
           TextContent(
@@ -760,27 +854,28 @@ extension WidgetHandlers on FlutterAgentLensServer {
       );
     }
 
-    _isTrackingRebuilds = true;
-    _rebuildStartTime = DateTime.now().millisecondsSinceEpoch;
-    _rebuildCounts.clear();
-    _rebuildIdToName.clear();
-    _rebuildIdToFile.clear();
+    isTrackingRebuilds = true;
+    rebuildStartTime = DateTime.now().millisecondsSinceEpoch;
+    rebuildCounts.clear();
+    rebuildIdToName.clear();
+    rebuildIdToFile.clear();
 
-    await _enableRebuildTracking(_rebuildIdToName, _rebuildIdToFile);
+    await _enableRebuildTracking(rebuildIdToName, rebuildIdToFile);
 
-    _rebuildSub = _vmService!.onExtensionEvent.listen((Event event) {
+    rebuildSub = vmService!.onExtensionEvent.listen((Event event) {
       if (event.extensionKind == 'Flutter.RebuiltWidgets') {
         final data = event.extensionData?.data;
         if (data != null) {
-          _parseLocationsMap(data['locations'], _rebuildIdToName, _rebuildIdToFile);
-          _parseNewLocationsMap(data['newLocations'], _rebuildIdToFile);
+          _parseLocationsMap(
+              data['locations'], rebuildIdToName, rebuildIdToFile);
+          _parseNewLocationsMap(data['newLocations'], rebuildIdToFile);
 
           final events = data['events'] as List<dynamic>?;
           if (events != null) {
             for (var i = 0; i + 1 < events.length; i += 2) {
               final locId = events[i].toString();
               final count = events[i + 1] is int ? events[i + 1] as int : 1;
-              _rebuildCounts[locId] = (_rebuildCounts[locId] ?? 0) + count;
+              rebuildCounts[locId] = (rebuildCounts[locId] ?? 0) + count;
             }
           }
         }
@@ -799,7 +894,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
   Future<CallToolResult> _handleStopTrackingRebuilds(
       CallToolRequest req) async {
-    if (!_isTrackingRebuilds) {
+    if (!isTrackingRebuilds) {
       return CallToolResult(
         content: [
           TextContent(
@@ -814,47 +909,44 @@ extension WidgetHandlers on FlutterAgentLensServer {
 
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Stopping rebuild tracking session...');
-    _isTrackingRebuilds = false;
-    await _rebuildSub?.cancel();
-    _rebuildSub = null;
+    isTrackingRebuilds = false;
+    await rebuildSub?.cancel();
+    rebuildSub = null;
 
-    await _vmService!.callServiceExtension(
+    await vmService!.callServiceExtension(
       'ext.flutter.inspector.trackRebuildDirtyWidgets',
-      isolateId: _isolateId,
+      isolateId: isolateId,
       args: {'enabled': 'false'},
     );
 
-    final durationSec = _rebuildStartTime != null
-        ? ((DateTime.now().millisecondsSinceEpoch - _rebuildStartTime!) /
-                1000.0)
+    final durationSec = rebuildStartTime != null
+        ? ((DateTime.now().millisecondsSinceEpoch - rebuildStartTime!) / 1000.0)
             .toStringAsFixed(1)
         : 'unknown';
 
-    // Refresh locations map one last time
     try {
-      final locationResponse = await _vmService!.callServiceExtension(
+      final locationResponse = await vmService!.callServiceExtension(
         'ext.flutter.inspector.widgetLocationIdMap',
-        isolateId: _isolateId,
+        isolateId: isolateId,
       );
       final rawLocationResult = locationResponse.json?['result'];
       if (rawLocationResult is String) {
         final decoded = jsonDecode(rawLocationResult);
-        _parseLocationsMap(decoded, _rebuildIdToName, _rebuildIdToFile);
+        _parseLocationsMap(decoded, rebuildIdToName, rebuildIdToFile);
       } else if (rawLocationResult is Map) {
-        _parseLocationsMap(rawLocationResult, _rebuildIdToName, _rebuildIdToFile);
+        _parseLocationsMap(rawLocationResult, rebuildIdToName, rebuildIdToFile);
       }
     } catch (_) {}
 
-    // Build results
     final widgets = <Map<String, dynamic>>[];
     var totalRebuilds = 0;
 
-    _rebuildCounts.forEach((locId, count) {
+    rebuildCounts.forEach((locId, count) {
       totalRebuilds += count;
-      final name = _rebuildIdToName[locId] ?? 'Widget#$locId';
-      final rawFile = _rebuildIdToFile[locId] ?? 'unknown';
-      final resolvedPath = _pathResolver != null
-          ? _pathResolver!.resolveToAbsolutePath(rawFile)
+      final name = rebuildIdToName[locId] ?? 'Widget#$locId';
+      final rawFile = rebuildIdToFile[locId] ?? 'unknown';
+      final resolvedPath = pathResolver != null
+          ? pathResolver!.resolveToAbsolutePath(rawFile)
           : rawFile;
       widgets.add({
         'widget': name,
@@ -927,7 +1019,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
       }
     }
 
-    return _serializeDualFormat(
+    return serializeDualFormat(
       title: 'Widget Rebuild Analysis',
       markdownBody: output.join('\n'),
       structuredData: {
@@ -987,25 +1079,50 @@ extension WidgetHandlers on FlutterAgentLensServer {
     });
   }
 
+  Future<CallToolResult> _handleScrollGesture(CallToolRequest req) async {
+    final controller = req.arguments!['scroll_controller_expression'] as String;
+    final offset = (req.arguments?['offset'] as num?)?.toDouble() ?? 500.0;
+    stderr.writeln(
+        '[mcp:scroll_gesture] Controller: $controller, offset: $offset');
+
+    final script = '$controller.animateTo('
+        '$offset,'
+        'duration: const Duration(milliseconds: 300),'
+        'curve: Curves.easeInOut,'
+        ')';
+
+    final libraryId = await getEvaluationLibraryId();
+    final eval = await vmService!.evaluate(isolateId!, libraryId, script);
+    final evalStr = eval is InstanceRef ? eval.valueAsString : eval.toString();
+    return CallToolResult(
+      content: [
+        TextContent(
+            text:
+                'Scroll gesture driven successfully. Evaluation result: `$evalStr`')
+      ],
+    );
+  }
+
   Future<bool> _isTrackRebuildSupported() async {
-    final isolate = await _vmService!.getIsolate(_isolateId!);
+    final isolate = await vmService!.getIsolate(isolateId!);
     final extensions = isolate.extensionRPCs ?? [];
-    return extensions.contains('ext.flutter.inspector.trackRebuildDirtyWidgets');
+    return extensions
+        .contains('ext.flutter.inspector.trackRebuildDirtyWidgets');
   }
 
   Future<void> _enableRebuildTracking(
     Map<String, String> idToName,
     Map<String, String> idToFile,
   ) async {
-    await _vmService!.callServiceExtension(
+    await vmService!.callServiceExtension(
       'ext.flutter.inspector.trackRebuildDirtyWidgets',
-      isolateId: _isolateId,
+      isolateId: isolateId,
       args: {'enabled': 'true'},
     );
     try {
-      final locationResponse = await _vmService!.callServiceExtension(
+      final locationResponse = await vmService!.callServiceExtension(
         'ext.flutter.inspector.widgetLocationIdMap',
-        isolateId: _isolateId,
+        isolateId: isolateId,
       );
       final rawLocationResult = locationResponse.json?['result'];
       if (rawLocationResult is String) {
@@ -1016,7 +1133,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
       }
     } catch (_) {}
     try {
-      await _vmService!.streamListen(EventStreams.kExtension);
+      await vmService!.streamListen(EventStreams.kExtension);
     } catch (_) {}
   }
 }

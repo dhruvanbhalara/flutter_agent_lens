@@ -1,24 +1,112 @@
-part of '../../flutter_agent_lens.dart';
+import 'dart:async';
+import 'dart:io';
+import 'package:dart_mcp/server.dart';
+import 'package:vm_service/vm_service.dart';
+import 'vm_connection_support.dart';
+import 'dtd_support.dart';
 
-/// MCP tool handlers for diagnosing frame jank and capturing CPU profiles.
-extension PerformanceHandlers on FlutterAgentLensServer {
+base mixin PerformanceProfilingSupport
+    on MCPServer, ToolsSupport, VmConnectionSupport {
+  bool isProfiling = false;
+  int? profilingStartTime;
+  double? targetFps;
+
+  void registerPerformanceTools() {
+    final formatSchema = StringSchema(
+      description:
+          'Response format: markdown, json, or dual (default: markdown).',
+    );
+
+    registerTool(
+      Tool(
+        name: 'diagnose_jank',
+        description: 'Check frame times to find rendering slowdowns (jank).',
+        inputSchema: ObjectSchema(
+          properties: {
+            'duration_seconds': durationSchema(),
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('diagnose_jank', _handleDiagnoseJank),
+    );
+
+    registerTool(
+      Tool(
+        name: 'get_cpu_profile',
+        description:
+            'Sample CPU usage and find execution hotspots in Dart functions.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'duration_seconds': durationSchema(),
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('get_cpu_profile', _handleGetCpuProfile),
+    );
+
+    registerTool(
+      Tool(
+        name: 'start_profiling',
+        description:
+            'Start a stateful performance profiling session (CPU & Jank).',
+        inputSchema: emptySchema(),
+      ),
+      wrapToolCall('start_profiling', _handleStartProfiling),
+    );
+
+    registerTool(
+      Tool(
+        name: 'stop_profiling',
+        description:
+            'Stop the active performance profiling session and get the analysis report.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('stop_profiling', _handleStopProfiling),
+    );
+
+    registerTool(
+      Tool(
+        name: 'hot_reload',
+        description: 'Trigger a hot reload.',
+        inputSchema: emptySchema(),
+      ),
+      wrapToolCall('hot_reload', handleHotReload),
+    );
+
+    registerTool(
+      Tool(
+        name: 'hot_restart',
+        description: 'Trigger a hot restart of the application.',
+        inputSchema: emptySchema(),
+      ),
+      wrapToolCall('hot_restart', handleHotRestart),
+    );
+  }
+
+  void cleanupPerformanceProfiling() {
+    isProfiling = false;
+    profilingStartTime = null;
+    targetFps = null;
+  }
+
   Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
-
     stderr.writeln(
         '[mcp:diagnose_jank] Starting jank diagnosis, duration=${duration}s');
-    // Fetch frame rendering events
-    final frameEvents = <Map<String, dynamic>>[];
 
-    // Enable and query timeline records
-    await _vmService!.setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API']);
-    await _vmService!.clearVMTimeline();
+    final frameEvents = <Map<String, dynamic>>[];
+    await vmService!.setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API']);
+    await vmService!.clearVMTimeline();
 
     await Future.delayed(Duration(seconds: duration));
 
-    final timeline = await _vmService!.getVMTimeline();
-
-    // Check timeline events
+    final timeline = await vmService!.getVMTimeline();
     final events = timeline.traceEvents ?? [];
     var jankyFrames = 0;
     var totalFrames = 0;
@@ -30,7 +118,6 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         totalFrames++;
         final dur = event.json?['dur'] as num? ?? 0;
         if (dur > 16666) {
-          // 16.6ms in microseconds
           jankyFrames++;
           frameEvents.add({
             'event': eventName,
@@ -65,7 +152,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
           'Clean Render Cycle: No frame events exceeded the 16.6ms budget.');
     }
 
-    return _serializeDualFormat(
+    return serializeDualFormat(
       title: 'Jank Diagnosis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
@@ -79,40 +166,44 @@ extension PerformanceHandlers on FlutterAgentLensServer {
   }
 
   Future<CallToolResult> handleHotReload(CallToolRequest req) async {
+    final self = this;
     bool dtdSuccess = false;
 
     // Use DTD ConnectedApp service if available to delegate compilation and UI reassembly to the host editor/process.
-    if (_dtdClient != null && _vmServiceUri != null) {
-      stderr.writeln(
-          '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...');
-      try {
-        await _dtdClient!.call(
-          'ConnectedApp',
-          'hotReload',
-          params: {'vmServiceUri': _vmServiceUri},
-        );
-        dtdSuccess = true;
-      } catch (e) {
+    if (self is DtdSupport) {
+      final dtd = self as DtdSupport;
+      if (dtd.dtdClient != null && self.vmServiceUri != null) {
         stderr.writeln(
-            '[mcp:hot_reload] DTD call failed: $e. Falling back to direct VM Service...');
+            '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...');
+        try {
+          await dtd.dtdClient!.call(
+            'ConnectedApp',
+            'hotReload',
+            params: {'vmServiceUri': self.vmServiceUri},
+          );
+          dtdSuccess = true;
+        } catch (e) {
+          stderr.writeln(
+              '[mcp:hot_reload] DTD call failed: $e. Falling back to direct VM Service...');
+        }
       }
     }
 
     if (!dtdSuccess) {
-      final reloadMethod = _registeredMethodsForService['reloadSources'] ??
-          _registeredMethodsForService['hotReload'];
+      final reloadMethod = registeredMethodsForService['reloadSources'] ??
+          registeredMethodsForService['hotReload'];
       if (reloadMethod != null) {
         stderr.writeln(
             '[mcp:hot_reload] Triggering registered service $reloadMethod...');
-        await _vmService!.callMethod(
+        await vmService!.callMethod(
           reloadMethod,
-          args: {'isolateId': _isolateId!},
+          args: {'isolateId': isolateId!},
         );
       } else {
         stderr.writeln('[mcp:hot_reload] Triggering ext.flutter.reassemble...');
-        await _vmService!.callServiceExtension(
+        await vmService!.callServiceExtension(
           'ext.flutter.reassemble',
-          isolateId: _isolateId!,
+          isolateId: isolateId!,
         );
       }
     }
@@ -127,50 +218,54 @@ extension PerformanceHandlers on FlutterAgentLensServer {
   }
 
   Future<CallToolResult> handleHotRestart(CallToolRequest req) async {
+    final self = this;
     bool dtdSuccess = false;
 
     // Use DTD ConnectedApp service if available to delegate compilation, reset in-memory state, and rerun main() via the host.
-    if (_dtdClient != null && _vmServiceUri != null) {
-      stderr.writeln(
-          '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...');
-      try {
-        await _dtdClient!.call(
-          'ConnectedApp',
-          'hotRestart',
-          params: {'vmServiceUri': _vmServiceUri},
-        );
-        dtdSuccess = true;
-      } catch (e) {
+    if (self is DtdSupport) {
+      final dtd = self as DtdSupport;
+      if (dtd.dtdClient != null && self.vmServiceUri != null) {
         stderr.writeln(
-            '[mcp:hot_restart] DTD call failed: $e. Falling back to direct VM Service...');
+            '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...');
+        try {
+          await dtd.dtdClient!.call(
+            'ConnectedApp',
+            'hotRestart',
+            params: {'vmServiceUri': self.vmServiceUri},
+          );
+          dtdSuccess = true;
+        } catch (e) {
+          stderr.writeln(
+              '[mcp:hot_restart] DTD call failed: $e. Falling back to direct VM Service...');
+        }
       }
     }
 
     if (!dtdSuccess) {
-      final hotRestartMethod = _registeredMethodsForService['hotRestart'] ??
-          _registeredMethodsForService['restart'];
+      final hotRestartMethod = registeredMethodsForService['hotRestart'] ??
+          registeredMethodsForService['restart'];
       if (hotRestartMethod != null) {
         stderr.writeln(
             '[mcp:hot_restart] Triggering registered service $hotRestartMethod...');
-        await _vmService!.callMethod(hotRestartMethod);
+        await vmService!.callMethod(hotRestartMethod);
       } else {
         stderr.writeln(
             '[mcp:hot_restart] Checking for restart service extensions...');
-        final isolate = await _vmService!.getIsolate(_isolateId!);
+        final isolate = await vmService!.getIsolate(isolateId!);
         final extensions = isolate.extensionRPCs ?? [];
 
         if (extensions.contains('ext.flutter.restart')) {
           stderr.writeln('[mcp:hot_restart] Triggering ext.flutter.restart...');
-          await _vmService!.callServiceExtension(
+          await vmService!.callServiceExtension(
             'ext.flutter.restart',
-            isolateId: _isolateId!,
+            isolateId: isolateId!,
           );
         } else {
           stderr.writeln(
               '[mcp:hot_restart] ext.flutter.restart not found, falling back to reassemble...');
-          await _vmService!.callServiceExtension(
+          await vmService!.callServiceExtension(
             'ext.flutter.reassemble',
-            isolateId: _isolateId!,
+            isolateId: isolateId!,
           );
         }
       }
@@ -180,12 +275,11 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     await Future.delayed(const Duration(milliseconds: 800));
 
     // Refresh the isolate ID and cache after the restart
-    final vm = await _vmService!.getVM();
+    final vm = await vmService!.getVM();
     if (vm.isolates != null && vm.isolates!.isNotEmpty) {
-      _isolateId = vm.isolates!.first.id!;
-      _cachedLibraryId = null;
-      stderr
-          .writeln('[mcp:hot_restart] Refreshed main isolate ID: $_isolateId');
+      isolateId = vm.isolates!.first.id!;
+      cachedLibraryId = null;
+      stderr.writeln('[mcp:hot_restart] Refreshed main isolate ID: $isolateId');
     }
 
     return CallToolResult(content: [
@@ -199,18 +293,14 @@ extension PerformanceHandlers on FlutterAgentLensServer {
 
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
-
     stderr.writeln(
         '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
-    // 1. Flush existing samples
-    await _vmService!.clearCpuSamples(_isolateId!);
 
-    // 2. Wait to collect fresh profiling data
+    await vmService!.clearCpuSamples(isolateId!);
     await Future.delayed(Duration(seconds: duration));
 
-    // 3. Retrieve all accumulated CPU samples up to now
     final endTime = DateTime.now().microsecondsSinceEpoch;
-    final cpuSamples = await _vmService!.getCpuSamples(_isolateId!, 0, endTime);
+    final cpuSamples = await vmService!.getCpuSamples(isolateId!, 0, endTime);
     final functions = cpuSamples.functions ?? [];
 
     final hotspots = <Map<String, dynamic>>[];
@@ -231,8 +321,8 @@ extension PerformanceHandlers on FlutterAgentLensServer {
           }
 
           final url = f.resolvedUrl ?? '';
-          final resolvedPath = _pathResolver != null
-              ? _pathResolver!.resolveToAbsolutePath(url)
+          final resolvedPath = pathResolver != null
+              ? pathResolver!.resolveToAbsolutePath(url)
               : url;
 
           hotspots.add({
@@ -245,7 +335,6 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       }
     }
 
-    // Sort by exclusive ticks descending
     hotspots.sort((a, b) =>
         (b['exclusive_ticks'] as int).compareTo(a['exclusive_ticks'] as int));
     stderr.writeln(
@@ -263,7 +352,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       }
     }
 
-    return _serializeDualFormat(
+    return serializeDualFormat(
       title: 'CPU Profiler Diagnostic Report',
       markdownBody: mdBuffer.toString(),
       structuredData: {
@@ -276,7 +365,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
   }
 
   Future<CallToolResult> _handleStartProfiling(CallToolRequest req) async {
-    if (_isProfiling) {
+    if (isProfiling) {
       return CallToolResult(
         content: [
           TextContent(
@@ -288,22 +377,22 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     }
 
     stderr.writeln('[mcp:profiling] Starting performance profiling session...');
-    await _vmService!.clearVMTimeline();
-    await _vmService!
+    await vmService!.clearVMTimeline();
+    await vmService!
         .setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API', 'Compiler']);
 
     double fpsVal = 60.0;
     try {
-      final fpsResponse = await _vmService!.callServiceExtension(
+      final fpsResponse = await vmService!.callServiceExtension(
         'ext.flutter.getDisplayRefreshRate',
-        isolateId: _isolateId,
+        isolateId: isolateId,
       );
       fpsVal = (fpsResponse.json?['fps'] as num?)?.toDouble() ?? 60.0;
     } catch (_) {}
 
-    _isProfiling = true;
-    _profilingStartTime = DateTime.now().millisecondsSinceEpoch;
-    _targetFps = fpsVal;
+    isProfiling = true;
+    profilingStartTime = DateTime.now().millisecondsSinceEpoch;
+    targetFps = fpsVal;
 
     return CallToolResult(
       content: [
@@ -316,7 +405,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
   }
 
   Future<CallToolResult> _handleStopProfiling(CallToolRequest req) async {
-    if (!_isProfiling) {
+    if (!isProfiling) {
       return CallToolResult(
         content: [
           TextContent(
@@ -327,21 +416,18 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     }
 
     stderr.writeln('[mcp:profiling] Stopping performance profiling session...');
-    _isProfiling = false;
+    isProfiling = false;
     final durationMs =
-        DateTime.now().millisecondsSinceEpoch - _profilingStartTime!;
+        DateTime.now().millisecondsSinceEpoch - profilingStartTime!;
 
-    // Get timeline trace events
-    final timeline = await _vmService!.getVMTimeline();
+    final timeline = await vmService!.getVMTimeline();
     final events = timeline.traceEvents ?? [];
 
-    // Reset timeline flags
-    await _vmService!.setVMTimelineFlags([]);
+    await vmService!.setVMTimelineFlags([]);
 
-    final targetFps = _targetFps ?? 60.0;
-    final targetFrameTimeMs = 1000.0 / targetFps;
+    final targetFpsVal = targetFps ?? 60.0;
+    final targetFrameTimeMs = 1000.0 / targetFpsVal;
 
-    // Analyze frames
     var totalFrames = 0;
     var jankyFrames = 0;
     var maxFrameTimeMs = 0.0;
@@ -377,7 +463,6 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       }
     }
 
-    // Sort frame durations for percentiles
     frameDurations.sort();
     final p90 = frameDurations.isNotEmpty
         ? frameDurations[(frameDurations.length * 0.9).floor()]
@@ -390,7 +475,6 @@ extension PerformanceHandlers on FlutterAgentLensServer {
         : 0.0;
     final jankPct = totalFrames > 0 ? (jankyFrames / totalFrames) * 100 : 0.0;
 
-    // Group CPU hotspots from timeline trace events where ph == 'X'
     final cpuEventMap = <String, List<double>>{};
     for (final event in events) {
       final ph = event.json?['ph'] as String?;
@@ -426,11 +510,9 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       });
     });
 
-    // Sort by total duration descending
     cpuHotspots.sort((a, b) => (b['totalDurationMs'] as double)
         .compareTo(a['totalDurationMs'] as double));
 
-    // Build phase breakdown
     Map<String, dynamic> analyzePhase(String phaseName, List<String> patterns) {
       final phaseDurations = <double>[];
       for (final event in events) {
@@ -467,7 +549,6 @@ extension PerformanceHandlers on FlutterAgentLensServer {
     final paintPhase = analyzePhase(
         'Paint', ['paint', 'flushpaint', 'compositeframe', 'rasterizer']);
 
-    // Generate output report
     final output = [
       'FLUTTER PERFORMANCE ANALYSIS',
       '',
@@ -487,7 +568,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       'P99 frame time: ${p99.toStringAsFixed(2)}ms',
       'Max frame time: ${maxFrameTimeMs.toStringAsFixed(2)}ms',
       'Jank frames: $jankyFrames ($jankPct%)',
-      'Target: ${targetFrameTimeMs.toStringAsFixed(1)}ms (${targetFps.round()}fps)',
+      'Target: ${targetFrameTimeMs.toStringAsFixed(1)}ms (${targetFpsVal.round()}fps)',
       '',
       'PHASE BREAKDOWN',
       'Build:  avg ${buildPhase['avgTimeMs']}ms | max ${buildPhase['maxTimeMs']}ms | ${buildPhase['count']} calls',
@@ -508,12 +589,12 @@ extension PerformanceHandlers on FlutterAgentLensServer {
                     ? '[MEDIUM]'
                     : '[LOW]';
         output.add('$severityLabel ${h['name']}');
-        output.add('Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}');
+        output.add(
+            'Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}');
       }
       output.add('');
     }
 
-    // Generate recommendations
     final recommendations = <String>[];
     if (events.isEmpty) {
       recommendations.add(
@@ -555,7 +636,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       output.add('- $rec');
     }
 
-    return _serializeDualFormat(
+    return serializeDualFormat(
       title: 'Performance Profiling Analysis',
       markdownBody: output.join('\n'),
       structuredData: {

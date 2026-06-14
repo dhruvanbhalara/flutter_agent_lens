@@ -1,9 +1,44 @@
-part of '../../flutter_agent_lens.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:dart_mcp/server.dart';
+import 'package:path/path.dart' as p;
+import 'vm_connection_support.dart';
 
-/// MCP tool handlers for analyzing Flutter app bundle sizes.
-extension BundleHandlers on FlutterAgentLensServer {
+base mixin BundleAnalysisSupport
+    on MCPServer, ToolsSupport, VmConnectionSupport {
+  void registerBundleAnalysisTools() {
+    final formatSchema = StringSchema(
+      description:
+          'Response format: markdown, json, or dual (default: markdown).',
+    );
+
+    registerTool(
+      Tool(
+        name: 'analyze_bundle_size',
+        description:
+            'Analyze build size details from size mapping files in the build/ directory.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'build_target': StringSchema(
+              description:
+                  'Target format to inspect (e.g. apk, appbundle, ios, web; default: apk).',
+            ),
+            'target_platform': StringSchema(
+              description:
+                  'Specific target platform (e.g. android-arm64, android-arm, android-x64). Only used for Android.',
+            ),
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('analyze_bundle_size', _handleAnalyzeBundleSize,
+          requiresConnection: false),
+    );
+  }
+
   Future<CallToolResult> _handleAnalyzeBundleSize(CallToolRequest req) async {
-    final root = _workspaceRoot;
+    final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
         content: [
@@ -16,9 +51,9 @@ extension BundleHandlers on FlutterAgentLensServer {
     }
 
     String defaultTarget = 'apk';
-    if (_vmService != null) {
+    if (vmService != null) {
       try {
-        final vm = await _vmService!.getVM();
+        final vm = await vmService!.getVM();
         final os = vm.operatingSystem?.toLowerCase();
         if (os == 'ios') {
           defaultTarget = 'ios';
@@ -144,8 +179,8 @@ extension BundleHandlers on FlutterAgentLensServer {
     final totalSizeBytes = leafComponents.fold<int>(
         0, (sum, item) => sum + (item['size_bytes'] as int));
 
-    final md = StringBuffer(
-        'Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
+    final md =
+        StringBuffer('Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
     md.writeln(
         '- Total Calculated Size: ${(totalSizeBytes / 1024 / 1024).toStringAsFixed(2)} MB ($totalSizeBytes Bytes)');
     md.writeln();
@@ -166,7 +201,7 @@ extension BundleHandlers on FlutterAgentLensServer {
       md.writeln('\n_...and ${leafComponents.length - 25} more components._');
     }
 
-    return _serializeDualFormat(
+    return serializeDualFormat(
       title: 'Application Bundle Size Details',
       markdownBody: md.toString(),
       structuredData: {
