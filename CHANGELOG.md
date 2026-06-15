@@ -1,3 +1,11 @@
+## 1.4.1
+
+- Refactored and optimized internal MCP tool handlers for widget tracking, memory diffing, and network capturing.
+- Parameterized location map parsers (`_parseLocationsMap` and `_parseNewLocationsMap`) to remove local duplicates and share code across rebuild tracking handlers.
+- Standardized class allocation diff tables and sorted delta logic into shared helpers in `memory_handlers.dart`.
+- Converted local size formatting (`formatSize`) in `network_handlers.dart` and `memory_handlers.dart` to a library-wide unified `_formatBytes` helper on `FlutterAgentLensServer`.
+- Consolidated rebuild tracking availability checks under `_isTrackRebuildSupported()`.
+
 ## 1.4.0
 
 - Added a `format` parameter (`markdown`, `json`, `dual`) to verbose tools so clients can drop JSON and base64 payloads when they're not needed.

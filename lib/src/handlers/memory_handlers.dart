@@ -152,42 +152,10 @@ extension MemoryHandlers on FlutterAgentLensServer {
       }
     }
 
-    // Sort by absolute instance delta descending
-    deltas.sort((a, b) {
-      final cmp = (b['instances_delta'] as int)
-          .abs()
-          .compareTo((a['instances_delta'] as int).abs());
-      if (cmp != 0) return cmp;
-      return (b['bytes_delta'] as int)
-          .abs()
-          .compareTo((a['bytes_delta'] as int).abs());
-    });
+    _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
-    final md = StringBuffer('Memory Allocations Delta\n\n');
-    if (deltas.isEmpty) {
-      md.writeln(
-          'No heap allocation changes recorded during the profiling window.');
-    } else {
-      md.writeln(
-          '| Class | Instances Delta | Bytes Delta | Before (Count / Size) | After (Count / Size) |');
-      md.writeln('| :--- | :--- | :--- | :--- | :--- |');
-      for (final d in deltas.take(20)) {
-        final instDeltaStr = d['instances_delta'] > 0
-            ? '+${d['instances_delta']}'
-            : '${d['instances_delta']}';
-        final byteDeltaStr = d['bytes_delta'] > 0
-            ? '+${d['bytes_delta']} B'
-            : '${d['bytes_delta']} B';
-        md.writeln(
-          '| **${d['class']}** | $instDeltaStr | $byteDeltaStr | '
-          '${d['instances_before']} / ${d['bytes_before']} B | '
-          '${d['instances_after']} / ${d['bytes_after']} B |',
-        );
-      }
-      if (deltas.length > 20) {
-        md.writeln('\n_...and ${deltas.length - 20} more classes._');
-      }
-    }
+    final md = StringBuffer('Memory Allocations Delta\n\n')
+      ..write(_formatAllocationDiffTable(deltas, limit: 20));
 
     return _serializeDualFormat(
       title: 'Allocation Snapshot Difference',
@@ -231,7 +199,7 @@ extension MemoryHandlers on FlutterAgentLensServer {
           'The following references are keeping this object alive in the heap:');
       md.writeln();
       for (var i = 0; i < pathElements.length; i++) {
-        md.writeln('${i + 1}. **${pathElements[i]}**');
+        md.writeln('${i + 1}. ${pathElements[i]}');
       }
     }
 
@@ -336,12 +304,10 @@ extension MemoryHandlers on FlutterAgentLensServer {
     }
 
     final grew = diffs.where((d) => (d['bytesDiff'] as int) > 0).toList();
-    grew.sort(
-        (a, b) => (b['bytesDiff'] as int).compareTo(a['bytesDiff'] as int));
+    _sortDeltas(grew, 'instancesDiff', 'bytesDiff');
 
     final shrank = diffs.where((d) => (d['bytesDiff'] as int) < 0).toList();
-    shrank.sort(
-        (a, b) => (a['bytesDiff'] as int).compareTo(b['bytesDiff'] as int));
+    _sortDeltas(shrank, 'instancesDiff', 'bytesDiff');
 
     final heapIcon = heapDiff <= 0
         ? '[OK]'
@@ -464,19 +430,6 @@ extension MemoryHandlers on FlutterAgentLensServer {
       externalUsage: externalUsage,
       topClasses: topClasses,
     );
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes == 0) return '0 B';
-    final sign = bytes < 0 ? '-' : '';
-    var absVal = bytes.abs().toDouble();
-    final units = ['B', 'KB', 'MB', 'GB'];
-    var i = 0;
-    while (absVal >= 1024.0 && i < units.length - 1) {
-      absVal /= 1024.0;
-      i++;
-    }
-    return '$sign${absVal.toStringAsFixed(2)} ${units[i]}';
   }
 
   String _pctChange(int before, int after) {
@@ -694,6 +647,44 @@ extension MemoryHandlers on FlutterAgentLensServer {
       structuredData: structuredData,
       format: req.arguments?['format'] as String?,
     );
+  }
+
+  void _sortDeltas(List<Map<String, dynamic>> deltas, String instDeltaKey, String bytesDeltaKey) {
+    deltas.sort((a, b) {
+      final cmp = (b[instDeltaKey] as int)
+          .abs()
+          .compareTo((a[instDeltaKey] as int).abs());
+      if (cmp != 0) return cmp;
+      return (b[bytesDeltaKey] as int)
+          .abs()
+          .compareTo((a[bytesDeltaKey] as int).abs());
+    });
+  }
+
+  String _formatAllocationDiffTable(List<Map<String, dynamic>> deltas, {int limit = 20}) {
+    if (deltas.isEmpty) {
+      return 'No heap allocation changes recorded during the profiling window.\n';
+    }
+    final md = StringBuffer();
+    md.writeln(
+        '| Class | Instances Delta | Bytes Delta | Before (Count / Size) | After (Count / Size) |');
+    md.writeln('| :--- | :--- | :--- | :--- | :--- |');
+    for (final d in deltas.take(limit)) {
+      final instDelta = d['instances_delta'] as int;
+      final bytesDelta = d['bytes_delta'] as int;
+      final instDeltaStr = instDelta > 0 ? '+$instDelta' : '$instDelta';
+      final byteDeltaStr = bytesDelta > 0 ? '+${_formatBytes(bytesDelta)}' : _formatBytes(bytesDelta);
+      
+      md.writeln(
+        '| ${d['class']} | $instDeltaStr | $byteDeltaStr | '
+        '${d['instances_before']} / ${_formatBytes(d['bytes_before'] as int)} | '
+        '${d['instances_after']} / ${_formatBytes(d['bytes_after'] as int)} |',
+      );
+    }
+    if (deltas.length > limit) {
+      md.writeln('\n_...and ${deltas.length - limit} more classes._');
+    }
+    return md.toString();
   }
 }
 

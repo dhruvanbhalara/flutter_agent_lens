@@ -133,31 +133,11 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     _cleanupStreams();
     _logBuffer.clear();
 
-    // Subscribe to stdout stream
-    _vmService!.streamListen(EventStreams.kStdout).then((_) {
-      _stdoutSub = _vmService!.onStdoutEvent.listen((Event event) {
-        final bytes = event.bytes;
-        if (bytes != null) {
-          try {
-            final decoded = utf8.decode(base64.decode(bytes));
-            _addToLogBuffer('[STDOUT]', decoded);
-          } catch (_) {}
-        }
-      });
-    }).catchError((_) {});
-
-    // Subscribe to stderr stream
-    _vmService!.streamListen(EventStreams.kStderr).then((_) {
-      _stderrSub = _vmService!.onStderrEvent.listen((Event event) {
-        final bytes = event.bytes;
-        if (bytes != null) {
-          try {
-            final decoded = utf8.decode(base64.decode(bytes));
-            _addToLogBuffer('[STDERR]', decoded);
-          } catch (_) {}
-        }
-      });
-    }).catchError((_) {});
+    // Subscribe to stdout and stderr streams using helper
+    _listenToByteStream(EventStreams.kStdout, '[STDOUT]', _vmService!.onStdoutEvent)
+        .then((sub) => _stdoutSub = sub);
+    _listenToByteStream(EventStreams.kStderr, '[STDERR]', _vmService!.onStderrEvent)
+        .then((sub) => _stderrSub = sub);
 
     // Subscribe to developer logs stream
     _vmService!.streamListen(EventStreams.kLogging).then((_) {
@@ -173,10 +153,6 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     }).catchError((_) {});
 
     // Subscribe to the Service stream to track dynamically registered service methods.
-    // NOTE: The Service stream is subscribed eagerly in _handleConnect so that
-    // replay events for already-registered services (hotRestart, reloadSources)
-    // are captured before connect() returns. Here we only subscribe if the
-    // subscription was not already set up (e.g. on reconnect after cleanup).
     if (_serviceStreamSub == null) {
       _vmService!.streamListen(EventStreams.kService).then((_) {
         _serviceStreamSub = _vmService!.onServiceEvent.listen((Event event) {
@@ -402,5 +378,26 @@ extension ConnectionHandlers on FlutterAgentLensServer {
       structuredData: appInfo,
       format: req.arguments?['format'] as String?,
     );
+  }
+
+  Future<StreamSubscription?> _listenToByteStream(
+    String streamId,
+    String logPrefix,
+    Stream<Event> eventStream,
+  ) async {
+    try {
+      await _vmService!.streamListen(streamId);
+      return eventStream.listen((Event event) {
+        final bytes = event.bytes;
+        if (bytes != null) {
+          try {
+            final decoded = utf8.decode(base64.decode(bytes));
+            _addToLogBuffer(logPrefix, decoded);
+          } catch (_) {}
+        }
+      });
+    } catch (_) {
+      return null;
+    }
   }
 }
