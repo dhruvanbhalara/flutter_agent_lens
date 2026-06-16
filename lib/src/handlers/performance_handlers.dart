@@ -194,7 +194,7 @@ extension PerformanceHandlers on FlutterAgentLensServer {
       mdBuffer.writeln('| :--- | :--- | :--- | :--- |');
       for (final h in hotspots.take(15)) {
         mdBuffer.writeln(
-            '| **${h['name']}** | ${h['exclusive_ticks']} | ${h['inclusive_ticks']} | `${h['location']}` |');
+            '| ${h['name']} | ${h['exclusive_ticks']} | ${h['inclusive_ticks']} | `${h['location']}` |');
       }
     }
 

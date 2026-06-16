@@ -7,117 +7,32 @@ extension WidgetHandlers on FlutterAgentLensServer {
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Starting rebuild tracking, duration=${duration}s');
 
-    // First, list available service extensions to verify what's supported
-    final isolate = await _vmService!.getIsolate(_isolateId!);
-    final extensions = isolate.extensionRPCs ?? [];
-    stderr.writeln(
-        '[mcp:widget_rebuild_counts] Available extensions: ${extensions.where((e) => e.contains('flutter')).join(', ')}');
-
-    // Check if trackRebuildDirtyWidgets is available
-    if (!extensions
-        .contains('ext.flutter.inspector.trackRebuildDirtyWidgets')) {
+    if (!await _isTrackRebuildSupported()) {
       stderr.writeln(
           '[mcp:widget_rebuild_counts] trackRebuildDirtyWidgets NOT available');
       return CallToolResult(
         content: [
           TextContent(
             text: 'Widget rebuild tracking is not available.\n'
-                'This extension requires a debug-mode Flutter app.\n'
-                'Available Flutter extensions: ${extensions.where((e) => e.contains("flutter")).join(", ")}',
+                'This extension requires a debug-mode Flutter app.',
           )
         ],
         isError: true,
       );
     }
 
-    // Enable rebuild tracking
-    stderr.writeln(
-        '[mcp:widget_rebuild_counts] Enabling trackRebuildDirtyWidgets...');
-    await _vmService!.callServiceExtension(
-      'ext.flutter.inspector.trackRebuildDirtyWidgets',
-      isolateId: _isolateId,
-      args: {'enabled': 'true'},
-    );
-
     // Maps location ID -> widget name
     final idToName = <String, String>{};
     // Maps location ID -> "file:line"
     final idToFile = <String, String>{};
 
-    void parseLocationsMap(dynamic locationsObj) {
-      if (locationsObj is! Map) return;
-      locationsObj.forEach((key, value) {
-        final filePath = key.toString();
-        if (value is Map) {
-          final ids = value['ids'];
-          final lines = value['lines'];
-          final names = value['names'];
-          if (ids is List) {
-            for (var i = 0; i < ids.length; i++) {
-              final id = ids[i].toString();
-              final line = (lines is List && i < lines.length)
-                  ? lines[i].toString()
-                  : '?';
-              final name =
-                  (names is List && i < names.length && names[i] != null)
-                      ? names[i].toString()
-                      : null;
-              if (name != null && name.isNotEmpty) {
-                idToName[id] = name;
-              }
-              idToFile[id] = '$filePath:$line';
-            }
-          }
-        }
-      });
-    }
-
-    void parseNewLocationsMap(dynamic newLocationsObj) {
-      if (newLocationsObj is! Map) return;
-      newLocationsObj.forEach((key, value) {
-        final filePath = key.toString();
-        if (value is List) {
-          // Triples: [id, line, column, id, line, column, ...]
-          for (var i = 0; i + 2 < value.length; i += 3) {
-            final id = value[i].toString();
-            final line = value[i + 1].toString();
-            idToFile.putIfAbsent(id, () => '$filePath:$line');
-          }
-        }
-      });
-    }
-
-    // Pre-seed location lookup map from the widgetLocationIdMap extension
-    try {
-      final locationResponse = await _vmService!.callServiceExtension(
-        'ext.flutter.inspector.widgetLocationIdMap',
-        isolateId: _isolateId,
-      );
-      final rawLocationResult = locationResponse.json?['result'];
-      if (rawLocationResult is String) {
-        final decoded = jsonDecode(rawLocationResult);
-        parseLocationsMap(decoded);
-      } else if (rawLocationResult is Map) {
-        parseLocationsMap(rawLocationResult);
-      }
-      stderr.writeln(
-          '[mcp:widget_rebuild_counts] Seeded ${idToName.length} widget names from location ID map');
-    } catch (e) {
-      stderr.writeln(
-          '[mcp:widget_rebuild_counts] Warning: Failed to query widgetLocationIdMap: $e');
-    }
+    stderr.writeln(
+        '[mcp:widget_rebuild_counts] Enabling trackRebuildDirtyWidgets...');
+    await _enableRebuildTracking(idToName, idToFile);
 
     // Listen for Extension events that carry rebuild data
     final rebuildEvents = <Map<String, dynamic>>[];
-    StreamSubscription? extSub;
-
-    try {
-      await _vmService!.streamListen(EventStreams.kExtension);
-    } catch (_) {
-      // Already listening
-    }
-
-    extSub = _vmService!.onExtensionEvent.listen((Event event) {
+    final extSub = _vmService!.onExtensionEvent.listen((Event event) {
       if (event.extensionKind == 'Flutter.RebuiltWidgets') {
         final data = event.extensionData?.data;
         if (data != null) {
@@ -144,8 +59,8 @@ extension WidgetHandlers on FlutterAgentLensServer {
     final widgetCounts = <String, int>{};
     for (final event in rebuildEvents) {
       // Parse locations and newLocations to update lookup maps
-      parseLocationsMap(event['locations']);
-      parseNewLocationsMap(event['newLocations']);
+      _parseLocationsMap(event['locations'], idToName, idToFile);
+      _parseNewLocationsMap(event['newLocations'], idToFile);
 
       // Count rebuilds per location ID.
       final events = event['events'] as List<dynamic>?;
@@ -197,7 +112,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
       mdBuffer.writeln('| :--- | :--- | :--- |');
       for (final w in widgets.take(20)) {
         mdBuffer.writeln(
-            '| **${w['widget']}** | ${w['count']} | `${w['location']}` |');
+            '| ${w['widget']} | ${w['count']} | `${w['location']}` |');
       }
       if (widgets.length > 20) {
         mdBuffer.writeln('\n_...and ${widgets.length - 20} more widgets._');
@@ -833,11 +748,7 @@ extension WidgetHandlers on FlutterAgentLensServer {
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Starting rebuild tracking session...');
 
-    final isolate = await _vmService!.getIsolate(_isolateId!);
-    final extensions = isolate.extensionRPCs ?? [];
-
-    if (!extensions
-        .contains('ext.flutter.inspector.trackRebuildDirtyWidgets')) {
+    if (!await _isTrackRebuildSupported()) {
       return CallToolResult(
         content: [
           TextContent(
@@ -855,38 +766,14 @@ extension WidgetHandlers on FlutterAgentLensServer {
     _rebuildIdToName.clear();
     _rebuildIdToFile.clear();
 
-    // Enable rebuild tracking
-    await _vmService!.callServiceExtension(
-      'ext.flutter.inspector.trackRebuildDirtyWidgets',
-      isolateId: _isolateId,
-      args: {'enabled': 'true'},
-    );
-
-    // Pre-seed location lookup map
-    try {
-      final locationResponse = await _vmService!.callServiceExtension(
-        'ext.flutter.inspector.widgetLocationIdMap',
-        isolateId: _isolateId,
-      );
-      final rawLocationResult = locationResponse.json?['result'];
-      if (rawLocationResult is String) {
-        final decoded = jsonDecode(rawLocationResult);
-        _parseLocationsMap(decoded);
-      } else if (rawLocationResult is Map) {
-        _parseLocationsMap(rawLocationResult);
-      }
-    } catch (_) {}
-
-    try {
-      await _vmService!.streamListen(EventStreams.kExtension);
-    } catch (_) {}
+    await _enableRebuildTracking(_rebuildIdToName, _rebuildIdToFile);
 
     _rebuildSub = _vmService!.onExtensionEvent.listen((Event event) {
       if (event.extensionKind == 'Flutter.RebuiltWidgets') {
         final data = event.extensionData?.data;
         if (data != null) {
-          _parseLocationsMap(data['locations']);
-          _parseNewLocationsMap(data['newLocations']);
+          _parseLocationsMap(data['locations'], _rebuildIdToName, _rebuildIdToFile);
+          _parseNewLocationsMap(data['newLocations'], _rebuildIdToFile);
 
           final events = data['events'] as List<dynamic>?;
           if (events != null) {
@@ -952,9 +839,9 @@ extension WidgetHandlers on FlutterAgentLensServer {
       final rawLocationResult = locationResponse.json?['result'];
       if (rawLocationResult is String) {
         final decoded = jsonDecode(rawLocationResult);
-        _parseLocationsMap(decoded);
+        _parseLocationsMap(decoded, _rebuildIdToName, _rebuildIdToFile);
       } else if (rawLocationResult is Map) {
-        _parseLocationsMap(rawLocationResult);
+        _parseLocationsMap(rawLocationResult, _rebuildIdToName, _rebuildIdToFile);
       }
     } catch (_) {}
 
@@ -1053,7 +940,11 @@ extension WidgetHandlers on FlutterAgentLensServer {
     );
   }
 
-  void _parseLocationsMap(dynamic locationsObj) {
+  void _parseLocationsMap(
+    dynamic locationsObj,
+    Map<String, String> idToName,
+    Map<String, String> idToFile,
+  ) {
     if (locationsObj is! Map) return;
     locationsObj.forEach((key, value) {
       final filePath = key.toString();
@@ -1070,16 +961,19 @@ extension WidgetHandlers on FlutterAgentLensServer {
                 ? names[i].toString()
                 : null;
             if (name != null && name.isNotEmpty) {
-              _rebuildIdToName[id] = name;
+              idToName[id] = name;
             }
-            _rebuildIdToFile[id] = '$filePath:$line';
+            idToFile[id] = '$filePath:$line';
           }
         }
       }
     });
   }
 
-  void _parseNewLocationsMap(dynamic newLocationsObj) {
+  void _parseNewLocationsMap(
+    dynamic newLocationsObj,
+    Map<String, String> idToFile,
+  ) {
     if (newLocationsObj is! Map) return;
     newLocationsObj.forEach((key, value) {
       final filePath = key.toString();
@@ -1087,10 +981,43 @@ extension WidgetHandlers on FlutterAgentLensServer {
         for (var i = 0; i + 2 < value.length; i += 3) {
           final id = value[i].toString();
           final line = value[i + 1].toString();
-          _rebuildIdToFile.putIfAbsent(id, () => '$filePath:$line');
+          idToFile.putIfAbsent(id, () => '$filePath:$line');
         }
       }
     });
+  }
+
+  Future<bool> _isTrackRebuildSupported() async {
+    final isolate = await _vmService!.getIsolate(_isolateId!);
+    final extensions = isolate.extensionRPCs ?? [];
+    return extensions.contains('ext.flutter.inspector.trackRebuildDirtyWidgets');
+  }
+
+  Future<void> _enableRebuildTracking(
+    Map<String, String> idToName,
+    Map<String, String> idToFile,
+  ) async {
+    await _vmService!.callServiceExtension(
+      'ext.flutter.inspector.trackRebuildDirtyWidgets',
+      isolateId: _isolateId,
+      args: {'enabled': 'true'},
+    );
+    try {
+      final locationResponse = await _vmService!.callServiceExtension(
+        'ext.flutter.inspector.widgetLocationIdMap',
+        isolateId: _isolateId,
+      );
+      final rawLocationResult = locationResponse.json?['result'];
+      if (rawLocationResult is String) {
+        final decoded = jsonDecode(rawLocationResult);
+        _parseLocationsMap(decoded, idToName, idToFile);
+      } else if (rawLocationResult is Map) {
+        _parseLocationsMap(rawLocationResult, idToName, idToFile);
+      }
+    } catch (_) {}
+    try {
+      await _vmService!.streamListen(EventStreams.kExtension);
+    } catch (_) {}
   }
 }
 
