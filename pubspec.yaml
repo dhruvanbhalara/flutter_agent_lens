@@ -1,6 +1,6 @@
 name: flutter_agent_lens
 description: Agent-first MCP server to debug, profile, and optimize running Flutter apps.
-version: 1.4.1
+version: 1.5.0
 homepage: https://github.com/dhruvanbhalara/flutter_agent_lens
 repository: https://github.com/dhruvanbhalara/flutter_agent_lens
 
@@ -13,6 +13,7 @@ executables:
 dependencies:
   args: ^2.7.0
   dart_mcp: ^0.5.1
+  dtd: ^4.0.0
   stream_channel: ^2.1.4
   vm_service: ^15.2.0
   path: ^1.9.1
