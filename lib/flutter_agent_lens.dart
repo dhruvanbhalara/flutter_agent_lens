@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
+import 'package:dtd/dtd.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
@@ -43,6 +44,10 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
   PathResolver? _pathResolver;
   String? _cachedLibraryId;
   final Map<String, _MemorySnapshot> _memorySnapshots = {};
+
+  // DTD integration
+  DartToolingDaemon? _dtdClient;
+  Uri? _dtdUri;
 
   // Stateful Rebuild Tracking
   bool _isTrackingRebuilds = false;
@@ -106,6 +111,9 @@ final class FlutterAgentLensServer extends MCPServer with ToolsSupport {
     _capturedRequests.clear();
     _lastLogLine = null;
     _duplicateLogCount = 0;
+    _dtdClient?.close();
+    _dtdClient = null;
+    _dtdUri = null;
   }
 
   @override

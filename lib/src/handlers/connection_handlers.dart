@@ -16,6 +16,8 @@ extension ConnectionHandlers on FlutterAgentLensServer {
       String uriToConnect = rawUri;
       if (_isDtdUri(rawUri)) {
         try {
+          _dtdUri = Uri.parse(rawUri);
+          _dtdClient = await DartToolingDaemon.connect(_dtdUri!);
           uriToConnect = await _resolveDtdToVmServiceUri(rawUri);
           stderr.writeln(
               '[mcp:connect] DTD resolved VM Service URI: $uriToConnect');
@@ -58,11 +60,10 @@ extension ConnectionHandlers on FlutterAgentLensServer {
       // The VM Protocol guarantees that when a client calls streamListen('Service')
       // it immediately receives a ServiceRegistered event for every service that
       // is already registered - this is how DevTools seeds its own map.
-      // We await the subscription, attach the listener, then wait a short drain
+      // We attach the listener first, await the subscription, then wait a short drain
       // window so the replay events populate _registeredMethodsForService before
       // connect() returns and the caller invokes hot_restart / hot_reload.
       try {
-        await _vmService!.streamListen(EventStreams.kService);
         _serviceStreamSub = _vmService!.onServiceEvent.listen((Event event) {
           final service = event.service;
           final method = event.method;
@@ -76,6 +77,7 @@ extension ConnectionHandlers on FlutterAgentLensServer {
             stderr.writeln('[mcp:service] Unregistered service: $service');
           }
         });
+        await _vmService!.streamListen(EventStreams.kService);
         // Drain window: give the event loop a tick to deliver the replayed
         // ServiceRegistered events before we return from connect.
         await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -129,8 +131,17 @@ extension ConnectionHandlers on FlutterAgentLensServer {
     }
   }
 
+  void _cleanupLogging() {
+    _stdoutSub?.cancel();
+    _stderrSub?.cancel();
+    _loggingSub?.cancel();
+    _stdoutSub = null;
+    _stderrSub = null;
+    _loggingSub = null;
+  }
+
   void _startLogging() {
-    _cleanupStreams();
+    _cleanupLogging();
     _logBuffer.clear();
 
     // Subscribe to stdout and stderr streams using helper
@@ -151,25 +162,6 @@ extension ConnectionHandlers on FlutterAgentLensServer {
         }
       });
     }).catchError((_) {});
-
-    // Subscribe to the Service stream to track dynamically registered service methods.
-    if (_serviceStreamSub == null) {
-      _vmService!.streamListen(EventStreams.kService).then((_) {
-        _serviceStreamSub = _vmService!.onServiceEvent.listen((Event event) {
-          final service = event.service;
-          final method = event.method;
-          if (service == null || method == null) return;
-          if (event.kind == EventKind.kServiceRegistered) {
-            _registeredMethodsForService[service] = method;
-            stderr.writeln(
-                '[mcp:service] Registered service: $service -> $method');
-          } else if (event.kind == EventKind.kServiceUnregistered) {
-            _registeredMethodsForService.remove(service);
-            stderr.writeln('[mcp:service] Unregistered service: $service');
-          }
-        });
-      }).catchError((_) {});
-    }
   }
 
   void _addToLogBuffer(String prefix, String message) {
