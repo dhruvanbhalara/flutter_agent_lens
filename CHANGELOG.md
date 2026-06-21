@@ -1,3 +1,9 @@
+## 1.5.0
+
+- Subscribed to `onServiceEvent` before calling `streamListen(EventStreams.kService)` in `connection_handlers.dart` to resolve a VM service discovery race condition.
+- Routed `handleHotReload` and `handleHotRestart` through DTD service calls if DTD is active, VM service callbacks (`s1.reloadSources` with `isolateId` and `s1.hotRestart`) if available, or isolate-level extensions as a fallback.
+- Added dependency on `dtd` package to support direct Dart Tooling Daemon communication.
+
 ## 1.4.1
 
 - Refactored and optimized internal MCP tool handlers for widget tracking, memory diffing, and network capturing.

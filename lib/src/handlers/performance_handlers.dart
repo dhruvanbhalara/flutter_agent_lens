@@ -79,11 +79,44 @@ extension PerformanceHandlers on FlutterAgentLensServer {
   }
 
   Future<CallToolResult> handleHotReload(CallToolRequest req) async {
-    stderr.writeln('[mcp:hot_reload] Triggering ext.flutter.reassemble...');
-    await _vmService!.callServiceExtension(
-      'ext.flutter.reassemble',
-      isolateId: _isolateId!,
-    );
+    bool dtdSuccess = false;
+
+    // Use DTD ConnectedApp service if available to delegate compilation and UI reassembly to the host editor/process.
+    if (_dtdClient != null && _vmServiceUri != null) {
+      stderr.writeln(
+          '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...');
+      try {
+        await _dtdClient!.call(
+          'ConnectedApp',
+          'hotReload',
+          params: {'vmServiceUri': _vmServiceUri},
+        );
+        dtdSuccess = true;
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:hot_reload] DTD call failed: $e. Falling back to direct VM Service...');
+      }
+    }
+
+    if (!dtdSuccess) {
+      final reloadMethod = _registeredMethodsForService['reloadSources'] ??
+          _registeredMethodsForService['hotReload'];
+      if (reloadMethod != null) {
+        stderr.writeln(
+            '[mcp:hot_reload] Triggering registered service $reloadMethod...');
+        await _vmService!.callMethod(
+          reloadMethod,
+          args: {'isolateId': _isolateId!},
+        );
+      } else {
+        stderr.writeln('[mcp:hot_reload] Triggering ext.flutter.reassemble...');
+        await _vmService!.callServiceExtension(
+          'ext.flutter.reassemble',
+          isolateId: _isolateId!,
+        );
+      }
+    }
+
     return CallToolResult(content: [
       TextContent(
         text: 'Hot reload triggered successfully.\n'
@@ -94,27 +127,59 @@ extension PerformanceHandlers on FlutterAgentLensServer {
   }
 
   Future<CallToolResult> handleHotRestart(CallToolRequest req) async {
-    stderr.writeln(
-        '[mcp:hot_restart] Checking for restart service extensions...');
-    final isolate = await _vmService!.getIsolate(_isolateId!);
-    final extensions = isolate.extensionRPCs ?? [];
+    bool dtdSuccess = false;
 
-    if (extensions.contains('ext.flutter.restart')) {
-      stderr.writeln('[mcp:hot_restart] Triggering ext.flutter.restart...');
-      await _vmService!.callServiceExtension(
-        'ext.flutter.restart',
-        isolateId: _isolateId!,
-      );
-    } else {
+    // Use DTD ConnectedApp service if available to delegate compilation, reset in-memory state, and rerun main() via the host.
+    if (_dtdClient != null && _vmServiceUri != null) {
       stderr.writeln(
-          '[mcp:hot_restart] ext.flutter.restart not found, falling back to reassemble...');
-      await _vmService!.callServiceExtension(
-        'ext.flutter.reassemble',
-        isolateId: _isolateId!,
-      );
+          '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...');
+      try {
+        await _dtdClient!.call(
+          'ConnectedApp',
+          'hotRestart',
+          params: {'vmServiceUri': _vmServiceUri},
+        );
+        dtdSuccess = true;
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:hot_restart] DTD call failed: $e. Falling back to direct VM Service...');
+      }
     }
 
-    // Refresh isolate ID and clear library cache
+    if (!dtdSuccess) {
+      final hotRestartMethod = _registeredMethodsForService['hotRestart'] ??
+          _registeredMethodsForService['restart'];
+      if (hotRestartMethod != null) {
+        stderr.writeln(
+            '[mcp:hot_restart] Triggering registered service $hotRestartMethod...');
+        await _vmService!.callMethod(hotRestartMethod);
+      } else {
+        stderr.writeln(
+            '[mcp:hot_restart] Checking for restart service extensions...');
+        final isolate = await _vmService!.getIsolate(_isolateId!);
+        final extensions = isolate.extensionRPCs ?? [];
+
+        if (extensions.contains('ext.flutter.restart')) {
+          stderr.writeln('[mcp:hot_restart] Triggering ext.flutter.restart...');
+          await _vmService!.callServiceExtension(
+            'ext.flutter.restart',
+            isolateId: _isolateId!,
+          );
+        } else {
+          stderr.writeln(
+              '[mcp:hot_restart] ext.flutter.restart not found, falling back to reassemble...');
+          await _vmService!.callServiceExtension(
+            'ext.flutter.reassemble',
+            isolateId: _isolateId!,
+          );
+        }
+      }
+    }
+
+    // Wait briefly for the isolate to restart before querying the VM
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    // Refresh the isolate ID and cache after the restart
     final vm = await _vmService!.getVM();
     if (vm.isolates != null && vm.isolates!.isNotEmpty) {
       _isolateId = vm.isolates!.first.id!;
