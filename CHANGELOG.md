@@ -1,3 +1,8 @@
+## 1.5.1
+
+- Split the monolithic server file into 12 separate class mixins for better maintainability.
+- Consolidated the tool list in the README file.
+
 ## 1.5.0
 
 - Subscribed to `onServiceEvent` before calling `streamListen(EventStreams.kService)` in `connection_handlers.dart` to resolve a VM service discovery race condition.
