@@ -1,12 +1,90 @@
-part of '../../flutter_agent_lens.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:dart_mcp/server.dart';
+import 'package:vm_service/vm_service.dart';
+import 'vm_connection_support.dart';
 
-/// MCP tool handlers for reading the Dart HTTP network profile.
-extension NetworkHandlers on FlutterAgentLensServer {
+base mixin NetworkCaptureSupport
+    on MCPServer, ToolsSupport, VmConnectionSupport {
+  bool isCapturingNetwork = false;
+  int? networkCaptureStartTime;
+  final Map<String, Map<String, dynamic>> capturedRequests = {};
+  StreamSubscription? networkExtensionSub;
+  StreamSubscription? networkLoggingSub;
+
+  void registerNetworkTools() {
+    final formatSchema = StringSchema(
+      description:
+          'Response format: markdown, json, or dual (default: markdown).',
+    );
+
+    registerTool(
+      Tool(
+        name: 'get_network_profile',
+        description:
+            'Read the current HTTP network requests profile history from the VM.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'includeRawResponse': BooleanSchema(
+              description:
+                  'Whether to include the raw JSON-RPC response in structured data (default: false).',
+            ),
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('get_network_profile', _handleGetNetworkProfile),
+    );
+
+    registerTool(
+      Tool(
+        name: 'start_network_capture',
+        description:
+            'Start a stateful session to capture HTTP network traffic.',
+        inputSchema: emptySchema(),
+      ),
+      wrapToolCall('start_network_capture', _handleStartNetworkCapture),
+    );
+
+    registerTool(
+      Tool(
+        name: 'stop_network_capture',
+        description:
+            'Stop the active network capture session and get the traffic report.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'sortBy': StringSchema(
+              description:
+                  'Sort requests by (time, duration, size; default: time).',
+            ),
+            'includeRawResponse': BooleanSchema(
+              description:
+                  'Whether to include the full raw network requests response in the structured data (default: false).',
+            ),
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('stop_network_capture', _handleStopNetworkCapture),
+    );
+  }
+
+  void cleanupNetworkCapture() {
+    networkExtensionSub?.cancel();
+    networkExtensionSub = null;
+    networkLoggingSub?.cancel();
+    networkLoggingSub = null;
+    isCapturingNetwork = false;
+    networkCaptureStartTime = null;
+    capturedRequests.clear();
+  }
+
   Future<CallToolResult> _handleGetNetworkProfile(CallToolRequest req) async {
     stderr.writeln('[mcp:network_profile] Fetching HTTP profile...');
-    final response = await _vmService!.callServiceExtension(
+    final response = await vmService!.callServiceExtension(
       'ext.dart.io.getHttpProfile',
-      isolateId: _isolateId,
+      isolateId: isolateId,
     );
 
     final rawResult = response.json?['result'];
@@ -84,8 +162,9 @@ extension NetworkHandlers on FlutterAgentLensServer {
       }
     }
 
-    final includeRawResponse = req.arguments?['includeRawResponse'] as bool? ?? false;
-    return _serializeDualFormat(
+    final includeRawResponse =
+        req.arguments?['includeRawResponse'] as bool? ?? false;
+    return serializeDualFormat(
       title: 'Network Diagnostics Report',
       markdownBody: md.toString(),
       structuredData: {
@@ -98,7 +177,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
   }
 
   Future<CallToolResult> _handleStartNetworkCapture(CallToolRequest req) async {
-    if (_isCapturingNetwork) {
+    if (isCapturingNetwork) {
       return CallToolResult(
         content: [
           TextContent(
@@ -110,24 +189,23 @@ extension NetworkHandlers on FlutterAgentLensServer {
     }
 
     stderr.writeln('[mcp:network_capture] Starting network capture...');
-    _isCapturingNetwork = true;
-    _networkCaptureStartTime = DateTime.now().millisecondsSinceEpoch;
-    _capturedRequests.clear();
+    isCapturingNetwork = true;
+    networkCaptureStartTime = DateTime.now().millisecondsSinceEpoch;
+    capturedRequests.clear();
 
     try {
-      await _vmService!.streamListen(EventStreams.kExtension);
+      await vmService!.streamListen(EventStreams.kExtension);
     } catch (_) {}
 
-    // Enable HTTP timeline logging
     try {
-      await _vmService!.callServiceExtension(
+      await vmService!.callServiceExtension(
         'ext.dart.io.httpEnableTimelineLogging',
-        isolateId: _isolateId!,
+        isolateId: isolateId!,
         args: {'enabled': 'true'},
       );
     } catch (_) {}
 
-    _networkExtensionSub = _vmService!.onExtensionEvent.listen((Event event) {
+    networkExtensionSub = vmService!.onExtensionEvent.listen((Event event) {
       final kind = event.extensionKind;
       final data = event.extensionData?.data;
       if (data == null) return;
@@ -135,7 +213,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
       if (kind == 'dart:io.httpClient.request.start') {
         final id = data['id']?.toString() ??
             'req_${DateTime.now().millisecondsSinceEpoch}';
-        _capturedRequests[id] = {
+        capturedRequests[id] = {
           'id': id,
           'method': data['method'] ?? 'GET',
           'uri': data['uri'] ?? 'unknown',
@@ -144,8 +222,8 @@ extension NetworkHandlers on FlutterAgentLensServer {
         };
       } else if (kind == 'dart:io.httpClient.request.finish') {
         final id = data['id']?.toString();
-        if (id != null && _capturedRequests.containsKey(id)) {
-          final reqMap = _capturedRequests[id]!;
+        if (id != null && capturedRequests.containsKey(id)) {
+          final reqMap = capturedRequests[id]!;
           reqMap['endTime'] = DateTime.now().millisecondsSinceEpoch;
           reqMap['statusCode'] = data['statusCode'];
           reqMap['responseSize'] = data['contentLength'] ?? 0;
@@ -157,8 +235,8 @@ extension NetworkHandlers on FlutterAgentLensServer {
         }
       } else if (kind == 'dart:io.httpClient.request.error') {
         final id = data['id']?.toString();
-        if (id != null && _capturedRequests.containsKey(id)) {
-          final reqMap = _capturedRequests[id]!;
+        if (id != null && capturedRequests.containsKey(id)) {
+          final reqMap = capturedRequests[id]!;
           reqMap['endTime'] = DateTime.now().millisecondsSinceEpoch;
           reqMap['error'] = data['error']?.toString() ?? 'Unknown error';
         }
@@ -176,7 +254,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
   }
 
   Future<CallToolResult> _handleStopNetworkCapture(CallToolRequest req) async {
-    if (!_isCapturingNetwork) {
+    if (!isCapturingNetwork) {
       return CallToolResult(
         content: [
           TextContent(
@@ -190,24 +268,23 @@ extension NetworkHandlers on FlutterAgentLensServer {
     final sortBy = req.arguments?['sortBy'] as String? ?? 'time';
 
     stderr.writeln('[mcp:network_capture] Stopping network capture...');
-    _isCapturingNetwork = false;
-    await _networkExtensionSub?.cancel();
-    _networkExtensionSub = null;
-    await _networkLoggingSub?.cancel();
-    _networkLoggingSub = null;
+    isCapturingNetwork = false;
+    await networkExtensionSub?.cancel();
+    networkExtensionSub = null;
+    await networkLoggingSub?.cancel();
+    networkLoggingSub = null;
 
-    // Disable HTTP timeline logging
     try {
-      await _vmService!.callServiceExtension(
+      await vmService!.callServiceExtension(
         'ext.dart.io.httpEnableTimelineLogging',
-        isolateId: _isolateId!,
+        isolateId: isolateId!,
         args: {'enabled': 'false'},
       );
     } catch (_) {}
 
     final durationMs =
-        DateTime.now().millisecondsSinceEpoch - _networkCaptureStartTime!;
-    final allRequests = _capturedRequests.values.toList();
+        DateTime.now().millisecondsSinceEpoch - networkCaptureStartTime!;
+    final allRequests = capturedRequests.values.toList();
 
     if (allRequests.isEmpty) {
       return CallToolResult(
@@ -224,7 +301,6 @@ extension NetworkHandlers on FlutterAgentLensServer {
       );
     }
 
-    // Sorting
     if (sortBy == 'duration') {
       allRequests.sort((a, b) {
         final durA = a['endTime'] != null
@@ -239,7 +315,6 @@ extension NetworkHandlers on FlutterAgentLensServer {
       allRequests.sort((a, b) => ((b['responseSize'] as int?) ?? 0)
           .compareTo((a['responseSize'] as int?) ?? 0));
     } else {
-      // time sorting
       allRequests.sort(
           (a, b) => (a['startTime'] as int).compareTo(b['startTime'] as int));
     }
@@ -277,7 +352,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
       'Captured for ${(durationMs / 1000.0).toStringAsFixed(1)}s',
       'Total requests: ${allRequests.length}',
       'Completed: ${completedRequests.length} | Failed: ${failedRequests.length} | Pending: ${pendingRequests.length}',
-      'Total response size: ${_formatBytes(totalSize)}',
+      'Total response size: ${formatBytes(totalSize)}',
       'Average response time: ${formatDuration(avgDuration)}',
       'Slowest request: ${formatDuration(maxDuration.toDouble())}',
       '',
@@ -307,7 +382,7 @@ extension NetworkHandlers on FlutterAgentLensServer {
       }
 
       final sizeStr = reqMap['responseSize'] != null
-          ? _formatBytes(reqMap['responseSize'] as int)
+          ? formatBytes(reqMap['responseSize'] as int)
           : '-';
       final method = reqMap['method'] as String? ?? 'GET';
       final uri = reqMap['uri'] as String? ?? 'unknown';
@@ -315,7 +390,6 @@ extension NetworkHandlers on FlutterAgentLensServer {
       output.add('$statusSymbol $method $durationStr | $sizeStr | $uri');
     }
 
-    // Potential concerns recommendations
     final slowRequests = completedRequests
         .where((r) => ((r['endTime'] as int) - (r['startTime'] as int)) > 2000)
         .toList();
@@ -336,14 +410,14 @@ extension NetworkHandlers on FlutterAgentLensServer {
       }
       for (final r in largeResponses.take(3)) {
         output.add(
-            '- LARGE: ${r['method']} ${r['uri']} returned ${_formatBytes(r['responseSize'] as int)}');
+            '- LARGE: ${r['method']} ${r['uri']} returned ${formatBytes(r['responseSize'] as int)}');
       }
       for (final r in failedRequests.take(3)) {
         output.add('- ERROR: ${r['method']} ${r['uri']} - ${r['error']}');
       }
     }
 
-    return _serializeDualFormat(
+    return serializeDualFormat(
       title: 'Network Traffic Report',
       markdownBody: output.join('\n'),
       structuredData: {

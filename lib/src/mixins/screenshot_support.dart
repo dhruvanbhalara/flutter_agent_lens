@@ -1,10 +1,83 @@
-part of '../../flutter_agent_lens.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:dart_mcp/server.dart';
+import 'package:path/path.dart' as p;
+import 'package:image/image.dart' as img;
+import 'vm_connection_support.dart';
 
-/// Extension containing handlers for capturing and comparing layout screenshots.
-extension ScreenshotHandlers on FlutterAgentLensServer {
+base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
+  void registerScreenshotTools() {
+    final formatSchema = StringSchema(
+      description:
+          'Response format: markdown, json, or dual (default: markdown).',
+    );
+
+    registerTool(
+      Tool(
+        name: 'compare_layout_screenshots',
+        description:
+            'Capture screenshots and perform pixel diff checks to find layout changes or bugs.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'baseline_name': StringSchema(
+              description:
+                  'The filename prefix for the baseline screenshot (e.g. "home_screen").',
+            ),
+            'action': StringSchema(
+              description:
+                  'The visual operation to execute (capture_baseline, compare).',
+            ),
+            'threshold': NumberSchema(
+              description:
+                  'The similarity pass threshold from 0.0 to 1.0 (default: 0.98).',
+            ),
+            'screenshot_type': StringSchema(
+              description:
+                  'The format/method to capture (device = native screenshot, skia = Skia Picture via VM service; default: device).',
+            ),
+            'device_id': StringSchema(
+              description:
+                  'Target device ID or name if multiple devices are connected (prefixes allowed).',
+            ),
+            'format': formatSchema,
+          },
+          required: ['baseline_name', 'action'],
+        ),
+      ),
+      wrapToolCall(
+          'compare_layout_screenshots', _handleCompareLayoutScreenshots),
+    );
+
+    registerTool(
+      Tool(
+        name: 'take_screenshot',
+        description:
+            'Capture a standalone screenshot of the running Flutter application.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'screenshot_type': StringSchema(
+              description:
+                  'The capture method (device = native screenshot, skia = Skia Picture via VM service; default: device).',
+            ),
+            'device_id': StringSchema(
+              description:
+                  'Target device ID or name if multiple devices are connected.',
+            ),
+            'output_path': StringSchema(
+              description:
+                  'Optional destination file path. If not specified, the screenshot will be saved to a default directory.',
+            ),
+          },
+        ),
+      ),
+      wrapToolCall('take_screenshot', _handleTakeScreenshot),
+    );
+  }
+
   Future<CallToolResult> _handleCompareLayoutScreenshots(
       CallToolRequest req) async {
-    final root = _workspaceRoot;
+    final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
         content: [
@@ -79,7 +152,6 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
         );
       }
     } else {
-      // Compare action
       final baselinePath =
           p.join(screenshotDir.path, '${baselineName}_baseline.png');
       final currentPath =
@@ -157,7 +229,6 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
             matchingPixels++;
             diffImage.setPixel(x, y, p2);
           } else {
-            // Mark difference in bright red
             diffImage.setPixel(x, y, img.ColorRgba8(255, 0, 0, 255));
           }
         }
@@ -185,7 +256,7 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
       md.writeln('- Current: $currentPath');
       md.writeln('- Visual Diff: $diffPath');
 
-      return _serializeDualFormat(
+      return serializeDualFormat(
         title: 'Visual Layout Comparison Report',
         markdownBody: md.toString(),
         structuredData: {
@@ -205,7 +276,7 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
   }
 
   Future<CallToolResult> _handleTakeScreenshot(CallToolRequest req) async {
-    final root = _workspaceRoot;
+    final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
         content: [
@@ -263,15 +334,14 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
     required String screenshotType,
     required String? deviceId,
   }) async {
-    if (_vmService != null) {
+    if (vmService != null) {
       String? effectiveDeviceId = deviceId;
       String? os;
 
       try {
-        final vm = await _vmService!.getVM();
+        final vm = await vmService!.getVM();
         os = vm.operatingSystem?.toLowerCase();
 
-        // 1. Auto-detect device ID if not explicitly passed
         if (effectiveDeviceId == null || effectiveDeviceId.isEmpty) {
           if (os != null) {
             effectiveDeviceId = await _detectDeviceForOs(os);
@@ -279,7 +349,6 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
         }
       } catch (_) {}
 
-      // 2. Capture using flutter screenshot directly
       final flutterRoot = Platform.environment['FLUTTER_ROOT'];
       final executable = flutterRoot != null
           ? p.join(flutterRoot, 'bin',
@@ -289,8 +358,8 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
       final args = [
         'screenshot',
         '--out=$targetPath',
-        if (screenshotType == 'skia' && _vmServiceUri != null) ...[
-          '--vm-service-url=$_vmServiceUri',
+        if (screenshotType == 'skia' && vmServiceUri != null) ...[
+          '--vm-service-url=$vmServiceUri',
           '--type=skia',
         ] else ...[
           '--type=device',
@@ -325,7 +394,6 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
     throw StateError('VM Service is not connected.');
   }
 
-  /// Auto-detect the connected device corresponding to the running app's operating system.
   Future<String?> _detectDeviceForOs(String targetOs) async {
     try {
       final flutterRoot = Platform.environment['FLUTTER_ROOT'];
@@ -364,7 +432,6 @@ extension ScreenshotHandlers on FlutterAgentLensServer {
             devices.whereType<Map<String, dynamic>>().where(matches).toList();
 
         if (matchesList.isNotEmpty) {
-          // Prefer emulators/simulators if multiple found
           final emulator = matchesList.firstWhere(
             (d) => d['emulator'] == true,
             orElse: () => matchesList.first,

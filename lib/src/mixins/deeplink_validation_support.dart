@@ -1,9 +1,49 @@
-part of '../../flutter_agent_lens.dart';
+import 'dart:async';
+import 'dart:io';
+import 'package:dart_mcp/server.dart';
+import 'package:path/path.dart' as p;
+import 'vm_connection_support.dart';
 
-/// MCP tool handlers for validating App Links and Universal Links configurations.
-extension DeeplinkHandlers on FlutterAgentLensServer {
+base mixin DeeplinkValidationSupport
+    on MCPServer, ToolsSupport, VmConnectionSupport {
+  void registerDeeplinkTools() {
+    final formatSchema = StringSchema(
+      description:
+          'Response format: markdown, json, or dual (default: markdown).',
+    );
+
+    registerTool(
+      Tool(
+        name: 'validate_deep_links',
+        description: 'Validate deep link configurations on Android or iOS.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'platform': StringSchema(
+              description: 'The target platform (android or ios).',
+            ),
+            'build_variant': StringSchema(
+              description:
+                  'The build variant for Android (e.g., debug, release).',
+            ),
+            'configuration': StringSchema(
+              description:
+                  'The build configuration for iOS (e.g., Debug, Release).',
+            ),
+            'target': StringSchema(
+              description: 'The target name for iOS (default: Runner).',
+            ),
+            'format': formatSchema,
+          },
+          required: ['platform'],
+        ),
+      ),
+      wrapToolCall('validate_deep_links', _handleValidateDeepLinks,
+          requiresConnection: false),
+    );
+  }
+
   Future<CallToolResult> _handleValidateDeepLinks(CallToolRequest req) async {
-    final root = _workspaceRoot;
+    final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
         content: [
@@ -90,7 +130,7 @@ extension DeeplinkHandlers on FlutterAgentLensServer {
     md.writeln('\nCONSOLE OUTPUT');
     md.writeln(output);
 
-    return _serializeDualFormat(
+    return serializeDualFormat(
       title: 'Deep Link Analysis Report',
       markdownBody: md.toString(),
       structuredData: {
