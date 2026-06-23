@@ -182,6 +182,20 @@ base mixin WidgetInspectionSupport
       ),
       wrapToolCall('trigger_scroll_gesture', _handleScrollGesture),
     );
+
+    registerTool(
+      Tool(
+        name: 'get_navigation_stack',
+        description:
+            "Retrieve the application's current routing/navigation stacks.",
+        inputSchema: ObjectSchema(
+          properties: {
+            'format': formatSchema,
+          },
+        ),
+      ),
+      wrapToolCall('get_navigation_stack', _handleGetNavigationStack),
+    );
   }
 
   void cleanupWidgetInspection() {
@@ -1103,6 +1117,197 @@ base mixin WidgetInspectionSupport
     );
   }
 
+  Future<CallToolResult> _handleGetNavigationStack(CallToolRequest req) async {
+    stderr.writeln('[mcp:get_navigation_stack] Retrieving navigation tree...');
+    final isolate = await vmService!.getIsolate(isolateId!);
+    final navigatorLib = isolate.libraries?.firstWhere(
+      (lib) => lib.uri == 'package:flutter/src/widgets/navigator.dart',
+      orElse: () => throw StateError(
+          'Navigator library not found in target isolate.'),
+    );
+    final libId = navigatorLib!.id!;
+    final eval = await vmService!.evaluate(
+      isolateId!,
+      libId,
+      _navigationStackScript.replaceAll('\n', ' ').replaceAll('\r', ' '),
+    );
+    if (eval is! InstanceRef) {
+      return CallToolResult(
+        content: [
+          TextContent(
+              text:
+                  'Evaluation failed. Unexpected result type: ${eval.runtimeType}')
+        ],
+        isError: true,
+      );
+    }
+
+    var jsonStr = eval.valueAsString;
+    if (eval.valueAsStringIsTruncated == true) {
+      final fullObj = await vmService!.getObject(isolateId!, eval.id!);
+      if (fullObj is Instance) {
+        jsonStr = fullObj.valueAsString;
+      }
+    }
+    if (jsonStr == null) {
+      return CallToolResult(
+        content: [TextContent(text: 'Evaluation result string is null.')],
+        isError: true,
+      );
+    }
+
+    final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
+    if (decoded.containsKey('error')) {
+      return CallToolResult(
+        content: [
+          TextContent(text: 'Navigation tree error: ${decoded['error']}')
+        ],
+        isError: true,
+      );
+    }
+
+    final currentUrl = decoded['currentUrl'] as String?;
+    final navRaw = decoded['navigators'] as List<dynamic>? ?? [];
+
+    final navMap = <int, Map<String, dynamic>>{};
+    for (final n in navRaw) {
+      final nav = n as Map<String, dynamic>;
+      navMap[nav['id'] as int] = nav;
+    }
+
+    final md = StringBuffer();
+    if (currentUrl != null) {
+      md.writeln('Current URL: $currentUrl');
+      md.writeln();
+    }
+
+    int maxDepth = 0;
+
+    void renderNav(int id, String indent, bool isLast) {
+      final nav = navMap[id];
+      if (nav == null) return;
+
+      final routes = nav['routes'] as List<dynamic>? ?? [];
+      final parentId = nav['parentId'] as int?;
+      final depth = routes.length;
+      if (depth > maxDepth) maxDepth = depth;
+
+      final label = parentId == null ? 'Navigator [root]' : 'Navigator';
+      md.writeln('$indent$label ($depth routes)');
+
+      final children = navRaw
+          .cast<Map<String, dynamic>>()
+          .where((n) => n['parentId'] == id)
+          .toList();
+
+      final renderedChildren = <int>{};
+
+      for (var i = 0; i < routes.length; i++) {
+        final r = routes[i] as Map<String, dynamic>;
+        var name = r['name'] as String? ?? 'anonymous';
+        final screenName = r['screenName'] as String?;
+        final routeHash = r['hash'] as int? ?? 0;
+        final isCurrent = r['isCurrent'] == true;
+        final isFirst = r['isFirst'] == true;
+        final routeType = r['type'] as String? ?? '';
+
+        bool isScrambled = false;
+        if (name.length == 32) {
+          isScrambled = true;
+          for (var charCode in name.codeUnits) {
+            if (charCode < 89 || charCode > 121) {
+              isScrambled = false;
+              break;
+            }
+          }
+        }
+
+        final isHashcode = RegExp(r'^\d+$').hasMatch(name);
+
+        if (screenName != null) {
+          if (name == 'anonymous' || isScrambled || isHashcode) {
+            name = screenName;
+          } else if (name != screenName) {
+            name = '$name ($screenName)';
+          }
+        } else if (isScrambled) {
+          name = 'GoRouter Shell (wrapper)';
+        }
+
+        final nestedChildren = children
+            .where((n) => n['parentRouteHash'] == routeHash && routeHash != 0)
+            .toList();
+
+        final isLastRoute = i == routes.length - 1 &&
+            children.where((n) => !renderedChildren.contains(n['id'] as int)).isEmpty;
+        
+        final branch = isLastRoute ? '$indent  └──' : '$indent  ├──';
+        final tag = isCurrent ? ' [current]' : (isFirst ? ' [root]' : '');
+        final cleanType = routeType.replaceAll('<dynamic>', '').replaceAll('<void>', '');
+        final typeStr = (cleanType.isNotEmpty && cleanType != 'Route') ? ' ($cleanType)' : '';
+        md.writeln('$branch $name$typeStr$tag');
+
+        for (var ci = 0; ci < nestedChildren.length; ci++) {
+          final childId = nestedChildren[ci]['id'] as int;
+          renderedChildren.add(childId);
+          final childIsLast = ci == nestedChildren.length - 1 && isLastRoute;
+          renderNav(childId, '$indent      ', childIsLast);
+        }
+      }
+
+      final remainingChildren = children
+          .where((n) => !renderedChildren.contains(n['id'] as int))
+          .toList();
+      
+      for (var ci = 0; ci < remainingChildren.length; ci++) {
+        final childId = remainingChildren[ci]['id'] as int;
+        final childIsLast = ci == remainingChildren.length - 1;
+        renderNav(childId, '$indent      ', childIsLast);
+      }
+    }
+
+    final roots = navRaw
+        .cast<Map<String, dynamic>>()
+        .where((n) => n['parentId'] == null)
+        .toList();
+
+    if (roots.isEmpty && navRaw.isNotEmpty) {
+      for (final n in navRaw) {
+        renderNav(n['id'] as int, '', true);
+      }
+    } else {
+      for (var i = 0; i < roots.length; i++) {
+        renderNav(roots[i]['id'] as int, '', i == roots.length - 1);
+      }
+    }
+
+    if (navRaw.isEmpty) {
+      md.writeln('No active navigators found.');
+    }
+
+    md.writeln();
+    final hasLeak = maxDepth >= 20;
+    if (hasLeak) {
+      md.writeln(
+          'WARNING: Navigator stack depth $maxDepth exceeds limit of 20. Possible navigation leak.');
+    } else {
+      md.writeln('Max stack depth: $maxDepth/20. No leak detected.');
+    }
+
+    return serializeDualFormat(
+      title: 'Navigation Tree',
+      markdownBody: md.toString(),
+      structuredData: {
+        'current_url': currentUrl,
+        'navigator_count': navRaw.length,
+        'max_depth': maxDepth,
+        'has_leak_warning': hasLeak,
+        'navigators': navRaw,
+      },
+      format: req.arguments?['format'] as String?,
+    );
+  }
+
   Future<bool> _isTrackRebuildSupported() async {
     final isolate = await vmService!.getIsolate(isolateId!);
     final extensions = isolate.extensionRPCs ?? [];
@@ -1172,3 +1377,183 @@ class _FlatWidget {
     };
   }
 }
+
+const String _navigationStackScript = r'''
+jsonEncode((() {
+  String? currentUrl;
+  void findCurrentUrl(dynamic el) {
+    if (el == null) return;
+    try {
+      final wt = el.widget.runtimeType.toString();
+      if (wt.startsWith("Router<")) {
+        try {
+          final uri = el.widget.routeInformationProvider?.value?.uri;
+          if (uri != null) {
+            currentUrl = uri.toString();
+            return;
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+    el.visitChildren(findCurrentUrl);
+  }
+
+  final blacklist = {
+    "Builder", "StatefulBuilder", "StatelessBuilder", "Directionality",
+    "MediaQuery", "Theme", "AnimatedTheme", "IconTheme", "DefaultTextStyle",
+    "Localizations", "Semantics", "Focus", "FocusScope", "Actions", "Shortcuts",
+    "Navigator", "Overlay", "AbsorbPointer", "IgnorePointer", "GestureDetector",
+    "RawGestureDetector", "Listener", "MouseRegion", "TickerMode", "AnimatedSize",
+    "CustomPaint", "RepaintBoundary", "CompositedTransformTarget", "CompositedTransformFollower",
+    "Padding", "Align", "Center", "SizedBox", "ConstrainedBox", "Container",
+    "AnimatedBuilder", "SlideTransition", "FadeTransition", "ScaleTransition",
+    "RotationTransition", "SizeTransition", "DecoratedBox", "ColoredBox",
+    "DefaultSelectionStyle", "SelectionArea", "OverlayPortal", "CheckedModeBanner",
+    "Title", "DefaultTextEditingActions", "TapRegion", "ShortcutRegistrar",
+    "NotificationListener", "KeyedSubtree", "BlockSemantics", "ExcludeSemantics",
+    "ModalBarrier", "SemanticsDebugger", "RawImage", "Image", "Icon",
+    "InheritedTheme", "DefaultColor", "RichText", "RawKeyboardListener",
+    "PrimaryScrollController", "ScrollConfiguration", "Scrollable", "Viewport",
+    "ShrinkWrappingViewport", "SliverPadding", "SliverList", "SliverGrid",
+    "ListWheelViewport", "IgnoreBaseline", "Visibility", "AnimatedDefaultTextStyle",
+    "AnimatedPhysicalModel", "PhysicalModel", "MetaSheets", "BlocProvider",
+    "BlocBuilder", "BlocListener", "MultiBlocProvider", "Provider", "Consumer",
+    "ListenableProvider", "ChangeNotifierProvider", "PageStorage", "Offstage",
+    "AutomaticKeepAlive", "KeepAlive", "FocusMarker", "ShortcutsMarker",
+    "ActionsMarker", "PopScope", "FocusTraversalGroup"
+  };
+
+  String? getScreenName(dynamic route) {
+    if (route == null) return null;
+    try {
+      final context = route.subtreeContext;
+      if (context == null) return null;
+      String? foundName;
+      void walk(dynamic el, int depth) {
+        if (foundName != null || el == null || depth > 40) return;
+        final typeStr = el.widget.runtimeType.toString();
+        final baseType = typeStr.split("<").first;
+        bool ignore = blacklist.contains(baseType) ||
+            baseType.contains("Provider") ||
+            baseType.contains("Bloc") ||
+            baseType.contains("Consumer") ||
+            baseType.contains("Selector") ||
+            baseType.contains("GoRouter") ||
+            baseType.contains("Scope");
+        if (!typeStr.startsWith("_") && !ignore) {
+          foundName = typeStr;
+          return;
+        }
+        el.visitChildren((child) => walk(child, depth + 1));
+      }
+      walk(context, 0);
+      return foundName;
+    } catch (_) {}
+    return null;
+  }
+
+  final navList = <Map<String, dynamic>>[];
+  void findNavigators(dynamic el, int? parentNavId) {
+    if (el == null) return;
+    int? myNavId = parentNavId;
+    try {
+      if (el.runtimeType.toString() == "StatefulElement" &&
+          el.state.runtimeType.toString() == "NavigatorState") {
+        final nav = el.state;
+        final id = nav.hashCode;
+        int? parentRouteHash;
+        try {
+          final pr = ModalRoute.of(el);
+          if (pr != null) parentRouteHash = pr.hashCode;
+        } catch (_) {}
+        final routes = <Map<String, dynamic>>[];
+        try {
+          int total = 0;
+          final present = <dynamic>[];
+          for (final e in nav._history) {
+            try {
+              if (e.isPresent) present.add(e);
+            } catch (_) {}
+          }
+          total = present.length;
+          final cap = 20;
+          final kept = total <= cap ? present : [...present.take(10), ...present.skip(total - 10)];
+          bool trimmed = total > cap;
+          for (final e in kept) {
+            final route = e.route;
+            String? name;
+            try {
+              name = route.settings.name;
+            } catch (_) {}
+            if (name == null) {
+              try {
+                final keyVal = (route.settings as dynamic).key?.value;
+                if (keyVal is String && keyVal.isNotEmpty) name = keyVal;
+              } catch (_) {}
+            }
+            if (name == null) name = "anonymous";
+            String? screenName = getScreenName(route);
+            String routeType = "Route";
+            try {
+              routeType = route.runtimeType.toString();
+            } catch (_) {}
+            String settingsType = "RouteSettings";
+            try {
+              settingsType = route.settings.runtimeType.toString();
+            } catch (_) {}
+            int routeHash = route.hashCode;
+            bool isCurrent = false;
+            bool isFirst = false;
+            try {
+              isCurrent = route.isCurrent;
+            } catch (_) {}
+            try {
+              isFirst = route.isFirst;
+            } catch (_) {}
+            routes.add({
+              "name": name,
+              "screenName": screenName,
+              "type": routeType,
+              "settingsType": settingsType,
+              "hash": routeHash,
+              "isCurrent": isCurrent,
+              "isFirst": isFirst
+            });
+          }
+          if (trimmed) {
+            routes.insert(10, {
+              "name": "...(${total - 20} routes omitted)...",
+              "screenName": null,
+              "type": "",
+              "settingsType": "",
+              "hash": 0,
+              "isCurrent": false,
+              "isFirst": false
+            });
+          }
+        } catch (_) {}
+        navList.add({
+          "id": id,
+          "parentId": parentNavId,
+          "parentRouteHash": parentRouteHash,
+          "total": routes.length,
+          "routes": routes
+        });
+        myNavId = id;
+      }
+    } catch (_) {}
+    el.visitChildren((child) => findNavigators(child, myNavId));
+  }
+
+  try {
+    final root = WidgetsBinding.instance.rootElement;
+    if (root != null) {
+      findCurrentUrl(root);
+      findNavigators(root, null);
+    }
+  } catch (e) {
+    return {"error": e.toString()};
+  }
+  return {"currentUrl": currentUrl, "navigators": navList};
+})())
+''';
