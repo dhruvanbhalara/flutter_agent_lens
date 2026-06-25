@@ -1,3 +1,8 @@
+## 1.5.2
+
+- Deprecated and removed the redundant `dual` format option across all tools to optimize token usage.
+- Updated tool schemas and `test_all_tools.dart` to specify either `markdown` or `json`.
+
 ## 1.5.1
 
 - Split the monolithic server file into 12 separate class mixins for better maintainability.
