@@ -18,7 +18,7 @@ base mixin WidgetInspectionSupport
   void registerWidgetTools() {
     final formatSchema = StringSchema(
       description:
-          'Response format: markdown, json, or dual (default: markdown).',
+          'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(

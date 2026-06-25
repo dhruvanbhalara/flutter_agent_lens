@@ -25,7 +25,7 @@ base mixin ConsoleLoggingSupport
             'limit': limitSchema(defaultValue: 50.0),
             'format': StringSchema(
               description:
-                  'Response format: markdown, json, or dual (default: markdown).',
+                  'Response format: markdown or json (default: markdown).',
             ),
           },
         ),

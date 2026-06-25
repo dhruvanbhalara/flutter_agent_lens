@@ -77,20 +77,16 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
         format ?? Platform.environment['MCP_RESPONSE_FORMAT'] ?? 'markdown';
     final contentBuffer = StringBuffer();
 
-    if (fmt == 'markdown' || fmt == 'dual') {
-      contentBuffer
-        ..writeln(title)
-        ..writeln()
-        ..writeln(markdownBody);
-    }
-    if (fmt == 'dual') {
-      contentBuffer.writeln();
-    }
-    if (fmt == 'json' || fmt == 'dual') {
+    if (fmt == 'json') {
       contentBuffer
         ..writeln('```json')
         ..writeln(const JsonEncoder.withIndent('  ').convert(structuredData))
         ..writeln('```');
+    } else {
+      contentBuffer
+        ..writeln(title)
+        ..writeln()
+        ..writeln(markdownBody);
     }
 
     return CallToolResult(

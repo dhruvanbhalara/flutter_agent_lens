@@ -10,7 +10,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   void registerScreenshotTools() {
     final formatSchema = StringSchema(
       description:
-          'Response format: markdown, json, or dual (default: markdown).',
+          'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
