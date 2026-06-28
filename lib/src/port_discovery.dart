@@ -3,11 +3,17 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 /// Represents a running Flutter or Dart application discovered on the local machine.
-class DiscoveredApp {
+final class DiscoveredApp {
+  /// The WebSocket VM Service URI of the application (e.g. `ws://127.0.0.1:8181/auth_token/ws`).
   final String serviceUri;
+
+  /// The name of the project corresponding to the application's working directory.
   final String projectName;
+
+  /// A descriptive identifier indicating how this app was discovered.
   final String configPath;
 
+  /// Creates a new [DiscoveredApp] instance.
   DiscoveredApp({
     required this.serviceUri,
     required this.projectName,
@@ -16,6 +22,9 @@ class DiscoveredApp {
 }
 
 /// Finds running Flutter/Dart applications by scanning OS processes.
+///
+/// Under Windows, it uses PowerShell to query CIM instances. On macOS and Linux,
+/// it executes `ps` and maps the process working directories.
 Future<List<DiscoveredApp>> discoverActiveApps() async {
   final apps = <DiscoveredApp>[];
   stderr.writeln('[discovery] Starting process-based app discovery...');
@@ -125,6 +134,8 @@ Future<List<DiscoveredApp>> discoverActiveApps() async {
   return apps;
 }
 
+/// Probes the given HTTP VM Service URI to verify if it is alive and
+/// extracts its WebSocket URL, appending it to the [apps] collection.
 Future<void> _probeAndAddApp(
   String rawVmUri,
   String projectName,

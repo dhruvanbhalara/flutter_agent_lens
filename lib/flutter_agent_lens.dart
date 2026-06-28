@@ -15,7 +15,10 @@ import 'src/mixins/bundle_analysis_support.dart';
 import 'src/mixins/deeplink_validation_support.dart';
 import 'src/mixins/dtd_support.dart';
 
-/// Flutter Agent Lens MCP Server.
+/// Flutter Agent Lens MCP Server class.
+///
+/// This server exposes a suite of tools that allow AI agents to debug,
+/// profile, and inspect running Flutter applications over an MCP channel.
 final class FlutterAgentLensServer extends MCPServer
     with
         ToolsSupport,
@@ -33,6 +36,8 @@ final class FlutterAgentLensServer extends MCPServer
         BundleAnalysisSupport,
         DeeplinkValidationSupport,
         DtdSupport {
+  
+  /// Creates a new [FlutterAgentLensServer] instance communicating over the given [channel].
   FlutterAgentLensServer({required StreamChannel<String> channel})
       : super.fromStreamChannel(
           channel,
@@ -44,6 +49,7 @@ final class FlutterAgentLensServer extends MCPServer
               'Connect using the connect tool, or discover running apps with discover_apps.',
         );
 
+  /// Cleans up active streams and subscriptions on connection close.
   @override
   void cleanupStreams() {
     cleanupLogging();
@@ -60,6 +66,7 @@ final class FlutterAgentLensServer extends MCPServer
     dtdUri = null;
   }
 
+  /// Initializes the server and registers all supported tools.
   @override
   FutureOr<InitializeResult> initialize(InitializeRequest request) async {
     final result = await super.initialize(request);
@@ -67,6 +74,8 @@ final class FlutterAgentLensServer extends MCPServer
     return result;
   }
 
+  /// Registers all connection, inspection, profiling, memory, logging,
+  /// network, debugging, screenshot, bundle analysis, deep link, and DTD tools.
   void _registerTools() {
     registerConnectionTools();
     registerWidgetTools();
