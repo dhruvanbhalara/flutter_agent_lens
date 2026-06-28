@@ -4,12 +4,15 @@ import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 import 'package:dtd/dtd.dart';
+import '../enums/mcp_tool.dart';
 import 'vm_connection_support.dart';
 import 'console_logging_support.dart';
 import 'dtd_support.dart';
 import '../port_discovery.dart';
 import '../path_resolver.dart';
 
+/// Support mixin providing tools for connecting, disconnecting, retrieving
+/// app information, and autodiscovering running Flutter/Dart applications.
 base mixin ConnectionSupport
     on
         MCPServer,
@@ -17,6 +20,7 @@ base mixin ConnectionSupport
         VmConnectionSupport,
         ConsoleLoggingSupport,
         RootsTrackingSupport {
+  /// Registers all connection-related tools in the MCP server.
   void registerConnectionTools() {
     final formatSchema = StringSchema(
       description:
@@ -25,7 +29,7 @@ base mixin ConnectionSupport
 
     registerTool(
       Tool(
-        name: 'connect',
+        name: McpTool.connect.name,
         description: 'Connect to a running Flutter app via its VM Service URI.',
         inputSchema: ObjectSchema(
           properties: {
@@ -43,21 +47,21 @@ base mixin ConnectionSupport
           },
         ),
       ),
-      wrapToolCall('connect', _handleConnect, requiresConnection: false),
+      wrapToolCall(McpTool.connect, _handleConnect, requiresConnection: false),
     );
 
     registerTool(
       Tool(
-        name: 'disconnect',
+        name: McpTool.disconnect.name,
         description: 'Disconnect from the currently connected Flutter app.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('disconnect', _handleDisconnect),
+      wrapToolCall(McpTool.disconnect, _handleDisconnect),
     );
 
     registerTool(
       Tool(
-        name: 'get_app_info',
+        name: McpTool.getAppInfo.name,
         description:
             'Get detailed information about the connected Flutter app including VM info, isolates, and available extensions.',
         inputSchema: ObjectSchema(
@@ -70,12 +74,12 @@ base mixin ConnectionSupport
           },
         ),
       ),
-      wrapToolCall('get_app_info', _handleGetAppInfo),
+      wrapToolCall(McpTool.getAppInfo, _handleGetAppInfo),
     );
 
     registerTool(
       Tool(
-        name: 'discover_apps',
+        name: McpTool.discoverApps.name,
         description:
             'Automatically discover running Flutter apps on this machine.',
         inputSchema: ObjectSchema(
@@ -91,14 +95,18 @@ base mixin ConnectionSupport
           },
         ),
       ),
-      wrapToolCall('discover_apps', _handleAutodiscover,
+      wrapToolCall(McpTool.discoverApps, _handleAutodiscover,
           requiresConnection: false),
     );
   }
 
+  /// Handles the connect tool request.
   Future<CallToolResult> _handleConnect(CallToolRequest req) async {
-    final rawUri =
-        (req.arguments!['uri'] ?? req.arguments!['vmServiceUri']) as String;
+    final rawUri = switch (req.arguments) {
+      {'uri': String uri} => uri,
+      {'vmServiceUri': String uri} => uri,
+      _ => throw ArgumentError('Required parameter "uri" or "vmServiceUri" is missing.'),
+    };
     try {
       stderr.writeln('[mcp:connect] Attempting connection to: $rawUri');
       workspaceRoot = req.arguments?['workspace_root'] as String?;
@@ -248,6 +256,7 @@ base mixin ConnectionSupport
     }
   }
 
+  /// Handles the disconnect tool request.
   Future<CallToolResult> _handleDisconnect(CallToolRequest req) async {
     if (vmService == null) {
       return CallToolResult(
@@ -267,6 +276,7 @@ base mixin ConnectionSupport
     );
   }
 
+  /// Handles the get_app_info tool request.
   Future<CallToolResult> _handleGetAppInfo(CallToolRequest req) async {
     final vm = await vmService!.getVM();
     final isolate = await vmService!.getIsolate(isolateId!);
@@ -351,6 +361,7 @@ base mixin ConnectionSupport
     );
   }
 
+  /// Handles the discover_apps tool request.
   Future<CallToolResult> _handleAutodiscover(CallToolRequest req) async {
     final workspace = req.arguments?['workspace_root'] as String?;
     final autoConnect = req.arguments?['autoConnect'] as bool? ?? true;

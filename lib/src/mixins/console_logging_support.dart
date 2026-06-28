@@ -3,21 +3,36 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
+import '../enums/mcp_tool.dart';
 import 'vm_connection_support.dart';
 
+/// Support mixin providing tools for fetching and statefully buffering console
+/// stdout, stderr, and developer log streams from the connected application.
 base mixin ConsoleLoggingSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Local buffer of the most recent console logs.
   final List<String> logBuffer = [];
+
+  /// Last log line received, used for deduplication.
   String? lastLogLine;
+
+  /// Counter for duplicate consecutive logs.
   int duplicateLogCount = 0;
+
+  /// Subscription to the VM Service's stdout stream.
   StreamSubscription? stdoutSub;
+
+  /// Subscription to the VM Service's stderr stream.
   StreamSubscription? stderrSub;
+
+  /// Subscription to the VM Service's logging/developer stream.
   StreamSubscription? loggingSub;
 
+  /// Registers the console log retrieval tool.
   void registerLoggingTools() {
     registerTool(
       Tool(
-        name: 'fetch_console_logs',
+        name: McpTool.fetchConsoleLogs.name,
         description:
             'Read recent console logs from stdout, stderr, and developer streams.',
         inputSchema: ObjectSchema(
@@ -30,10 +45,11 @@ base mixin ConsoleLoggingSupport
           },
         ),
       ),
-      wrapToolCall('fetch_console_logs', _handleFetchConsoleLogs),
+      wrapToolCall(McpTool.fetchConsoleLogs, _handleFetchConsoleLogs),
     );
   }
 
+  /// Starts listening to and buffering stdout, stderr, and logging streams.
   void startLogging() {
     cleanupLogging();
     logBuffer.clear();
@@ -62,6 +78,7 @@ base mixin ConsoleLoggingSupport
     }).catchError((_) {});
   }
 
+  /// Formats and adds a new log message to the log buffer, deduplicating identical lines.
   void addToLogBuffer(String prefix, String message) {
     final lines = message.split(RegExp(r'\r?\n'));
     for (final line in lines) {
@@ -86,6 +103,7 @@ base mixin ConsoleLoggingSupport
     }
   }
 
+  /// Cancels all active log stream subscriptions and resets state.
   void cleanupLogging() {
     stdoutSub?.cancel();
     stderrSub?.cancel();
@@ -97,6 +115,7 @@ base mixin ConsoleLoggingSupport
     duplicateLogCount = 0;
   }
 
+  /// Subscribes to a VM service stream producing base64-encoded byte buffers (stdout/stderr).
   Future<StreamSubscription?> _listenToByteStream(
     String streamId,
     String logPrefix,
@@ -119,9 +138,10 @@ base mixin ConsoleLoggingSupport
     }
   }
 
+  /// Handles the fetch_console_logs tool request.
   Future<CallToolResult> _handleFetchConsoleLogs(CallToolRequest req) async {
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 50;
-    final maxLimit = limit > 200 ? 200 : (limit < 1 ? 1 : limit);
+    final maxLimit = limit.clamp(1, 200);
     stderr.writeln(
         '[mcp:fetch_console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$maxLimit');
 
