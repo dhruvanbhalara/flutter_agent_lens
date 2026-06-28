@@ -37,7 +37,7 @@ base mixin MemoryDebuggingSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.getMemorySnapshot, _handleGetMemorySnapshot),
+      _handleGetMemorySnapshot,
     );
 
     registerTool(
@@ -58,7 +58,7 @@ base mixin MemoryDebuggingSupport
           required: ['name'],
         ),
       ),
-      wrapToolCall(McpTool.saveSnapshot, _handleSaveSnapshot),
+      _handleSaveSnapshot,
     );
 
     registerTool(
@@ -78,7 +78,7 @@ base mixin MemoryDebuggingSupport
           required: ['before', 'after'],
         ),
       ),
-      wrapToolCall(McpTool.compareSnapshots, _handleCompareSnapshots),
+      _handleCompareSnapshots,
     );
 
     registerTool(
@@ -88,8 +88,7 @@ base mixin MemoryDebuggingSupport
             'List all saved memory snapshots available for comparison.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall(McpTool.listSnapshots, _handleListSnapshots,
-          requiresConnection: false),
+      _handleListSnapshots,
     );
 
     registerTool(
@@ -107,7 +106,7 @@ base mixin MemoryDebuggingSupport
           required: ['class_name'],
         ),
       ),
-      wrapToolCall(McpTool.auditClassMemoryLeak, _handleAuditClassMemoryLeak),
+      _handleAuditClassMemoryLeak,
     );
 
     registerTool(
@@ -128,7 +127,7 @@ base mixin MemoryDebuggingSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.diffHeapAllocations, _handleDiffHeapAllocations),
+      _handleDiffHeapAllocations,
     );
 
     registerTool(
@@ -151,7 +150,7 @@ base mixin MemoryDebuggingSupport
           required: ['object_id'],
         ),
       ),
-      wrapToolCall(McpTool.getObjectReferrers, _handleGetObjectReferrers),
+      _handleGetObjectReferrers,
     );
   }
 

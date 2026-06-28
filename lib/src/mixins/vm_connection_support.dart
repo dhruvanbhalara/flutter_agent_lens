@@ -134,15 +134,6 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     );
   }
 
-  /// A helper that returns the handler directly, as tool call wrapping is now
-  /// handled centrally by overriding [registerTool].
-  FutureOr<CallToolResult> Function(CallToolRequest) wrapToolCall(
-    McpTool tool,
-    FutureOr<CallToolResult> Function(CallToolRequest) handler, {
-    bool requiresConnection = true,
-  }) {
-    return handler;
-  }
 
   /// Helper to determine if an error is related to garbage collection or isolate sentinels.
   bool _isCollectedError(Object e) {

@@ -34,8 +34,7 @@ base mixin BundleAnalysisSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.analyzeBundleSize, _handleAnalyzeBundleSize,
-          requiresConnection: false),
+      _handleAnalyzeBundleSize,
     );
   }
 

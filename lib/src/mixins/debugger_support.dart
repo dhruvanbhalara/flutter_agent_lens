@@ -26,7 +26,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           },
         ),
       ),
-      wrapToolCall(McpTool.getCallStack, _handleGetCallStack),
+      _handleGetCallStack,
     );
 
     registerTool(
@@ -42,7 +42,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['mode'],
         ),
       ),
-      wrapToolCall(McpTool.setExceptionPauseMode, _handleSetExceptionPauseMode),
+      _handleSetExceptionPauseMode,
     );
 
     registerTool(
@@ -66,7 +66,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['file_path', 'line'],
         ),
       ),
-      wrapToolCall(McpTool.addBreakpoint, _handleAddBreakpoint),
+      _handleAddBreakpoint,
     );
 
     registerTool(
@@ -82,7 +82,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['breakpoint_id'],
         ),
       ),
-      wrapToolCall(McpTool.removeBreakpoint, _handleRemoveBreakpoint),
+      _handleRemoveBreakpoint,
     );
 
     registerTool(
@@ -103,7 +103,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['expression'],
         ),
       ),
-      wrapToolCall(McpTool.evaluateExpression, _handleEvalExpression),
+      _handleEvalExpression,
     );
   }
 
