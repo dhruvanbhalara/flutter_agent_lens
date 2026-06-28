@@ -1,12 +1,18 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
 
-/// Maps VM-reported file URIs to local absolute paths.
-class PathResolver {
+/// Maps VM-reported file URIs (such as `package:foo/main.dart` or `file://`) to local absolute paths.
+final class PathResolver {
+  /// The absolute path of the local Flutter workspace root.
   final String workspaceRoot;
+
+  /// Cache mapping VM-reported URIs to resolved local absolute file paths.
   final Map<String, String> _pathCache = {};
+
+  /// Cached dictionary of all files in the workspace (for fallback lookups).
   Map<String, String>? _allWorkspaceFiles;
 
+  /// Creates a new [PathResolver] instance centered around the given [workspaceRoot].
   PathResolver(this.workspaceRoot);
 
   /// Resolves a VM-reported URI to a local absolute path.
