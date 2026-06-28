@@ -4,9 +4,12 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:path/path.dart' as p;
 import 'package:image/image.dart' as img;
+import '../enums/mcp_tool.dart';
 import 'vm_connection_support.dart';
 
+/// Support mixin providing tools for taking and visually comparing screenshots.
 base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Registers screenshot-related tools.
   void registerScreenshotTools() {
     final formatSchema = StringSchema(
       description:
@@ -15,7 +18,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
     registerTool(
       Tool(
-        name: 'compare_layout_screenshots',
+        name: McpTool.compareLayoutScreenshots.name,
         description:
             'Capture screenshots and perform pixel diff checks to find layout changes or bugs.',
         inputSchema: ObjectSchema(
@@ -46,12 +49,12 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         ),
       ),
       wrapToolCall(
-          'compare_layout_screenshots', _handleCompareLayoutScreenshots),
+          McpTool.compareLayoutScreenshots, _handleCompareLayoutScreenshots),
     );
 
     registerTool(
       Tool(
-        name: 'take_screenshot',
+        name: McpTool.takeScreenshot.name,
         description:
             'Capture a standalone screenshot of the running Flutter application.',
         inputSchema: ObjectSchema(
@@ -71,10 +74,11 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           },
         ),
       ),
-      wrapToolCall('take_screenshot', _handleTakeScreenshot),
+      wrapToolCall(McpTool.takeScreenshot, _handleTakeScreenshot),
     );
   }
 
+  /// Handles the compare_layout_screenshots tool request.
   Future<CallToolResult> _handleCompareLayoutScreenshots(
       CallToolRequest req) async {
     final root = workspaceRoot;
@@ -90,41 +94,32 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     }
 
     final baselineName = req.arguments!['baseline_name'] as String;
-    final action = req.arguments!['action'] as String;
+    final actionStr = req.arguments!['action'] as String;
     final threshold = (req.arguments?['threshold'] as num?)?.toDouble() ?? 0.98;
-    final screenshotType =
-        req.arguments?['screenshot_type'] as String? ?? 'device';
+    final screenshotTypeStr = req.arguments?['screenshot_type'] as String?;
     final deviceId = req.arguments?['device_id'] as String?;
 
-    if (action != 'capture_baseline' && action != 'compare') {
+    final ScreenshotAction action;
+    try {
+      action = ScreenshotAction.fromString(actionStr);
+    } catch (e) {
       return CallToolResult(
-        content: [
-          TextContent(
-              text:
-                  'Invalid action. Supported actions: capture_baseline, compare.')
-        ],
-        isError: true,
-      );
-    }
-    if (screenshotType != 'device' && screenshotType != 'skia') {
-      return CallToolResult(
-        content: [
-          TextContent(
-              text: 'Invalid screenshot_type. Supported values: device, skia.')
-        ],
+        content: [TextContent(text: e.toString())],
         isError: true,
       );
     }
 
+    final screenshotType = ScreenshotType.fromString(screenshotTypeStr);
+
     stderr.writeln(
-        '[mcp:screenshot] Action=$action, baselineName=$baselineName, type=$screenshotType, deviceId=$deviceId');
+        '[mcp:screenshot] Action=${action.value}, baselineName=$baselineName, type=${screenshotType.value}, deviceId=$deviceId');
 
     final screenshotDir = Directory(p.join(root, 'build', 'mcp_screenshots'));
     if (!screenshotDir.existsSync()) {
       screenshotDir.createSync(recursive: true);
     }
 
-    if (action == 'capture_baseline') {
+    if (action == ScreenshotAction.captureBaseline) {
       final baselinePath =
           p.join(screenshotDir.path, '${baselineName}_baseline.png');
       stderr.writeln('[mcp:screenshot] Capturing baseline to $baselinePath');
@@ -132,10 +127,10 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       try {
         final actualType = await _captureDeviceScreenshot(
           targetPath: baselinePath,
-          screenshotType: screenshotType,
+          screenshotType: screenshotType.value,
           deviceId: deviceId,
         );
-        final notice = (screenshotType == 'skia' && actualType == 'device')
+        final notice = (screenshotType == ScreenshotType.skia && actualType == 'device')
             ? '\n(Note: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported)'
             : '';
         return CallToolResult(
@@ -175,7 +170,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       try {
         actualType = await _captureDeviceScreenshot(
           targetPath: currentPath,
-          screenshotType: screenshotType,
+          screenshotType: screenshotType.value,
           deviceId: deviceId,
         );
       } catch (e) {
@@ -246,7 +241,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       md.writeln(
           '- Similarity Score: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)');
       md.writeln('- Matching Pixels: $matchingPixels / $totalPixels');
-      if (screenshotType == 'skia' && actualType == 'device') {
+      if (screenshotType == ScreenshotType.skia && actualType == 'device') {
         md.writeln(
             '- Notice: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.');
       }
@@ -275,6 +270,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     }
   }
 
+  /// Handles the take_screenshot tool request.
   Future<CallToolResult> _handleTakeScreenshot(CallToolRequest req) async {
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
@@ -287,20 +283,11 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     }
 
-    final screenshotType =
-        req.arguments?['screenshot_type'] as String? ?? 'device';
+    final screenshotTypeStr = req.arguments?['screenshot_type'] as String?;
     final deviceId = req.arguments?['device_id'] as String?;
     final outputPath = req.arguments?['output_path'] as String?;
 
-    if (screenshotType != 'device' && screenshotType != 'skia') {
-      return CallToolResult(
-        content: [
-          TextContent(
-              text: 'Invalid screenshot_type. Supported values: device, skia.')
-        ],
-        isError: true,
-      );
-    }
+    final screenshotType = ScreenshotType.fromString(screenshotTypeStr);
 
     String targetPath;
     if (outputPath != null && outputPath.isNotEmpty) {
@@ -316,10 +303,10 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
     final actualType = await _captureDeviceScreenshot(
       targetPath: targetPath,
-      screenshotType: screenshotType,
+      screenshotType: screenshotType.value,
       deviceId: deviceId,
     );
-    final notice = (screenshotType == 'skia' && actualType == 'device')
+    final notice = (screenshotType == ScreenshotType.skia && actualType == 'device')
         ? '\n(Note: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported)'
         : '';
     return CallToolResult(
@@ -329,6 +316,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     );
   }
 
+  /// Helper to capture a screenshot via the Flutter CLI tool.
   Future<String> _captureDeviceScreenshot({
     required String targetPath,
     required String screenshotType,
@@ -394,6 +382,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     throw StateError('VM Service is not connected.');
   }
 
+  /// Helper to detect the active device or emulator ID matching the given OS.
   Future<String?> _detectDeviceForOs(String targetOs) async {
     try {
       final flutterRoot = Platform.environment['FLUTTER_ROOT'];
@@ -412,20 +401,15 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               (device['targetPlatform'] as String?)?.toLowerCase() ?? '';
           final id = (device['id'] as String?)?.toLowerCase() ?? '';
 
-          if (normalizedOs == 'android') {
-            return platform.startsWith('android');
-          } else if (normalizedOs == 'ios') {
-            return platform.startsWith('ios');
-          } else if (normalizedOs == 'macos') {
-            return platform == 'darwin' || id == 'macos';
-          } else if (normalizedOs == 'windows') {
-            return platform == 'windows' || id == 'windows';
-          } else if (normalizedOs == 'linux') {
-            return platform == 'linux' || id == 'linux';
-          } else if (normalizedOs == 'web') {
-            return platform == 'web-javascript' || id == 'chrome';
-          }
-          return false;
+          return switch (normalizedOs) {
+            'android' => platform.startsWith('android'),
+            'ios' => platform.startsWith('ios'),
+            'macos' => platform == 'darwin' || id == 'macos',
+            'windows' => platform == 'windows' || id == 'windows',
+            'linux' => platform == 'linux' || id == 'linux',
+            'web' => platform == 'web-javascript' || id == 'chrome',
+            _ => false,
+          };
         }
 
         final matchesList =
@@ -441,5 +425,50 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       }
     } catch (_) {}
     return null;
+  }
+}
+
+/// The visual screenshot comparison action.
+enum ScreenshotAction {
+  /// Capture baseline screenshot.
+  captureBaseline('capture_baseline'),
+
+  /// Compare visual screen with baseline screenshot.
+  compare('compare');
+
+  /// The raw String identifier of the action.
+  final String value;
+
+  const ScreenshotAction(this.value);
+
+  /// Resolves the action from a raw string.
+  /// Throws an [ArgumentError] if the action is unsupported.
+  static ScreenshotAction fromString(String val) {
+    return ScreenshotAction.values.firstWhere(
+      (e) => e.value.toLowerCase() == val.toLowerCase(),
+      orElse: () => throw ArgumentError('Unsupported action: $val'),
+    );
+  }
+}
+
+/// The format/method used to capture screenshots.
+enum ScreenshotType {
+  /// Native device screenshot.
+  device('device'),
+
+  /// Skia Picture representation via VM service.
+  skia('skia');
+
+  /// The raw String identifier of the screenshot type.
+  final String value;
+
+  const ScreenshotType(this.value);
+
+  /// Resolves the type from a raw string, defaulting to [device].
+  static ScreenshotType fromString(String? val) {
+    return ScreenshotType.values.firstWhere(
+      (e) => e.value.toLowerCase() == val?.toLowerCase(),
+      orElse: () => ScreenshotType.device,
+    );
   }
 }
