@@ -9,7 +9,7 @@ base mixin DeeplinkValidationSupport
   void registerDeeplinkTools() {
     final formatSchema = StringSchema(
       description:
-          'Response format: markdown, json, or dual (default: markdown).',
+          'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
