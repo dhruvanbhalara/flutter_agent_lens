@@ -4,17 +4,31 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:path/path.dart' as p;
+import '../enums/mcp_tool.dart';
 import 'vm_connection_support.dart';
 
+/// Support mixin providing tools for widget inspection, layout diagnostics, and rebuild tracking.
 base mixin WidgetInspectionSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Whether a rebuild tracking session is currently active.
   bool isTrackingRebuilds = false;
+
+  /// Timestamp in milliseconds when rebuild tracking was started.
   int? rebuildStartTime;
+
+  /// Cache mapping widget location IDs to rebuild counts.
   final Map<String, int> rebuildCounts = {};
+
+  /// Cache mapping widget location IDs to display names.
   final Map<String, String> rebuildIdToName = {};
+
+  /// Cache mapping widget location IDs to source file locations.
   final Map<String, String> rebuildIdToFile = {};
+
+  /// Subscription to the VM Service's extension event stream for rebuilt widgets.
   StreamSubscription? rebuildSub;
 
+  /// Registers all widget inspection and diagnostic tools.
   void registerWidgetTools() {
     final formatSchema = StringSchema(
       description:
@@ -23,7 +37,7 @@ base mixin WidgetInspectionSupport
 
     registerTool(
       Tool(
-        name: 'get_widget_rebuild_counts',
+        name: McpTool.getWidgetRebuildCounts.name,
         description:
             'Find widgets that rebuild frequently by tracking rebuild counts.',
         inputSchema: ObjectSchema(
@@ -33,12 +47,12 @@ base mixin WidgetInspectionSupport
           },
         ),
       ),
-      wrapToolCall('get_widget_rebuild_counts', _handleWidgetRebuildCounts),
+      wrapToolCall(McpTool.getWidgetRebuildCounts, _handleWidgetRebuildCounts),
     );
 
     registerTool(
       Tool(
-        name: 'inspect_widget',
+        name: McpTool.inspectWidget.name,
         description:
             'Retrieve layout constraints and details of a widget by its ID.',
         inputSchema: ObjectSchema(
@@ -55,12 +69,12 @@ base mixin WidgetInspectionSupport
           required: ['widgetId'],
         ),
       ),
-      wrapToolCall('inspect_widget', _handleInspectLayoutConstraints),
+      wrapToolCall(McpTool.inspectWidget, _handleInspectLayoutConstraints),
     );
 
     registerTool(
       Tool(
-        name: 'toggle_widget_selection',
+        name: McpTool.toggleWidgetSelection.name,
         description: 'Toggle the tap-to-select widget inspection overlay.',
         inputSchema: ObjectSchema(
           properties: {
@@ -71,12 +85,12 @@ base mixin WidgetInspectionSupport
           required: ['enabled'],
         ),
       ),
-      wrapToolCall('toggle_widget_selection', _handleToggleWidgetSelection),
+      wrapToolCall(McpTool.toggleWidgetSelection, _handleToggleWidgetSelection),
     );
 
     registerTool(
       Tool(
-        name: 'toggle_package_widgets',
+        name: McpTool.togglePackageWidgets.name,
         description:
             'Toggle whether package widgets are shown in the widget tree.',
         inputSchema: ObjectSchema(
@@ -88,19 +102,19 @@ base mixin WidgetInspectionSupport
           required: ['enabled'],
         ),
       ),
-      wrapToolCall('toggle_package_widgets', _handleTogglePackageWidgets),
+      wrapToolCall(McpTool.togglePackageWidgets, _handleTogglePackageWidgets),
     );
 
     registerTool(
       Tool(
-        name: 'toggle_debug_flag',
+        name: McpTool.toggleDebugFlag.name,
         description:
-            'Toggle standard Flutter debug paint/overlay flags (e.g. paintBorder, timeDilation).',
+            'Toggle standard Flutter debug paint/overlay flags (e.g. debugPaintSizeEnabled, debugPaintBaselinesEnabled).',
         inputSchema: ObjectSchema(
           properties: {
             'flag_name': StringSchema(
               description:
-                  'Flag name: debugPaintSizeEnabled, debugPaintBaselinesEnabled, debugPaintForceRequests, timeDilation.',
+                  'Flag name: debugPaintSizeEnabled, debugPaintBaselinesEnabled, repaintRainbow, invertOversizedImages, timeDilation.',
             ),
             'value': StringSchema(
               description:
@@ -110,12 +124,12 @@ base mixin WidgetInspectionSupport
           required: ['flag_name', 'value'],
         ),
       ),
-      wrapToolCall('toggle_debug_flag', _handleToggleDebugFlag),
+      wrapToolCall(McpTool.toggleDebugFlag, _handleToggleDebugFlag),
     );
 
     registerTool(
       Tool(
-        name: 'get_widget_tree',
+        name: McpTool.getWidgetTree.name,
         description:
             'Get the current widget tree of the running Flutter application.',
         inputSchema: ObjectSchema(
@@ -132,22 +146,22 @@ base mixin WidgetInspectionSupport
           },
         ),
       ),
-      wrapToolCall('get_widget_tree', _handleGetWidgetTree),
+      wrapToolCall(McpTool.getWidgetTree, _handleGetWidgetTree),
     );
 
     registerTool(
       Tool(
-        name: 'start_tracking_rebuilds',
+        name: McpTool.startTrackingRebuilds.name,
         description:
             'Start a stateful session to track widget rebuild frequencies.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('start_tracking_rebuilds', _handleStartTrackingRebuilds),
+      wrapToolCall(McpTool.startTrackingRebuilds, _handleStartTrackingRebuilds),
     );
 
     registerTool(
       Tool(
-        name: 'stop_tracking_rebuilds',
+        name: McpTool.stopTrackingRebuilds.name,
         description:
             'Stop the active widget rebuild tracking session and get the report.',
         inputSchema: ObjectSchema(
@@ -160,12 +174,12 @@ base mixin WidgetInspectionSupport
           },
         ),
       ),
-      wrapToolCall('stop_tracking_rebuilds', _handleStopTrackingRebuilds),
+      wrapToolCall(McpTool.stopTrackingRebuilds, _handleStopTrackingRebuilds),
     );
 
     registerTool(
       Tool(
-        name: 'trigger_scroll_gesture',
+        name: McpTool.triggerScrollGesture.name,
         description: 'Simulate user scrolling by animating a ScrollController.',
         inputSchema: ObjectSchema(
           properties: {
@@ -180,10 +194,11 @@ base mixin WidgetInspectionSupport
           required: ['scroll_controller_expression'],
         ),
       ),
-      wrapToolCall('trigger_scroll_gesture', _handleScrollGesture),
+      wrapToolCall(McpTool.triggerScrollGesture, _handleScrollGesture),
     );
   }
 
+  /// Clears active rebuild tracking listeners and cached state.
   void cleanupWidgetInspection() {
     rebuildSub?.cancel();
     rebuildSub = null;
@@ -193,6 +208,7 @@ base mixin WidgetInspectionSupport
     rebuildIdToFile.clear();
   }
 
+  /// Handles the get_widget_rebuild_counts tool request.
   Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
     stderr.writeln(
@@ -301,6 +317,7 @@ base mixin WidgetInspectionSupport
     );
   }
 
+  /// Handles the inspect_widget tool request.
   Future<CallToolResult> _handleInspectLayoutConstraints(
       CallToolRequest req) async {
     final widgetId =
@@ -393,6 +410,7 @@ base mixin WidgetInspectionSupport
     );
   }
 
+  /// Handles the toggle_widget_selection tool request.
   Future<CallToolResult> _handleToggleWidgetSelection(
       CallToolRequest req) async {
     final enabled = req.arguments!['enabled'] as bool;
@@ -412,6 +430,7 @@ base mixin WidgetInspectionSupport
     );
   }
 
+  /// Handles the toggle_package_widgets tool request.
   Future<CallToolResult> _handleTogglePackageWidgets(
       CallToolRequest req) async {
     final enabled = req.arguments!['enabled'] as bool;
@@ -539,15 +558,17 @@ base mixin WidgetInspectionSupport
     return directories;
   }
 
+  /// Handles the toggle_debug_flag tool request.
   Future<CallToolResult> _handleToggleDebugFlag(CallToolRequest req) async {
-    final flagName = req.arguments!['flag_name'] as String;
+    final flagNameInput = req.arguments!['flag_name'] as String;
     final value = req.arguments!['value'] as String;
+    final flag = FlutterDebugFlag.fromString(flagNameInput);
     stderr.writeln(
-        '[mcp:toggle_debug_flag] Setting flag_name=$flagName to value=$value');
+        '[mcp:toggle_debug_flag] Resolved flag $flagNameInput to ${flag.flagName}, setting to value=$value');
 
-    final extensionName = 'ext.flutter.$flagName';
+    final extensionName = 'ext.flutter.${flag.extensionSuffix}';
     final Map<String, dynamic> args;
-    if (flagName == 'timeDilation') {
+    if (flag == FlutterDebugFlag.timeDilation) {
       final doubleVal = double.tryParse(value) ?? 1.0;
       args = {'timeDilation': doubleVal.toString()};
     } else {
@@ -564,11 +585,12 @@ base mixin WidgetInspectionSupport
     return CallToolResult(
       content: [
         TextContent(
-            text: 'Successfully set debug flag `$flagName` to `$value`.')
+            text: 'Successfully set debug flag `${flag.flagName}` to `$value`.')
       ],
     );
   }
 
+  /// Handles the get_widget_tree tool request.
   Future<CallToolResult> _handleGetWidgetTree(CallToolRequest req) async {
     final maxDepth = (req.arguments?['maxDepth'] as num?)?.toInt() ?? 15;
     final projectOnly = (req.arguments?['projectOnly'] as bool?) ?? false;
@@ -730,33 +752,9 @@ base mixin WidgetInspectionSupport
         typeStr ??
         'Unknown';
 
-    String? sourceFile;
-    int? sourceLine;
-
-    if (isProjectWidget && creationLocation != null) {
-      final fileUri = creationLocation['file'] as String?;
-      if (fileUri != null) {
-        try {
-          final cleanFile = Uri.parse(fileUri).toFilePath();
-          final parts = p.split(cleanFile);
-          final libIndex = parts.indexOf('lib');
-          if (libIndex != -1) {
-            sourceFile = p.joinAll(parts.sublist(libIndex));
-          } else {
-            sourceFile = p.basename(cleanFile);
-          }
-        } catch (_) {
-          final cleanFile = fileUri.replaceFirst(RegExp(r'^file://'), '');
-          final parts = cleanFile.split('/lib/');
-          if (parts.length > 1) {
-            sourceFile = parts.last;
-          } else {
-            sourceFile = cleanFile.split('/').last;
-          }
-        }
-      }
-      sourceLine = creationLocation['line'] as int?;
-    }
+    final (sourceFile, sourceLine) = (isProjectWidget && creationLocation != null)
+        ? _extractSourceLocation(creationLocation)
+        : (null, null);
 
     final rawProperties = node['properties'] as List<dynamic>?;
     List<Map<String, String>>? properties;
@@ -826,6 +824,7 @@ base mixin WidgetInspectionSupport
     return buffer.toString();
   }
 
+  /// Handles the start_tracking_rebuilds tool request.
   Future<CallToolResult> _handleStartTrackingRebuilds(
       CallToolRequest req) async {
     if (isTrackingRebuilds) {
@@ -892,6 +891,7 @@ base mixin WidgetInspectionSupport
     );
   }
 
+  /// Handles the stop_tracking_rebuilds tool request.
   Future<CallToolResult> _handleStopTrackingRebuilds(
       CallToolRequest req) async {
     if (!isTrackingRebuilds) {
@@ -1079,6 +1079,7 @@ base mixin WidgetInspectionSupport
     });
   }
 
+  /// Handles the trigger_scroll_gesture tool request.
   Future<CallToolResult> _handleScrollGesture(CallToolRequest req) async {
     final controller = req.arguments!['scroll_controller_expression'] as String;
     final offset = (req.arguments?['offset'] as num?)?.toDouble() ?? 500.0;
@@ -1136,18 +1137,63 @@ base mixin WidgetInspectionSupport
       await vmService!.streamListen(EventStreams.kExtension);
     } catch (_) {}
   }
+
+  /// Extracts project source location (file path and line number) from a creation location map.
+  (String? file, int? line) _extractSourceLocation(Map<dynamic, dynamic> creationLocation) {
+    String? sourceFile;
+    final fileUri = creationLocation['file'] as String?;
+    if (fileUri != null) {
+      try {
+        final cleanFile = Uri.parse(fileUri).toFilePath();
+        final parts = p.split(cleanFile);
+        final libIndex = parts.indexOf('lib');
+        if (libIndex != -1) {
+          sourceFile = p.joinAll(parts.sublist(libIndex));
+        } else {
+          sourceFile = p.basename(cleanFile);
+        }
+      } catch (_) {
+        final cleanFile = fileUri.replaceFirst(RegExp(r'^file://'), '');
+        final parts = cleanFile.split('/lib/');
+        if (parts.length > 1) {
+          sourceFile = parts.last;
+        } else {
+          sourceFile = cleanFile.split('/').last;
+        }
+      }
+    }
+    final sourceLine = creationLocation['line'] as int?;
+    return (sourceFile, sourceLine);
+  }
 }
 
-class _FlatWidget {
+/// Represents a flattened, simplified widget node from the widget tree.
+final class _FlatWidget {
+  /// The class type/name of the widget.
   final String type;
+
+  /// The depth level of the widget in the tree (0-indexed).
   final int depth;
+
+  /// The unique value ID of the widget in the inspector service.
   final String? id;
+
+  /// Whether the widget was created directly by the user's project codebase.
   final bool isProjectWidget;
+
+  /// Total number of immediate children this widget has.
   final int childCount;
+
+  /// The relative source file path where this widget is instantiated.
   final String? sourceFile;
+
+  /// The 1-based source line number where this widget is instantiated.
   final int? sourceLine;
+
+  /// Key-value properties of the widget extracted from diagnostic details.
   final List<Map<String, String>>? properties;
 
+  /// Creates a new [_FlatWidget] data container.
   _FlatWidget({
     required this.type,
     required this.depth,
@@ -1159,6 +1205,7 @@ class _FlatWidget {
     this.properties,
   });
 
+  /// Serializes the widget data into a Map.
   Map<String, dynamic> toMap() {
     return {
       'type': type,
@@ -1170,5 +1217,41 @@ class _FlatWidget {
       if (sourceLine != null) 'sourceLine': sourceLine,
       if (properties != null) 'properties': properties,
     };
+  }
+}
+
+/// Flutter widget inspector/rendering debug flags.
+enum FlutterDebugFlag {
+  /// Toggle visual debugging layout sizes.
+  debugPaint('debugPaintSizeEnabled', 'debugPaint'),
+
+  /// Toggle visual baselines of text widgets.
+  debugPaintBaselines('debugPaintBaselinesEnabled', 'debugPaintBaselinesEnabled'),
+
+  /// Force repaint showing visual boundaries.
+  repaintRainbow('repaintRainbow', 'repaintRainbow'),
+
+  /// Invert oversized images to help performance optimization.
+  invertOversizedImages('invertOversizedImages', 'invertOversizedImages'),
+
+  /// Adjust animation time dilation (slow motion animations).
+  timeDilation('timeDilation', 'timeDilation');
+
+  /// The friendly flag name used in tool inputs.
+  final String flagName;
+
+  /// The actual suffix of the extension key under `ext.flutter.*`.
+  final String extensionSuffix;
+
+  const FlutterDebugFlag(this.flagName, this.extensionSuffix);
+
+  /// Resolves the debug flag from the tool parameter name input, defaulting to [debugPaint].
+  static FlutterDebugFlag fromString(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('paintbaselines')) return FlutterDebugFlag.debugPaintBaselines;
+    if (lower.contains('rainbow')) return FlutterDebugFlag.repaintRainbow;
+    if (lower.contains('oversized')) return FlutterDebugFlag.invertOversizedImages;
+    if (lower.contains('dilation')) return FlutterDebugFlag.timeDilation;
+    return FlutterDebugFlag.debugPaint;
   }
 }
