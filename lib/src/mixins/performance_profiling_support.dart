@@ -2,15 +2,23 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
+import '../enums/mcp_tool.dart';
 import 'vm_connection_support.dart';
 import 'dtd_support.dart';
 
+/// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
 base mixin PerformanceProfilingSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Whether the CPU timeline sampling or profiling is active.
   bool isProfiling = false;
+
+  /// Timestamp in milliseconds when the performance profiling session was started.
   int? profilingStartTime;
+
+  /// The target display refresh rate (FPS) of the connected device.
   double? targetFps;
 
+  /// Registers all performance profiling and trigger tools.
   void registerPerformanceTools() {
     final formatSchema = StringSchema(
       description: 'Response format: markdown or json (default: markdown).',
@@ -18,7 +26,7 @@ base mixin PerformanceProfilingSupport
 
     registerTool(
       Tool(
-        name: 'diagnose_jank',
+        name: McpTool.diagnoseJank.name,
         description: 'Check frame times to find rendering slowdowns (jank).',
         inputSchema: ObjectSchema(
           properties: {
@@ -27,12 +35,12 @@ base mixin PerformanceProfilingSupport
           },
         ),
       ),
-      wrapToolCall('diagnose_jank', _handleDiagnoseJank),
+      wrapToolCall(McpTool.diagnoseJank, _handleDiagnoseJank),
     );
 
     registerTool(
       Tool(
-        name: 'get_cpu_profile',
+        name: McpTool.getCpuProfile.name,
         description:
             'Sample CPU usage and find execution hotspots in Dart functions.',
         inputSchema: ObjectSchema(
@@ -42,22 +50,22 @@ base mixin PerformanceProfilingSupport
           },
         ),
       ),
-      wrapToolCall('get_cpu_profile', _handleGetCpuProfile),
+      wrapToolCall(McpTool.getCpuProfile, _handleGetCpuProfile),
     );
 
     registerTool(
       Tool(
-        name: 'start_profiling',
+        name: McpTool.startProfiling.name,
         description:
             'Start a stateful performance profiling session (CPU & Jank).',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('start_profiling', _handleStartProfiling),
+      wrapToolCall(McpTool.startProfiling, _handleStartProfiling),
     );
 
     registerTool(
       Tool(
-        name: 'stop_profiling',
+        name: McpTool.stopProfiling.name,
         description:
             'Stop the active performance profiling session and get the analysis report.',
         inputSchema: ObjectSchema(
@@ -66,34 +74,36 @@ base mixin PerformanceProfilingSupport
           },
         ),
       ),
-      wrapToolCall('stop_profiling', _handleStopProfiling),
+      wrapToolCall(McpTool.stopProfiling, _handleStopProfiling),
     );
 
     registerTool(
       Tool(
-        name: 'hot_reload',
+        name: McpTool.hotReload.name,
         description: 'Trigger a hot reload.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('hot_reload', handleHotReload),
+      wrapToolCall(McpTool.hotReload, handleHotReload),
     );
 
     registerTool(
       Tool(
-        name: 'hot_restart',
+        name: McpTool.hotRestart.name,
         description: 'Trigger a hot restart of the application.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('hot_restart', handleHotRestart),
+      wrapToolCall(McpTool.hotRestart, handleHotRestart),
     );
   }
 
+  /// Clears performance profiling state and resets targets.
   void cleanupPerformanceProfiling() {
     isProfiling = false;
     profilingStartTime = null;
     targetFps = null;
   }
 
+  /// Handles the diagnose_jank tool request.
   Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
     stderr.writeln(
@@ -164,6 +174,7 @@ base mixin PerformanceProfilingSupport
     );
   }
 
+  /// Handles the hot_reload tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotReload(CallToolRequest req) async {
     final self = this;
     bool dtdSuccess = false;
@@ -216,6 +227,7 @@ base mixin PerformanceProfilingSupport
     ]);
   }
 
+  /// Handles the hot_restart tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotRestart(CallToolRequest req) async {
     final self = this;
     bool dtdSuccess = false;
@@ -290,6 +302,7 @@ base mixin PerformanceProfilingSupport
     ]);
   }
 
+  /// Handles the get_cpu_profile tool request.
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
     stderr.writeln(
@@ -363,6 +376,7 @@ base mixin PerformanceProfilingSupport
     );
   }
 
+  /// Handles the start_profiling tool request.
   Future<CallToolResult> _handleStartProfiling(CallToolRequest req) async {
     if (isProfiling) {
       return CallToolResult(
@@ -405,6 +419,7 @@ base mixin PerformanceProfilingSupport
     );
   }
 
+  /// Handles the stop_profiling tool request.
   Future<CallToolResult> _handleStopProfiling(CallToolRequest req) async {
     if (!isProfiling) {
       return CallToolResult(
@@ -492,14 +507,12 @@ base mixin PerformanceProfilingSupport
       final maxDur = durations.reduce((a, b) => a > b ? a : b);
       final avgDur = totalDur / durations.length;
 
-      String severity = 'low';
-      if (maxDur > 100.0) {
-        severity = 'critical';
-      } else if (maxDur > 32.0) {
-        severity = 'high';
-      } else if (maxDur > 16.0) {
-        severity = 'medium';
-      }
+      final severity = switch (maxDur) {
+        > 100.0 => 'critical',
+        > 32.0 => 'high',
+        > 16.0 => 'medium',
+        _ => 'low',
+      };
 
       cpuHotspots.add({
         'name': name,
