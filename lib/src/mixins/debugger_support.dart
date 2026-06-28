@@ -2,9 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
+import '../enums/mcp_tool.dart';
 import 'vm_connection_support.dart';
 
+/// Support mixin providing debugger capabilities including call stack retrieval,
+/// breakpoint management, pause configuration, and expression evaluation.
 base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Registers all debugger-related tools.
   void registerDebuggerTools() {
     final formatSchema = StringSchema(
       description:
@@ -13,7 +17,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
     registerTool(
       Tool(
-        name: 'get_call_stack',
+        name: McpTool.getCallStack.name,
         description:
             'Fetch the active call stack frames for the running application (when paused).',
         inputSchema: ObjectSchema(
@@ -23,12 +27,12 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           },
         ),
       ),
-      wrapToolCall('get_call_stack', _handleGetCallStack),
+      wrapToolCall(McpTool.getCallStack, _handleGetCallStack),
     );
 
     registerTool(
       Tool(
-        name: 'set_exception_pause_mode',
+        name: McpTool.setExceptionPauseMode.name,
         description: 'Set exception pause mode (None, All, Unhandled).',
         inputSchema: ObjectSchema(
           properties: {
@@ -39,12 +43,12 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['mode'],
         ),
       ),
-      wrapToolCall('set_exception_pause_mode', _handleSetExceptionPauseMode),
+      wrapToolCall(McpTool.setExceptionPauseMode, _handleSetExceptionPauseMode),
     );
 
     registerTool(
       Tool(
-        name: 'add_breakpoint',
+        name: McpTool.addBreakpoint.name,
         description: 'Install a breakpoint at a specific line in a file.',
         inputSchema: ObjectSchema(
           properties: {
@@ -63,12 +67,12 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['file_path', 'line'],
         ),
       ),
-      wrapToolCall('add_breakpoint', _handleAddBreakpoint),
+      wrapToolCall(McpTool.addBreakpoint, _handleAddBreakpoint),
     );
 
     registerTool(
       Tool(
-        name: 'remove_breakpoint',
+        name: McpTool.removeBreakpoint.name,
         description: 'Remove an active breakpoint by its ID.',
         inputSchema: ObjectSchema(
           properties: {
@@ -79,12 +83,12 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['breakpoint_id'],
         ),
       ),
-      wrapToolCall('remove_breakpoint', _handleRemoveBreakpoint),
+      wrapToolCall(McpTool.removeBreakpoint, _handleRemoveBreakpoint),
     );
 
     registerTool(
       Tool(
-        name: 'evaluate_expression',
+        name: McpTool.evaluateExpression.name,
         description:
             'Evaluate a Dart expression in the context of the running app.',
         inputSchema: ObjectSchema(
@@ -100,10 +104,11 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['expression'],
         ),
       ),
-      wrapToolCall('evaluate_expression', _handleEvalExpression),
+      wrapToolCall(McpTool.evaluateExpression, _handleEvalExpression),
     );
   }
 
+  /// Handles the get_call_stack tool request.
   Future<CallToolResult> _handleGetCallStack(CallToolRequest req) async {
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 20;
     stderr.writeln('[mcp:get_call_stack] Fetching stack frames (limit=$limit)');
@@ -140,31 +145,34 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
                   'script': f.location?.script?.uri,
                   'line': f.location?.line,
                   'column': f.location?.column,
-                })
+                 })
             .toList(),
       },
       format: req.arguments?['format'] as String?,
     );
   }
 
+  /// Handles the set_exception_pause_mode tool request.
   Future<CallToolResult> _handleSetExceptionPauseMode(
       CallToolRequest req) async {
-    final mode = req.arguments!['mode'] as String;
-    stderr.writeln('[mcp:set_exception_pause_mode] Setting mode to: $mode');
+    final modeStr = req.arguments!['mode'] as String;
+    final mode = ExceptionPauseMode.fromString(modeStr);
+    stderr.writeln('[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
 
     try {
       await vmService!
-          .setIsolatePauseMode(isolateId!, exceptionPauseMode: mode);
+          .setIsolatePauseMode(isolateId!, exceptionPauseMode: mode.value);
     } catch (_) {
       // Fallback for older VM Service versions
       // ignore: deprecated_member_use
-      await vmService!.setExceptionPauseMode(isolateId!, mode);
+      await vmService!.setExceptionPauseMode(isolateId!, mode.value);
     }
     return CallToolResult(content: [
-      TextContent(text: 'Successfully set exception pause mode to: $mode')
+      TextContent(text: 'Successfully set exception pause mode to: ${mode.value}')
     ]);
   }
 
+  /// Handles the add_breakpoint tool request.
   Future<CallToolResult> _handleAddBreakpoint(CallToolRequest req) async {
     final filePath = req.arguments!['file_path'] as String;
     final line = (req.arguments!['line'] as num).toInt();
@@ -201,6 +209,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     );
   }
 
+  /// Handles the remove_breakpoint tool request.
   Future<CallToolResult> _handleRemoveBreakpoint(CallToolRequest req) async {
     final breakpointId = req.arguments!['breakpoint_id'] as String;
     stderr
@@ -212,6 +221,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     ]);
   }
 
+  /// Handles the evaluate_expression tool request.
   Future<CallToolResult> _handleEvalExpression(CallToolRequest req) async {
     final expression = req.arguments!['expression'] as String;
     final frameIndex = (req.arguments?['frame_index'] as num?)?.toInt();
@@ -244,6 +254,31 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
                 '- Value: $valStr\n'
                 '- Class: $classStr')
       ],
+    );
+  }
+}
+
+/// Modes for pausing the execution on exceptions.
+enum ExceptionPauseMode {
+  /// Do not pause on any exceptions.
+  none('None'),
+
+  /// Pause on all exceptions.
+  all('All'),
+
+  /// Pause only on unhandled exceptions.
+  unhandled('Unhandled');
+
+  /// The raw String identifier used by the Dart VM Service.
+  final String value;
+
+  const ExceptionPauseMode(this.value);
+
+  /// Resolves the enum from a raw string input, case-insensitively, defaulting to [none] if unresolved.
+  static ExceptionPauseMode fromString(String modeStr) {
+    return ExceptionPauseMode.values.firstWhere(
+      (e) => e.value.toLowerCase() == modeStr.toLowerCase(),
+      orElse: () => ExceptionPauseMode.none,
     );
   }
 }
