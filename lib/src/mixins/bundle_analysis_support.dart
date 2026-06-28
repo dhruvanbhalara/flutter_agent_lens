@@ -3,10 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:path/path.dart' as p;
+import '../enums/mcp_tool.dart';
 import 'vm_connection_support.dart';
 
+/// Support mixin providing tools for analyzing application bundle sizes.
 base mixin BundleAnalysisSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Registers all application bundle size analysis tools.
   void registerBundleAnalysisTools() {
     final formatSchema = StringSchema(
       description:
@@ -15,7 +18,7 @@ base mixin BundleAnalysisSupport
 
     registerTool(
       Tool(
-        name: 'analyze_bundle_size',
+        name: McpTool.analyzeBundleSize.name,
         description:
             'Analyze build size details from size mapping files in the build/ directory.',
         inputSchema: ObjectSchema(
@@ -32,11 +35,12 @@ base mixin BundleAnalysisSupport
           },
         ),
       ),
-      wrapToolCall('analyze_bundle_size', _handleAnalyzeBundleSize,
+      wrapToolCall(McpTool.analyzeBundleSize, _handleAnalyzeBundleSize,
           requiresConnection: false),
     );
   }
 
+  /// Handles the analyze_bundle_size tool request.
   Future<CallToolResult> _handleAnalyzeBundleSize(CallToolRequest req) async {
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
