@@ -47,7 +47,7 @@ base mixin WidgetInspectionSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.getWidgetRebuildCounts, _handleWidgetRebuildCounts),
+      _handleWidgetRebuildCounts,
     );
 
     registerTool(
@@ -69,7 +69,7 @@ base mixin WidgetInspectionSupport
           required: ['widgetId'],
         ),
       ),
-      wrapToolCall(McpTool.inspectWidget, _handleInspectLayoutConstraints),
+      _handleInspectLayoutConstraints,
     );
 
     registerTool(
@@ -85,7 +85,7 @@ base mixin WidgetInspectionSupport
           required: ['enabled'],
         ),
       ),
-      wrapToolCall(McpTool.toggleWidgetSelection, _handleToggleWidgetSelection),
+      _handleToggleWidgetSelection,
     );
 
     registerTool(
@@ -102,7 +102,7 @@ base mixin WidgetInspectionSupport
           required: ['enabled'],
         ),
       ),
-      wrapToolCall(McpTool.togglePackageWidgets, _handleTogglePackageWidgets),
+      _handleTogglePackageWidgets,
     );
 
     registerTool(
@@ -124,7 +124,7 @@ base mixin WidgetInspectionSupport
           required: ['flag_name', 'value'],
         ),
       ),
-      wrapToolCall(McpTool.toggleDebugFlag, _handleToggleDebugFlag),
+      _handleToggleDebugFlag,
     );
 
     registerTool(
@@ -146,7 +146,7 @@ base mixin WidgetInspectionSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.getWidgetTree, _handleGetWidgetTree),
+      _handleGetWidgetTree,
     );
 
     registerTool(
@@ -156,7 +156,7 @@ base mixin WidgetInspectionSupport
             'Start a stateful session to track widget rebuild frequencies.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall(McpTool.startTrackingRebuilds, _handleStartTrackingRebuilds),
+      _handleStartTrackingRebuilds,
     );
 
     registerTool(
@@ -174,7 +174,7 @@ base mixin WidgetInspectionSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.stopTrackingRebuilds, _handleStopTrackingRebuilds),
+      _handleStopTrackingRebuilds,
     );
 
     registerTool(
@@ -194,7 +194,7 @@ base mixin WidgetInspectionSupport
           required: ['scroll_controller_expression'],
         ),
       ),
-      wrapToolCall(McpTool.triggerScrollGesture, _handleScrollGesture),
+      _handleScrollGesture,
     );
   }
 

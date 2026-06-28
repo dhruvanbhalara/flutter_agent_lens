@@ -47,7 +47,7 @@ base mixin ConnectionSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.connect, _handleConnect, requiresConnection: false),
+      _handleConnect,
     );
 
     registerTool(
@@ -56,7 +56,7 @@ base mixin ConnectionSupport
         description: 'Disconnect from the currently connected Flutter app.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall(McpTool.disconnect, _handleDisconnect),
+      _handleDisconnect,
     );
 
     registerTool(
@@ -74,7 +74,7 @@ base mixin ConnectionSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.getAppInfo, _handleGetAppInfo),
+      _handleGetAppInfo,
     );
 
     registerTool(
@@ -95,8 +95,7 @@ base mixin ConnectionSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.discoverApps, _handleAutodiscover,
-          requiresConnection: false),
+      _handleAutodiscover,
     );
   }
 

@@ -40,8 +40,7 @@ base mixin DeeplinkValidationSupport
           required: ['platform'],
         ),
       ),
-      wrapToolCall(McpTool.validateDeepLinks, _handleValidateDeepLinks,
-          requiresConnection: false),
+      _handleValidateDeepLinks,
     );
   }
 

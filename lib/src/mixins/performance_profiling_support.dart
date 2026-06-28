@@ -36,7 +36,7 @@ base mixin PerformanceProfilingSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.diagnoseJank, _handleDiagnoseJank),
+      _handleDiagnoseJank,
     );
 
     registerTool(
@@ -51,7 +51,7 @@ base mixin PerformanceProfilingSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.getCpuProfile, _handleGetCpuProfile),
+      _handleGetCpuProfile,
     );
 
     registerTool(
@@ -61,7 +61,7 @@ base mixin PerformanceProfilingSupport
             'Start a stateful performance profiling session (CPU & Jank).',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall(McpTool.startProfiling, _handleStartProfiling),
+      _handleStartProfiling,
     );
 
     registerTool(
@@ -75,7 +75,7 @@ base mixin PerformanceProfilingSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.stopProfiling, _handleStopProfiling),
+      _handleStopProfiling,
     );
 
     registerTool(
@@ -84,7 +84,7 @@ base mixin PerformanceProfilingSupport
         description: 'Trigger a hot reload.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall(McpTool.hotReload, handleHotReload),
+      handleHotReload,
     );
 
     registerTool(
@@ -93,7 +93,7 @@ base mixin PerformanceProfilingSupport
         description: 'Trigger a hot restart of the application.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall(McpTool.hotRestart, handleHotRestart),
+      handleHotRestart,
     );
   }
 

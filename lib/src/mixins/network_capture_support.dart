@@ -46,7 +46,7 @@ base mixin NetworkCaptureSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.getNetworkProfile, _handleGetNetworkProfile),
+      _handleGetNetworkProfile,
     );
 
     registerTool(
@@ -56,7 +56,7 @@ base mixin NetworkCaptureSupport
             'Start a stateful session to capture HTTP network traffic.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall(McpTool.startNetworkCapture, _handleStartNetworkCapture),
+      _handleStartNetworkCapture,
     );
 
     registerTool(
@@ -78,7 +78,7 @@ base mixin NetworkCaptureSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.stopNetworkCapture, _handleStopNetworkCapture),
+      _handleStopNetworkCapture,
     );
   }
 

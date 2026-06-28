@@ -48,8 +48,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['baseline_name', 'action'],
         ),
       ),
-      wrapToolCall(
-          McpTool.compareLayoutScreenshots, _handleCompareLayoutScreenshots),
+      _handleCompareLayoutScreenshots,
     );
 
     registerTool(
@@ -74,7 +73,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           },
         ),
       ),
-      wrapToolCall(McpTool.takeScreenshot, _handleTakeScreenshot),
+      _handleTakeScreenshot,
     );
   }
 

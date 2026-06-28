@@ -45,7 +45,7 @@ base mixin ConsoleLoggingSupport
           },
         ),
       ),
-      wrapToolCall(McpTool.fetchConsoleLogs, _handleFetchConsoleLogs),
+      _handleFetchConsoleLogs,
     );
   }
 

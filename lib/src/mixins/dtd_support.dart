@@ -37,7 +37,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['uri'],
         ),
       ),
-      wrapToolCall(McpTool.connectDtd, _handleConnectDtd, requiresConnection: false),
+      _handleConnectDtd,
     );
 
     registerTool(
@@ -51,8 +51,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           },
         ),
       ),
-      wrapToolCall(McpTool.getActiveLocation, _handleGetActiveLocation,
-          requiresConnection: false),
+      _handleGetActiveLocation,
     );
   }
 
