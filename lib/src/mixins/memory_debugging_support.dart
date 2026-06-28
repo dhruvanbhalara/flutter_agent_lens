@@ -2,12 +2,17 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
+import '../enums/mcp_tool.dart';
 import 'vm_connection_support.dart';
 
+/// Support mixin providing tools for analyzing heap usage, tracking class instances,
+/// and capturing and comparing memory snapshots.
 base mixin MemoryDebuggingSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Named cache of taken memory snapshots.
   final Map<String, MemorySnapshot> memorySnapshots = {};
 
+  /// Registers all memory debugging and profiling tools.
   void registerMemoryTools() {
     final formatSchema = StringSchema(
       description:
@@ -16,7 +21,7 @@ base mixin MemoryDebuggingSupport
 
     registerTool(
       Tool(
-        name: 'get_memory_snapshot',
+        name: McpTool.getMemorySnapshot.name,
         description:
             'Get a general snapshot overview of application and framework class allocations.',
         inputSchema: ObjectSchema(
@@ -33,12 +38,12 @@ base mixin MemoryDebuggingSupport
           },
         ),
       ),
-      wrapToolCall('get_memory_snapshot', _handleGetMemorySnapshot),
+      wrapToolCall(McpTool.getMemorySnapshot, _handleGetMemorySnapshot),
     );
 
     registerTool(
       Tool(
-        name: 'save_snapshot',
+        name: McpTool.saveSnapshot.name,
         description: 'Save a named memory snapshot for later comparison.',
         inputSchema: ObjectSchema(
           properties: {
@@ -54,12 +59,12 @@ base mixin MemoryDebuggingSupport
           required: ['name'],
         ),
       ),
-      wrapToolCall('save_snapshot', _handleSaveSnapshot),
+      wrapToolCall(McpTool.saveSnapshot, _handleSaveSnapshot),
     );
 
     registerTool(
       Tool(
-        name: 'compare_snapshots',
+        name: McpTool.compareSnapshots.name,
         description:
             'Compare two previously saved memory snapshots to see deltas.',
         inputSchema: ObjectSchema(
@@ -74,23 +79,23 @@ base mixin MemoryDebuggingSupport
           required: ['before', 'after'],
         ),
       ),
-      wrapToolCall('compare_snapshots', _handleCompareSnapshots),
+      wrapToolCall(McpTool.compareSnapshots, _handleCompareSnapshots),
     );
 
     registerTool(
       Tool(
-        name: 'list_snapshots',
+        name: McpTool.listSnapshots.name,
         description:
             'List all saved memory snapshots available for comparison.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('list_snapshots', _handleListSnapshots,
+      wrapToolCall(McpTool.listSnapshots, _handleListSnapshots,
           requiresConnection: false),
     );
 
     registerTool(
       Tool(
-        name: 'audit_class_memory_leak',
+        name: McpTool.auditClassMemoryLeak.name,
         description: 'Check if class instances are leaking in memory.',
         inputSchema: ObjectSchema(
           properties: {
@@ -103,12 +108,12 @@ base mixin MemoryDebuggingSupport
           required: ['class_name'],
         ),
       ),
-      wrapToolCall('audit_class_memory_leak', _handleAuditClassMemoryLeak),
+      wrapToolCall(McpTool.auditClassMemoryLeak, _handleAuditClassMemoryLeak),
     );
 
     registerTool(
       Tool(
-        name: 'diff_heap_allocations',
+        name: McpTool.diffHeapAllocations.name,
         description:
             'Check delta allocations before and after an N-second window.',
         inputSchema: ObjectSchema(
@@ -124,12 +129,12 @@ base mixin MemoryDebuggingSupport
           },
         ),
       ),
-      wrapToolCall('diff_heap_allocations', _handleDiffHeapAllocations),
+      wrapToolCall(McpTool.diffHeapAllocations, _handleDiffHeapAllocations),
     );
 
     registerTool(
       Tool(
-        name: 'get_object_referrers',
+        name: McpTool.getObjectReferrers.name,
         description:
             'Trace the retaining path keeping an object alive in memory.',
         inputSchema: ObjectSchema(
@@ -147,14 +152,16 @@ base mixin MemoryDebuggingSupport
           required: ['object_id'],
         ),
       ),
-      wrapToolCall('get_object_referrers', _handleGetObjectReferrers),
+      wrapToolCall(McpTool.getObjectReferrers, _handleGetObjectReferrers),
     );
   }
 
+  /// Disposes and clears all saved memory snapshots.
   void cleanupMemoryDebugging() {
     memorySnapshots.clear();
   }
 
+  /// Handles the audit_class_memory_leak tool request.
   Future<CallToolResult> _handleAuditClassMemoryLeak(
       CallToolRequest req) async {
     final className = req.arguments!['class_name'] as String;
@@ -234,6 +241,7 @@ base mixin MemoryDebuggingSupport
     );
   }
 
+  /// Handles the diff_heap_allocations tool request.
   Future<CallToolResult> _handleDiffHeapAllocations(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
     final expression = req.arguments?['expression'] as String?;
@@ -314,6 +322,7 @@ base mixin MemoryDebuggingSupport
     );
   }
 
+  /// Handles the get_object_referrers tool request.
   Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
     final objectId = req.arguments!['object_id'] as String;
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 15;
@@ -361,6 +370,7 @@ base mixin MemoryDebuggingSupport
     );
   }
 
+  /// Handles the save_snapshot tool request.
   Future<CallToolResult> _handleSaveSnapshot(CallToolRequest req) async {
     final name = req.arguments!['name'] as String;
     final forceGc = (req.arguments?['forceGC'] as bool?) ?? true;
@@ -383,6 +393,7 @@ base mixin MemoryDebuggingSupport
     );
   }
 
+  /// Handles the compare_snapshots tool request.
   Future<CallToolResult> _handleCompareSnapshots(CallToolRequest req) async {
     final before = req.arguments!['before'] as String;
     final after = req.arguments!['after'] as String;
@@ -492,15 +503,12 @@ base mixin MemoryDebuggingSupport
 
     md.writeln();
     md.writeln('VERDICT');
-    if (heapDiff < -1000000) {
-      md.writeln(
-          'Memory improved by ${formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}).');
-    } else if (heapDiff > 1000000) {
-      md.writeln(
-          'Warning: Memory increased by ${formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.');
-    } else {
-      md.writeln('No significant change in memory usage between snapshots.');
-    }
+    final verdict = switch (heapDiff) {
+      < -1000000 => 'Memory improved by ${formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}).',
+      > 1000000 => 'Warning: Memory increased by ${formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.',
+      _ => 'No significant change in memory usage between snapshots.',
+    };
+    md.writeln(verdict);
 
     return serializeDualFormat(
       title: 'Snapshot Comparison: "$before" -> "$after"',
@@ -518,6 +526,7 @@ base mixin MemoryDebuggingSupport
     );
   }
 
+  /// Handles the list_snapshots tool request.
   Future<CallToolResult> _handleListSnapshots(CallToolRequest req) async {
     if (memorySnapshots.isEmpty) {
       return CallToolResult(
@@ -546,6 +555,7 @@ base mixin MemoryDebuggingSupport
     );
   }
 
+  /// Helper to capture a new [MemorySnapshot] from the VM.
   Future<MemorySnapshot> _takeSnapshot(String name, bool gc) async {
     final profile = await vmService!.getAllocationProfile(isolateId!, gc: gc);
     final heapUsage = profile.memoryUsage?.heapUsage ?? 0;
@@ -579,6 +589,7 @@ base mixin MemoryDebuggingSupport
     );
   }
 
+  /// Formats the percentage difference between before and after values.
   String _pctChange(int before, int after) {
     if (before == 0) return after > 0 ? '+inf%' : '0%';
     final pct = ((after - before) / before) * 100;
@@ -586,6 +597,7 @@ base mixin MemoryDebuggingSupport
     return '$sign${pct.toStringAsFixed(1)}%';
   }
 
+  /// Handles the get_memory_snapshot tool request.
   Future<CallToolResult> _handleGetMemorySnapshot(CallToolRequest req) async {
     final forceGc = (req.arguments?['forceGC'] as bool?) ?? false;
     final topN = (req.arguments?['topN'] as num?)?.toInt() ?? 20;
@@ -809,6 +821,7 @@ base mixin MemoryDebuggingSupport
     );
   }
 
+  /// Helper to sort class heap stat deltas by instance delta and byte delta.
   void _sortDeltas(List<Map<String, dynamic>> deltas, String instDeltaKey,
       String bytesDeltaKey) {
     deltas.sort((a, b) {
@@ -822,6 +835,7 @@ base mixin MemoryDebuggingSupport
     });
   }
 
+  /// Formats allocation difference deltas as a Markdown table.
   String _formatAllocationDiffTable(List<Map<String, dynamic>> deltas,
       {int limit = 20}) {
     if (deltas.isEmpty) {
@@ -852,17 +866,25 @@ base mixin MemoryDebuggingSupport
   }
 }
 
-class ClassAllocation {
+/// Represents the allocations and byte counts of a single Dart/Flutter class.
+final class ClassAllocation {
+  /// The fully-qualified name of the class.
   final String name;
+
+  /// Total number of bytes allocated to instances of this class.
   final int bytes;
+
+  /// Total number of active instances of this class on the heap.
   final int instances;
 
+  /// Creates a new [ClassAllocation] data container.
   ClassAllocation({
     required this.name,
     required this.bytes,
     required this.instances,
   });
 
+  /// Serializes class allocation details into a key-value Map.
   Map<String, dynamic> toMap() {
     return {
       'name': name,
@@ -872,14 +894,27 @@ class ClassAllocation {
   }
 }
 
-class MemorySnapshot {
+/// Represents a captured heap allocation state at a point in time.
+final class MemorySnapshot {
+  /// Descriptive name of the snapshot.
   final String name;
+
+  /// Millisecond timestamp when the snapshot was taken.
   final int timestamp;
+
+  /// Total active heap memory usage in bytes.
   final int heapUsage;
+
+  /// Total capacity of the heap in bytes.
   final int heapCapacity;
+
+  /// Total memory usage external to the Dart heap in bytes.
   final int externalUsage;
+
+  /// Allocation stats for the top classes by byte size.
   final List<ClassAllocation> topClasses;
 
+  /// Creates a new [MemorySnapshot] container.
   MemorySnapshot({
     required this.name,
     required this.timestamp,
@@ -889,6 +924,7 @@ class MemorySnapshot {
     required this.topClasses,
   });
 
+  /// Serializes the memory snapshot details into a nested Map.
   Map<String, dynamic> toMap() {
     return {
       'name': name,
