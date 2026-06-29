@@ -12,8 +12,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers screenshot-related tools.
   void registerScreenshotTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -129,7 +128,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           screenshotType: screenshotType.value,
           deviceId: deviceId,
         );
-        final notice = (screenshotType == ScreenshotType.skia && actualType == 'device')
+        final notice = (screenshotType == ScreenshotType.skia &&
+                actualType == 'device')
             ? '\n(Note: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported)'
             : '';
         return CallToolResult(
@@ -305,7 +305,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       screenshotType: screenshotType.value,
       deviceId: deviceId,
     );
-    final notice = (screenshotType == ScreenshotType.skia && actualType == 'device')
+    final notice = (screenshotType == ScreenshotType.skia &&
+            actualType == 'device')
         ? '\n(Note: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported)'
         : '';
     return CallToolResult(
@@ -334,7 +335,10 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             effectiveDeviceId = await _detectDeviceForOs(os);
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:screenshot] Error detecting VM OS or auto-detecting device: $e');
+      }
 
       final flutterRoot = Platform.environment['FLUTTER_ROOT'];
       final executable = flutterRoot != null
@@ -422,7 +426,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           return emulator['id'] as String?;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:screenshot] Error listing/matching devices: $e');
+    }
     return null;
   }
 }
