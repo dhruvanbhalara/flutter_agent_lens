@@ -232,6 +232,11 @@ base mixin ConnectionSupport
               orElse: () => vm.isolates!.first)
           .name;
 
+      final selectedIsolateName = vm.isolates!
+          .firstWhere((i) => i.id == isolateId,
+              orElse: () => vm.isolates!.first)
+          .name;
+
       return CallToolResult(
         content: [
           TextContent(
