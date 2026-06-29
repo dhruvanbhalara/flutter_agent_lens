@@ -22,9 +22,6 @@ base mixin ConnectionSupport
         RootsTrackingSupport {
   /// Registers all connection-related tools in the MCP server.
   void registerConnectionTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
 
     registerTool(
       Tool(
