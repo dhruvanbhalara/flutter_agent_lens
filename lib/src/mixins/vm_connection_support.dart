@@ -71,17 +71,6 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     );
   }
 
-  /// List of tools that do not require an active application VM connection.
-  static final Set<McpTool> _offlineTools = {
-    McpTool.connect,
-    McpTool.discoverApps,
-    McpTool.connectDtd,
-    McpTool.getActiveLocation,
-    McpTool.validateDeepLinks,
-    McpTool.listSnapshots,
-    McpTool.analyzeBundleSize,
-  };
-
   @override
   void registerTool(
     Tool tool,
@@ -93,7 +82,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       orElse: () => throw ArgumentError('Unknown tool name: ${tool.name}'),
     );
 
-    final requiresConnection = !_offlineTools.contains(mcpTool);
+    final requiresConnection = mcpTool.requiresConnection;
 
     super.registerTool(
       tool,
