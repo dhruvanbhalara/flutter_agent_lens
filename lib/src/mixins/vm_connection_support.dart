@@ -44,6 +44,11 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     );
   }
 
+  /// Returns a schema definition for tools requiring a format parameter.
+  StringSchema get formatSchema => StringSchema(
+        description: 'Response format: markdown or json (default: markdown).',
+      );
+
   /// Returns a schema definition for tools requiring a limit parameter.
   NumberSchema limitSchema({double defaultValue = 20.0, double max = 200.0}) {
     return NumberSchema(
