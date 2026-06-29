@@ -11,7 +11,6 @@ base mixin BundleAnalysisSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers all application bundle size analysis tools.
   void registerBundleAnalysisTools() {
-
     registerTool(
       Tool(
         name: McpTool.analyzeBundleSize.name,
@@ -184,16 +183,14 @@ base mixin BundleAnalysisSupport
     final md =
         StringBuffer('Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
     md.writeln(
-        '- Total Calculated Size: ${(totalSizeBytes / 1024 / 1024).toStringAsFixed(2)} MB ($totalSizeBytes Bytes)');
+        '- Total Calculated Size: ${formatBytes(totalSizeBytes)} ($totalSizeBytes Bytes)');
     md.writeln();
     md.writeln('| Component | Size | Percentage |');
     md.writeln('| :--- | :--- | :--- |');
 
     for (final item in leafComponents.take(25)) {
       final bytes = item['size_bytes'] as int;
-      final sizeStr = bytes > 1024 * 1024
-          ? '${(bytes / 1024 / 1024).toStringAsFixed(2)} MB'
-          : '${(bytes / 1024).toStringAsFixed(2)} KB';
+      final sizeStr = formatBytes(bytes);
       final pct = totalSizeBytes > 0 ? (bytes / totalSizeBytes) * 100 : 0.0;
       md.writeln(
           '| `${item['name']}` | $sizeStr | ${pct.toStringAsFixed(2)}% |');
