@@ -27,8 +27,7 @@ base mixin NetworkCaptureSupport
   /// Registers all network capture and diagnostic tools.
   void registerNetworkTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -210,7 +209,9 @@ base mixin NetworkCaptureSupport
 
     try {
       await vmService!.streamListen(EventStreams.kExtension);
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:network] Error subscribing to extension stream: $e');
+    }
 
     try {
       await vmService!.callServiceExtension(
@@ -218,7 +219,9 @@ base mixin NetworkCaptureSupport
         isolateId: isolateId!,
         args: {'enabled': 'true'},
       );
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:network] Error enabling HTTP timeline logging: $e');
+    }
 
     networkExtensionSub = vmService!.onExtensionEvent.listen((Event event) {
       final kind = event.extensionKind;
@@ -297,7 +300,9 @@ base mixin NetworkCaptureSupport
         isolateId: isolateId!,
         args: {'enabled': 'false'},
       );
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:network] Error disabling HTTP timeline logging: $e');
+    }
 
     final durationMs =
         DateTime.now().millisecondsSinceEpoch - networkCaptureStartTime!;
