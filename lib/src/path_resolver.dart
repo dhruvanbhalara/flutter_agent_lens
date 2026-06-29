@@ -67,9 +67,20 @@ final class PathResolver {
               directory.listSync(recursive: true, followLinks: false);
           for (final entity in entities) {
             if (entity is File) {
-              final name = p.basename(entity.path);
+              final filePath = entity.path;
+              final separator = p.separator;
+              if (filePath.contains('$separator.git$separator') ||
+                  filePath.contains('$separator.dart_tool$separator') ||
+                  filePath.contains('$separator.github$separator') ||
+                  filePath.contains('$separator.idea$separator') ||
+                  filePath.contains('$separator.vscode$separator') ||
+                  filePath.contains('${separator}build$separator') ||
+                  filePath.contains('${separator}node_modules$separator')) {
+                continue;
+              }
+              final name = p.basename(filePath);
               _allWorkspaceFiles!
-                  .putIfAbsent(name, () => p.canonicalize(entity.path));
+                  .putIfAbsent(name, () => p.canonicalize(filePath));
             }
           }
         }
