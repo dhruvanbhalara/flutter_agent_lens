@@ -14,9 +14,6 @@ base mixin MemoryDebuggingSupport
 
   /// Registers all memory debugging and profiling tools.
   void registerMemoryTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
 
     registerTool(
       Tool(
