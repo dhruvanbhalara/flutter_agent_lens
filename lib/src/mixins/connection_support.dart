@@ -114,7 +114,9 @@ base mixin ConnectionSupport
                   '[mcp:connect] Resolved workspace root from client: $workspaceRoot');
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          stderr.writeln('[mcp:connect] Error fetching client roots: $e');
+        }
       }
 
       if (workspaceRoot != null) {
@@ -206,7 +208,9 @@ base mixin ConnectionSupport
         await Future<void>.delayed(const Duration(milliseconds: 100));
         stderr.writeln(
             '[mcp:connect] Service stream seeded: ${registeredMethodsForService.keys.toList()}');
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('[mcp:connect] Error seeding service stream: $e');
+      }
 
       // Clear existing I/O subscriptions and start buffering streams
       startLogging();
@@ -218,7 +222,10 @@ base mixin ConnectionSupport
           isolateId: isolateId,
           args: {'enabled': 'true'},
         );
-      } catch (_) {}
+      } catch (e) {
+        stderr
+            .writeln('[mcp:connect] Error enabling HTTP timeline logging: $e');
+      }
 
       final selectedIsolateName = vm.isolates!
           .firstWhere((i) => i.id == isolateId,
@@ -265,7 +272,9 @@ base mixin ConnectionSupport
 
     try {
       await vmService!.dispose();
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:connect] Error disposing VM Service: $e');
+    }
     vmService = null;
     vmServiceUri = null;
     isolateId = null;
@@ -288,7 +297,9 @@ base mixin ConnectionSupport
         isolateId: isolateId,
       );
       fpsVal = (fpsResponse.json?['fps'] as num?)?.toDouble() ?? 60.0;
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:connect] Error getting display refresh rate: $e');
+    }
 
     final extensionRPCs = isolate.extensionRPCs ?? [];
     final flutterExtensions =
