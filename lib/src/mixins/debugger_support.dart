@@ -10,9 +10,6 @@ import 'vm_connection_support.dart';
 base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers all debugger-related tools.
   void registerDebuggerTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
 
     registerTool(
       Tool(
