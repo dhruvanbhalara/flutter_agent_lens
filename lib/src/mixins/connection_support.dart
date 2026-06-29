@@ -23,8 +23,7 @@ base mixin ConnectionSupport
   /// Registers all connection-related tools in the MCP server.
   void registerConnectionTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -104,7 +103,8 @@ base mixin ConnectionSupport
     final rawUri = switch (req.arguments) {
       {'uri': String uri} => uri,
       {'vmServiceUri': String uri} => uri,
-      _ => throw ArgumentError('Required parameter "uri" or "vmServiceUri" is missing.'),
+      _ => throw ArgumentError(
+          'Required parameter "uri" or "vmServiceUri" is missing.'),
     };
     try {
       stderr.writeln('[mcp:connect] Attempting connection to: $rawUri');
@@ -277,6 +277,9 @@ base mixin ConnectionSupport
 
   /// Handles the get_app_info tool request.
   Future<CallToolResult> _handleGetAppInfo(CallToolRequest req) async {
+    if (vmService == null || isolateId == null) {
+      return notConnected();
+    }
     final vm = await vmService!.getVM();
     final isolate = await vmService!.getIsolate(isolateId!);
 
