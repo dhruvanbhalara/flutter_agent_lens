@@ -227,10 +227,6 @@ base mixin ConnectionSupport
             .writeln('[mcp:connect] Error enabling HTTP timeline logging: $e');
       }
 
-      final selectedIsolateName = vm.isolates!
-          .firstWhere((i) => i.id == isolateId,
-              orElse: () => vm.isolates!.first)
-          .name;
 
       final selectedIsolateName = vm.isolates!
           .firstWhere((i) => i.id == isolateId,
