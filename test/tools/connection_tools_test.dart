@@ -1,5 +1,4 @@
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'package:vm_service/vm_service.dart';
 import '../helpers/test_server.dart';

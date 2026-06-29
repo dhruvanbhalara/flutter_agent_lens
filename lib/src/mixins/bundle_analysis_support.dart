@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:path/path.dart' as p;
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for analyzing application bundle sizes.
 base mixin BundleAnalysisSupport
@@ -41,14 +42,15 @@ base mixin BundleAnalysisSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Workspace root is not configured. Run connect first to set it.')
+            text:
+                'Workspace root is not configured. Run connect first to set it.',
+          ),
         ],
         isError: true,
       );
     }
 
-    String defaultTarget = 'apk';
+    var defaultTarget = 'apk';
     if (vmService != null) {
       try {
         final vm = await vmService!.getVM();
@@ -64,7 +66,8 @@ base mixin BundleAnalysisSupport
         }
       } catch (e) {
         stderr.writeln(
-            '[mcp:bundle_size] Error auto-detecting target OS from VM: $e');
+          '[mcp:bundle_size] Error auto-detecting target OS from VM: $e',
+        );
       }
     }
 
@@ -73,14 +76,16 @@ base mixin BundleAnalysisSupport
         ((target == 'apk' || target == 'appbundle') ? 'android-arm64' : '');
 
     stderr.writeln(
-        '[mcp:bundle_size] Analyzing bundle size, target=$target, platform=$targetPlatform');
+      '[mcp:bundle_size] Analyzing bundle size, target=$target, platform=$targetPlatform',
+    );
 
     final buildDir = Directory(p.join(root, 'build'));
     if (!buildDir.existsSync()) {
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Build directory does not exist at ${buildDir.path}.')
+            text: 'Build directory does not exist at ${buildDir.path}.',
+          ),
         ],
         isError: true,
       );
@@ -130,21 +135,23 @@ base mixin BundleAnalysisSupport
             text: 'No size analysis file found in the build directory.\n\n'
                 'Please run the following command manually to generate the size analysis file, then try again:\n\n'
                 '  flutter build $target --analyze-size ${targetPlatform.isNotEmpty ? "--target-platform=$targetPlatform" : ""}',
-          )
+          ),
         ],
         isError: true,
       );
     }
 
     stderr.writeln(
-        '[mcp:bundle_size] Parsing size analysis file: ${sizeFile.path}');
+      '[mcp:bundle_size] Parsing size analysis file: ${sizeFile.path}',
+    );
     final rawJson = jsonDecode(await sizeFile.readAsString());
     if (rawJson is! Map<String, dynamic>) {
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Invalid size analysis file format: Root is not a JSON object.')
+            text:
+                'Invalid size analysis file format: Root is not a JSON object.',
+          ),
         ],
         isError: true,
       );
@@ -175,15 +182,19 @@ base mixin BundleAnalysisSupport
 
     // Sort by size descending
     leafComponents.sort(
-        (a, b) => (b['size_bytes'] as int).compareTo(a['size_bytes'] as int));
+      (a, b) => (b['size_bytes'] as int).compareTo(a['size_bytes'] as int),
+    );
 
     final totalSizeBytes = leafComponents.fold<int>(
-        0, (sum, item) => sum + (item['size_bytes'] as int));
+      0,
+      (sum, item) => sum + (item['size_bytes'] as int),
+    );
 
     final md =
         StringBuffer('Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
     md.writeln(
-        '- Total Calculated Size: ${formatBytes(totalSizeBytes)} ($totalSizeBytes Bytes)');
+      '- Total Calculated Size: ${formatBytes(totalSizeBytes)} ($totalSizeBytes Bytes)',
+    );
     md.writeln();
     md.writeln('| Component | Size | Percentage |');
     md.writeln('| :--- | :--- | :--- |');
@@ -193,7 +204,8 @@ base mixin BundleAnalysisSupport
       final sizeStr = formatBytes(bytes);
       final pct = totalSizeBytes > 0 ? (bytes / totalSizeBytes) * 100 : 0.0;
       md.writeln(
-          '| `${item['name']}` | $sizeStr | ${pct.toStringAsFixed(2)}% |');
+        '| `${item['name']}` | $sizeStr | ${pct.toStringAsFixed(2)}% |',
+      );
     }
 
     if (leafComponents.length > 25) {

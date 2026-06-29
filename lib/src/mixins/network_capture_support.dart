@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:vm_service/vm_service.dart';
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for capturing and analyzing HTTP traffic details.
 base mixin NetworkCaptureSupport
@@ -26,7 +27,6 @@ base mixin NetworkCaptureSupport
 
   /// Registers all network capture and diagnostic tools.
   void registerNetworkTools() {
-
     registerTool(
       Tool(
         name: McpTool.getNetworkProfile.name,
@@ -117,7 +117,8 @@ base mixin NetworkCaptureSupport
       md.writeln('No network requests recorded.');
     } else {
       md.writeln(
-          '| ID | Method | URI | Status | Duration | Req Size | Res Size | Start Time |');
+        '| ID | Method | URI | Status | Duration | Req Size | Res Size | Start Time |',
+      );
       md.writeln('| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |');
 
       for (final reqObj in requestsList) {
@@ -134,13 +135,13 @@ base mixin NetworkCaptureSupport
 
           final startTimeUs = reqObj['startTime'] as int?;
           final endTimeUs = reqObj['endTime'] as int?;
-          String durationStr = 'Pending';
+          var durationStr = 'Pending';
           if (startTimeUs != null && endTimeUs != null) {
             final durationMs = (endTimeUs - startTimeUs) / 1000.0;
             durationStr = '${durationMs.toStringAsFixed(1)} ms';
           }
 
-          String startTimeStr = 'Unknown';
+          var startTimeStr = 'Unknown';
           if (startTimeUs != null) {
             final dt = DateTime.fromMicrosecondsSinceEpoch(startTimeUs);
             startTimeStr =
@@ -154,7 +155,8 @@ base mixin NetworkCaptureSupport
               uri.length > 50 ? '${uri.substring(0, 47)}...' : uri;
 
           md.writeln(
-              '| `$id` | $method | `$displayUri` | `$statusCode` | $durationStr | $reqSize B | $resSize B | $startTimeStr |');
+            '| `$id` | $method | `$displayUri` | `$statusCode` | $durationStr | $reqSize B | $resSize B | $startTimeStr |',
+          );
 
           formattedRequests.add({
             'id': id,
@@ -192,8 +194,9 @@ base mixin NetworkCaptureSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Already capturing network traffic. Call stop_network_capture first.')
+            text:
+                'Already capturing network traffic. Call stop_network_capture first.',
+          ),
         ],
         isError: true,
       );
@@ -213,14 +216,14 @@ base mixin NetworkCaptureSupport
     try {
       await vmService!.callServiceExtension(
         'ext.dart.io.httpEnableTimelineLogging',
-        isolateId: isolateId!,
+        isolateId: isolateId,
         args: {'enabled': 'true'},
       );
     } catch (e) {
       stderr.writeln('[mcp:network] Error enabling HTTP timeline logging: $e');
     }
 
-    networkExtensionSub = vmService!.onExtensionEvent.listen((Event event) {
+    networkExtensionSub = vmService!.onExtensionEvent.listen((event) {
       final kind = event.extensionKind;
       final data = event.extensionData?.data;
       if (data == null) return;
@@ -263,7 +266,7 @@ base mixin NetworkCaptureSupport
         TextContent(
           text:
               'Network capture started. Use the app to trigger API calls, then call `stop_network_capture` to see the results.',
-        )
+        ),
       ],
     );
   }
@@ -274,8 +277,9 @@ base mixin NetworkCaptureSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Not capturing network traffic. Call start_network_capture first.')
+            text:
+                'Not capturing network traffic. Call start_network_capture first.',
+          ),
         ],
         isError: true,
       );
@@ -294,7 +298,7 @@ base mixin NetworkCaptureSupport
     try {
       await vmService!.callServiceExtension(
         'ext.dart.io.httpEnableTimelineLogging',
-        isolateId: isolateId!,
+        isolateId: isolateId,
         args: {'enabled': 'false'},
       );
     } catch (e) {
@@ -312,7 +316,7 @@ base mixin NetworkCaptureSupport
             text:
                 'Captured for ${(durationMs / 1000.0).toStringAsFixed(1)}s - no HTTP requests detected.\n\n'
                 'This can happen if:\n'
-                '- The app didn\'t make any network calls during capture\n'
+                "- The app didn't make any network calls during capture\n"
                 '- HTTP timeline logging is not supported in this Flutter version\n\n'
                 'Try making the app load data (e.g. pull to refresh, navigate to a new screen).',
           ),
@@ -331,11 +335,14 @@ base mixin NetworkCaptureSupport
         return durB.compareTo(durA);
       });
     } else if (sortBy == NetworkSortBy.size) {
-      allRequests.sort((a, b) => ((b['responseSize'] as int?) ?? 0)
-          .compareTo((a['responseSize'] as int?) ?? 0));
+      allRequests.sort(
+        (a, b) => ((b['responseSize'] as int?) ?? 0)
+            .compareTo((a['responseSize'] as int?) ?? 0),
+      );
     } else {
       allRequests.sort(
-          (a, b) => (a['startTime'] as int).compareTo(b['startTime'] as int));
+        (a, b) => (a['startTime'] as int).compareTo(b['startTime'] as int),
+      );
     }
 
     final completedRequests = allRequests
@@ -348,7 +355,9 @@ base mixin NetworkCaptureSupport
         .toList();
 
     final totalSize = allRequests.fold<int>(
-        0, (sum, r) => sum + ((r['responseSize'] as int?) ?? 0));
+      0,
+      (sum, r) => sum + ((r['responseSize'] as int?) ?? 0),
+    );
     final durations = completedRequests
         .map((r) => (r['endTime'] as int) - (r['startTime'] as int))
         .toList();
@@ -388,7 +397,7 @@ base mixin NetworkCaptureSupport
 
       final statusSymbol = switch (reqMap) {
         {'error': final err} when err != null => '[ERROR] $err',
-        {'statusCode': int code} => switch (code) {
+        {'statusCode': final int code} => switch (code) {
             >= 400 => '[ERROR] $code',
             >= 300 => '[WARN]  $code',
             _ => '[OK]    $code',
@@ -421,11 +430,13 @@ base mixin NetworkCaptureSupport
         final dur =
             ((r['endTime'] as int) - (r['startTime'] as int)).toDouble();
         output.add(
-            '- SLOW: ${r['method']} ${r['uri']} took ${formatDuration(dur)}');
+          '- SLOW: ${r['method']} ${r['uri']} took ${formatDuration(dur)}',
+        );
       }
       for (final r in largeResponses.take(3)) {
         output.add(
-            '- LARGE: ${r['method']} ${r['uri']} returned ${formatBytes(r['responseSize'] as int)}');
+          '- LARGE: ${r['method']} ${r['uri']} returned ${formatBytes(r['responseSize'] as int)}',
+        );
       }
       for (final r in failedRequests.take(3)) {
         output.add('- ERROR: ${r['method']} ${r['uri']} - ${r['error']}');

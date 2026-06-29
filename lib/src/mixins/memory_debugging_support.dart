@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/models/memory_models.dart';
 import 'package:vm_service/vm_service.dart';
-import '../enums/mcp_tool.dart';
-import '../models/memory_models.dart';
-import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for analyzing heap usage, tracking class instances,
 /// and capturing and comparing memory snapshots.
@@ -137,7 +138,7 @@ base mixin MemoryDebuggingSupport
             'object_id': StringSchema(
               description: 'The VM ID of the object to inspect.',
             ),
-            'limit': limitSchema(defaultValue: 15.0),
+            'limit': limitSchema(defaultValue: 15),
             'includeRawResponse': BooleanSchema(
               description:
                   'Whether to include the raw JSON-RPC response in structured data.',
@@ -158,8 +159,9 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the audit_class_memory_leak tool request.
   Future<CallToolResult> _handleAuditClassMemoryLeak(
-      CallToolRequest req) async {
-    final className = req.arguments!['class_name'] as String;
+    CallToolRequest req,
+  ) async {
+    final className = req.arguments!['class_name']! as String;
     stderr.writeln('[mcp:audit_memory] Auditing class: $className');
 
     final classList = await vmService!.getClassList(isolateId!);
@@ -177,7 +179,7 @@ base mixin MemoryDebuggingSupport
 
     for (final instanceRef in instances) {
       final instanceId = instanceRef.id!;
-      bool isMounted = true;
+      var isMounted = true;
       try {
         final evalResult =
             await vmService!.evaluate(isolateId!, instanceId, 'this.mounted');
@@ -211,15 +213,19 @@ base mixin MemoryDebuggingSupport
 
     if (reports.isEmpty) {
       mdBuffer.writeln(
-          'No memory leaks detected for class `$className`. All heap instances are active.');
+        'No memory leaks detected for class `$className`. All heap instances are active.',
+      );
     } else {
       mdBuffer.writeln(
-          'Warning: Detected ${reports.length} leaked instances for `$className`!');
+        'Warning: Detected ${reports.length} leaked instances for `$className`!',
+      );
       for (var i = 0; i < reports.length; i++) {
         mdBuffer.writeln(
-            '\n#### Leaked Instance #${i + 1} (${reports[i]['instance_id']})');
+          '\n#### Leaked Instance #${i + 1} (${reports[i]['instance_id']})',
+        );
         mdBuffer.writeln(
-            '- Disposed State: mounted == false but retained in memory.');
+          '- Disposed State: mounted == false but retained in memory.',
+        );
         mdBuffer.writeln('- Retention Path:');
         for (final node in reports[i]['retaining_path'] as List<String>) {
           mdBuffer.writeln('  - $node');
@@ -248,12 +254,13 @@ base mixin MemoryDebuggingSupport
     final forceGc = req.arguments?['force_gc'] as bool? ?? true;
 
     stderr.writeln(
-        '[mcp:diff_heap] Starting heap profiling (duration=${duration}s, forceGc=$forceGc)');
+      '[mcp:diff_heap] Starting heap profiling (duration=${duration}s, forceGc=$forceGc)',
+    );
 
     final baselineProfile =
         await vmService!.getAllocationProfile(isolateId!, gc: forceGc);
     final baselineStats = <String, ClassHeapStats>{};
-    for (final member in baselineProfile.members ?? []) {
+    for (final member in baselineProfile.members ?? <ClassHeapStats>[]) {
       if (member.classRef?.name != null) {
         baselineStats[member.classRef!.name!] = member;
       }
@@ -307,7 +314,7 @@ base mixin MemoryDebuggingSupport
     _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
     final md = StringBuffer('Memory Allocations Delta\n\n')
-      ..write(_formatAllocationDiffTable(deltas, limit: 20));
+      ..write(_formatAllocationDiffTable(deltas));
 
     return serializeDualFormat(
       title: 'Allocation Snapshot Difference',
@@ -324,12 +331,13 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the get_object_referrers tool request.
   Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
-    final objectId = req.arguments!['object_id'] as String;
+    final objectId = req.arguments!['object_id']! as String;
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 15;
     final includeRawResponse =
         req.arguments?['includeRawResponse'] as bool? ?? false;
     stderr.writeln(
-        '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit');
+      '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit',
+    );
 
     final retainingPath =
         await vmService!.getRetainingPath(isolateId!, objectId, limit);
@@ -347,10 +355,12 @@ base mixin MemoryDebuggingSupport
     final md = StringBuffer('Retaining Path for Object: $objectId\n\n');
     if (pathElements.isEmpty) {
       md.writeln(
-          'No retaining path returned. The object might have been garbage collected or is a root.');
+        'No retaining path returned. The object might have been garbage collected or is a root.',
+      );
     } else {
       md.writeln(
-          'The following references are keeping this object alive in the heap:');
+        'The following references are keeping this object alive in the heap:',
+      );
       md.writeln();
       for (var i = 0; i < pathElements.length; i++) {
         md.writeln('${i + 1}. ${pathElements[i]}');
@@ -372,7 +382,7 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the save_snapshot tool request.
   Future<CallToolResult> _handleSaveSnapshot(CallToolRequest req) async {
-    final name = req.arguments!['name'] as String;
+    final name = req.arguments!['name']! as String;
     final forceGc = (req.arguments?['forceGC'] as bool?) ?? true;
 
     final snapshot = await _takeSnapshot(name, forceGc);
@@ -395,8 +405,8 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the compare_snapshots tool request.
   Future<CallToolResult> _handleCompareSnapshots(CallToolRequest req) async {
-    final before = req.arguments!['before'] as String;
-    final after = req.arguments!['after'] as String;
+    final before = req.arguments!['before']! as String;
+    final after = req.arguments!['after']! as String;
 
     final snap1 = memorySnapshots[before];
     final snap2 = memorySnapshots[after];
@@ -408,7 +418,8 @@ base mixin MemoryDebuggingSupport
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Snapshot "$before" not found. Available: $available')
+            text: 'Snapshot "$before" not found. Available: $available',
+          ),
         ],
         isError: true,
       );
@@ -421,7 +432,8 @@ base mixin MemoryDebuggingSupport
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Snapshot "$after" not found. Available: $available')
+            text: 'Snapshot "$after" not found. Available: $available',
+          ),
         ],
         isError: true,
       );
@@ -474,9 +486,11 @@ base mixin MemoryDebuggingSupport
     md.writeln();
     md.writeln('HEAP OVERVIEW');
     md.writeln(
-        '$heapIcon Heap usage: ${formatBytes(snap1.heapUsage)} -> ${formatBytes(snap2.heapUsage)} (${heapDiff <= 0 ? "" : "+"}${formatBytes(heapDiff)}, ${_pctChange(snap1.heapUsage, snap2.heapUsage)})');
+      '$heapIcon Heap usage: ${formatBytes(snap1.heapUsage)} -> ${formatBytes(snap2.heapUsage)} (${heapDiff <= 0 ? "" : "+"}${formatBytes(heapDiff)}, ${_pctChange(snap1.heapUsage, snap2.heapUsage)})',
+    );
     md.writeln(
-        'Capacity: ${formatBytes(snap1.heapCapacity)} -> ${formatBytes(snap2.heapCapacity)} (${capacityDiff <= 0 ? "" : "+"}${formatBytes(capacityDiff)})');
+      'Capacity: ${formatBytes(snap1.heapCapacity)} -> ${formatBytes(snap2.heapCapacity)} (${capacityDiff <= 0 ? "" : "+"}${formatBytes(capacityDiff)})',
+    );
     md.writeln('Time between snapshots: ${timeDiffS}s');
 
     if (grew.isNotEmpty) {
@@ -486,7 +500,8 @@ base mixin MemoryDebuggingSupport
         final instDiffVal = d['instancesDiff'] as int;
         final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
         md.writeln(
-            '+${formatBytes(d['bytesDiff'] as int)} | $instDiff inst | ${d['name']}');
+          '+${formatBytes(d['bytesDiff'] as int)} | $instDiff inst | ${d['name']}',
+        );
       }
     }
 
@@ -497,7 +512,8 @@ base mixin MemoryDebuggingSupport
         final instDiffVal = d['instancesDiff'] as int;
         final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
         md.writeln(
-            '-${formatBytes((d['bytesDiff'] as int).abs())} | $instDiff inst | ${d['name']}');
+          '-${formatBytes((d['bytesDiff'] as int).abs())} | $instDiff inst | ${d['name']}',
+        );
       }
     }
 
@@ -534,8 +550,8 @@ base mixin MemoryDebuggingSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'No snapshots saved yet. Use `save_snapshot` to create one.')
+            text: 'No snapshots saved yet. Use `save_snapshot` to create one.',
+          ),
         ],
       );
     }
@@ -574,11 +590,13 @@ base mixin MemoryDebuggingSupport
         validMembers.where((m) => (m.bytesCurrent ?? 0) > 0).take(50).toList();
 
     final topClasses = sorted
-        .map((m) => ClassAllocation(
-              name: m.classRef!.name!,
-              bytes: m.bytesCurrent ?? 0,
-              instances: m.instancesCurrent ?? 0,
-            ))
+        .map(
+          (m) => ClassAllocation(
+            name: m.classRef!.name!,
+            bytes: m.bytesCurrent ?? 0,
+            instances: m.instancesCurrent ?? 0,
+          ),
+        )
         .toList();
 
     return MemorySnapshot(
@@ -605,7 +623,8 @@ base mixin MemoryDebuggingSupport
     final topN = (req.arguments?['topN'] as num?)?.toInt() ?? 20;
 
     stderr.writeln(
-        '[mcp:memory_snapshot] Fetching memory snapshot (forceGc=$forceGc, topN=$topN)');
+      '[mcp:memory_snapshot] Fetching memory snapshot (forceGc=$forceGc, topN=$topN)',
+    );
 
     final profile =
         await vmService!.getAllocationProfile(isolateId!, gc: forceGc);
@@ -625,8 +644,9 @@ base mixin MemoryDebuggingSupport
         sortedBySize.where((m) => (m.bytesCurrent ?? 0) > 0).toList();
 
     final sortedByInstances = List<ClassHeapStats>.from(validMembers)
-      ..sort((a, b) =>
-          (b.instancesCurrent ?? 0).compareTo(a.instancesCurrent ?? 0));
+      ..sort(
+        (a, b) => (b.instancesCurrent ?? 0).compareTo(a.instancesCurrent ?? 0),
+      );
     final sortedByInstancesFiltered =
         sortedByInstances.where((m) => (m.instancesCurrent ?? 0) > 0).toList();
 
@@ -652,7 +672,8 @@ base mixin MemoryDebuggingSupport
           ? ((bytesCurrent / heapUsage) * 100).toStringAsFixed(1)
           : '0.0';
       output.add(
-          '${formatBytes(bytesCurrent)} ($pct%) | $instancesCurrent instances | $className');
+        '${formatBytes(bytesCurrent)} ($pct%) | $instancesCurrent instances | $className',
+      );
     }
 
     output.add('');
@@ -663,7 +684,8 @@ base mixin MemoryDebuggingSupport
       final instancesCurrent = member.instancesCurrent ?? 0;
       final className = member.classRef!.name!;
       output.add(
-          '$instancesCurrent instances | ${formatBytes(bytesCurrent)} | $className');
+        '$instancesCurrent instances | ${formatBytes(bytesCurrent)} | $className',
+      );
     }
 
     const vmInternalClasses = {
@@ -759,7 +781,8 @@ base mixin MemoryDebuggingSupport
         final instancesCurrent = cls.instancesCurrent ?? 0;
         final className = cls.classRef!.name!;
         output.add(
-            '$instancesCurrent instances | ${formatBytes(bytesCurrent)} | $className');
+          '$instancesCurrent instances | ${formatBytes(bytesCurrent)} | $className',
+        );
       }
     }
 
@@ -774,14 +797,16 @@ base mixin MemoryDebuggingSupport
         final instancesCurrent = cls.instancesCurrent ?? 0;
         final className = cls.classRef!.name!;
         output.add(
-            '- $className: $instancesCurrent instances (${formatBytes(bytesCurrent)}) - check for leaks or excessive allocations');
+          '- $className: $instancesCurrent instances (${formatBytes(bytesCurrent)}) - check for leaks or excessive allocations',
+        );
       }
     }
 
     if (heapUtilization > 85.0) {
       output.add('');
       output.add(
-          'WARNING: Heap utilization above 85%. The app may be at risk of OOM. Consider reducing memory footprint.');
+        'WARNING: Heap utilization above 85%. The app may be at risk of OOM. Consider reducing memory footprint.',
+      );
     }
 
     final structuredData = {
@@ -791,27 +816,33 @@ base mixin MemoryDebuggingSupport
       'heapUtilization': heapUtilization,
       'top_classes': sortedBySizeFiltered
           .take(topN)
-          .map((m) => {
-                'class': m.classRef!.name!,
-                'bytes': m.bytesCurrent ?? 0,
-                'instances': m.instancesCurrent ?? 0,
-              })
+          .map(
+            (m) => {
+              'class': m.classRef!.name!,
+              'bytes': m.bytesCurrent ?? 0,
+              'instances': m.instancesCurrent ?? 0,
+            },
+          )
           .toList(),
       'top_instances': sortedByInstancesFiltered
           .take(10)
-          .map((m) => {
-                'class': m.classRef!.name!,
-                'bytes': m.bytesCurrent ?? 0,
-                'instances': m.instancesCurrent ?? 0,
-              })
+          .map(
+            (m) => {
+              'class': m.classRef!.name!,
+              'bytes': m.bytesCurrent ?? 0,
+              'instances': m.instancesCurrent ?? 0,
+            },
+          )
           .toList(),
       'app_classes': appClasses
           .take(20)
-          .map((m) => {
-                'class': m.classRef!.name!,
-                'bytes': m.bytesCurrent ?? 0,
-                'instances': m.instancesCurrent ?? 0,
-              })
+          .map(
+            (m) => {
+              'class': m.classRef!.name!,
+              'bytes': m.bytesCurrent ?? 0,
+              'instances': m.instancesCurrent ?? 0,
+            },
+          )
           .toList(),
     };
 
@@ -824,8 +855,11 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Helper to sort class heap stat deltas by instance delta and byte delta.
-  void _sortDeltas(List<Map<String, dynamic>> deltas, String instDeltaKey,
-      String bytesDeltaKey) {
+  void _sortDeltas(
+    List<Map<String, dynamic>> deltas,
+    String instDeltaKey,
+    String bytesDeltaKey,
+  ) {
     deltas.sort((a, b) {
       final cmp = (b[instDeltaKey] as int)
           .abs()
@@ -838,14 +872,17 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Formats allocation difference deltas as a Markdown table.
-  String _formatAllocationDiffTable(List<Map<String, dynamic>> deltas,
-      {int limit = 20}) {
+  String _formatAllocationDiffTable(
+    List<Map<String, dynamic>> deltas, {
+    int limit = 20,
+  }) {
     if (deltas.isEmpty) {
       return 'No heap allocation changes recorded during the profiling window.\n';
     }
     final md = StringBuffer();
     md.writeln(
-        '| Class | Instances Delta | Bytes Delta | Before (Count / Size) | After (Count / Size) |');
+      '| Class | Instances Delta | Bytes Delta | Before (Count / Size) | After (Count / Size) |',
+    );
     md.writeln('| :--- | :--- | :--- | :--- | :--- |');
     for (final d in deltas.take(limit)) {
       final instDelta = d['instances_delta'] as int;

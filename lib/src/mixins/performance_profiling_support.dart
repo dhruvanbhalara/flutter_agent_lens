@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/dtd_support.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:vm_service/vm_service.dart';
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
-import 'dtd_support.dart';
 
 /// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
 base mixin PerformanceProfilingSupport
@@ -103,7 +104,8 @@ base mixin PerformanceProfilingSupport
   Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
     stderr.writeln(
-        '[mcp:diagnose_jank] Starting jank diagnosis, duration=${duration}s');
+      '[mcp:diagnose_jank] Starting jank diagnosis, duration=${duration}s',
+    );
 
     final frameEvents = <Map<String, dynamic>>[];
     await vmService!.setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API']);
@@ -136,11 +138,13 @@ base mixin PerformanceProfilingSupport
     final jankPercentage =
         totalFrames > 0 ? (jankyFrames / totalFrames) * 100 : 0.0;
     stderr.writeln(
-        '[mcp:diagnose_jank] Collected ${events.length} timeline events, $jankyFrames janky frames');
+      '[mcp:diagnose_jank] Collected ${events.length} timeline events, $jankyFrames janky frames',
+    );
     final mdBuffer = StringBuffer('Jank Diagnostic Report\n\n')
       ..writeln('- Total Frame Events Sampled: $totalFrames')
       ..writeln(
-          '- Janky Frame Events (> 16.6ms): $jankyFrames ($jankPercentage%)')
+        '- Janky Frame Events (> 16.6ms): $jankyFrames ($jankPercentage%)',
+      )
       ..writeln();
 
     if (jankyFrames > 0) {
@@ -150,11 +154,13 @@ base mixin PerformanceProfilingSupport
         final dur = f['duration_ms'] as double;
         final severity = dur > 33.3 ? 'CRITICAL (>33ms)' : 'WARNING (>16ms)';
         mdBuffer.writeln(
-            '| ${f['event']} | ${dur.toStringAsFixed(2)} | $severity |');
+          '| ${f['event']} | ${dur.toStringAsFixed(2)} | $severity |',
+        );
       }
     } else {
       mdBuffer.writeln(
-          'Clean Render Cycle: No frame events exceeded the 16.6ms budget.');
+        'Clean Render Cycle: No frame events exceeded the 16.6ms budget.',
+      );
     }
 
     return serializeDualFormat(
@@ -172,12 +178,13 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the hot_reload tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotReload(CallToolRequest req) async {
-    bool dtdSuccess = false;
+    var dtdSuccess = false;
     if (this is DtdSupport) {
       final dtd = this as DtdSupport;
       if (dtd.dtdClient != null && vmServiceUri != null) {
         stderr.writeln(
-            '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...');
+          '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...',
+        );
         try {
           await dtd.dtdClient!.call(
             'ConnectedApp',
@@ -187,7 +194,8 @@ base mixin PerformanceProfilingSupport
           dtdSuccess = true;
         } catch (e) {
           stderr.writeln(
-              '[mcp:hot_reload] DTD call failed: $e. Falling back to direct VM Service...');
+            '[mcp:hot_reload] DTD call failed: $e. Falling back to direct VM Service...',
+          );
         }
       }
     }
@@ -197,37 +205,41 @@ base mixin PerformanceProfilingSupport
           registeredMethodsForService['hotReload'];
       if (reloadMethod != null) {
         stderr.writeln(
-            '[mcp:hot_reload] Triggering registered service $reloadMethod...');
+          '[mcp:hot_reload] Triggering registered service $reloadMethod...',
+        );
         await vmService!.callMethod(
           reloadMethod,
-          args: {'isolateId': isolateId!},
+          args: {'isolateId': isolateId},
         );
       } else {
         stderr.writeln('[mcp:hot_reload] Triggering ext.flutter.reassemble...');
         await vmService!.callServiceExtension(
           'ext.flutter.reassemble',
-          isolateId: isolateId!,
+          isolateId: isolateId,
         );
       }
     }
 
-    return CallToolResult(content: [
-      TextContent(
-        text: 'Hot reload triggered successfully.\n'
-            'UI has been reassembled. Note: To load new code changes from disk, '
-            'save the files in your editor (VS Code, IntelliJ) to let the compiler build them first.',
-      )
-    ]);
+    return CallToolResult(
+      content: [
+        TextContent(
+          text: 'Hot reload triggered successfully.\n'
+              'UI has been reassembled. Note: To load new code changes from disk, '
+              'save the files in your editor (VS Code, IntelliJ) to let the compiler build them first.',
+        ),
+      ],
+    );
   }
 
   /// Handles the hot_restart tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotRestart(CallToolRequest req) async {
-    bool dtdSuccess = false;
+    var dtdSuccess = false;
     if (this is DtdSupport) {
       final dtd = this as DtdSupport;
       if (dtd.dtdClient != null && vmServiceUri != null) {
         stderr.writeln(
-            '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...');
+          '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...',
+        );
         try {
           await dtd.dtdClient!.call(
             'ConnectedApp',
@@ -237,7 +249,8 @@ base mixin PerformanceProfilingSupport
           dtdSuccess = true;
         } catch (e) {
           stderr.writeln(
-              '[mcp:hot_restart] DTD call failed: $e. Falling back to direct VM Service...');
+            '[mcp:hot_restart] DTD call failed: $e. Falling back to direct VM Service...',
+          );
         }
       }
     }
@@ -247,11 +260,13 @@ base mixin PerformanceProfilingSupport
           registeredMethodsForService['restart'];
       if (hotRestartMethod != null) {
         stderr.writeln(
-            '[mcp:hot_restart] Triggering registered service $hotRestartMethod...');
+          '[mcp:hot_restart] Triggering registered service $hotRestartMethod...',
+        );
         await vmService!.callMethod(hotRestartMethod);
       } else {
         stderr.writeln(
-            '[mcp:hot_restart] Checking for restart service extensions...');
+          '[mcp:hot_restart] Checking for restart service extensions...',
+        );
         final isolate = await vmService!.getIsolate(isolateId!);
         final extensions = isolate.extensionRPCs ?? [];
 
@@ -259,14 +274,15 @@ base mixin PerformanceProfilingSupport
           stderr.writeln('[mcp:hot_restart] Triggering ext.flutter.restart...');
           await vmService!.callServiceExtension(
             'ext.flutter.restart',
-            isolateId: isolateId!,
+            isolateId: isolateId,
           );
         } else {
           stderr.writeln(
-              '[mcp:hot_restart] ext.flutter.restart not found, falling back to reassemble...');
+            '[mcp:hot_restart] ext.flutter.restart not found, falling back to reassemble...',
+          );
           await vmService!.callServiceExtension(
             'ext.flutter.reassemble',
-            isolateId: isolateId!,
+            isolateId: isolateId,
           );
         }
       }
@@ -278,25 +294,28 @@ base mixin PerformanceProfilingSupport
     // Refresh the isolate ID and cache after the restart
     final vm = await vmService!.getVM();
     if (vm.isolates != null && vm.isolates!.isNotEmpty) {
-      isolateId = vm.isolates!.first.id!;
+      isolateId = vm.isolates!.first.id;
       cachedLibraryId = null;
       stderr.writeln('[mcp:hot_restart] Refreshed main isolate ID: $isolateId');
     }
 
-    return CallToolResult(content: [
-      TextContent(
-        text: 'Hot restart triggered successfully.\n'
-            'Isolate reference has been updated. Note: To load new code changes from disk, '
-            'save the files in your editor (VS Code, IntelliJ) to let the compiler build them first.',
-      )
-    ]);
+    return CallToolResult(
+      content: [
+        TextContent(
+          text: 'Hot restart triggered successfully.\n'
+              'Isolate reference has been updated. Note: To load new code changes from disk, '
+              'save the files in your editor (VS Code, IntelliJ) to let the compiler build them first.',
+        ),
+      ],
+    );
   }
 
   /// Handles the get_cpu_profile tool request.
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
     stderr.writeln(
-        '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
+      '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s',
+    );
 
     await vmService!.clearCpuSamples(isolateId!);
     await Future.delayed(Duration(seconds: duration));
@@ -337,20 +356,25 @@ base mixin PerformanceProfilingSupport
       }
     }
 
-    hotspots.sort((a, b) =>
-        (b['exclusive_ticks'] as int).compareTo(a['exclusive_ticks'] as int));
+    hotspots.sort(
+      (a, b) =>
+          (b['exclusive_ticks'] as int).compareTo(a['exclusive_ticks'] as int),
+    );
     stderr.writeln(
-        '[mcp:cpu_profile] Collected ${cpuSamples.sampleCount} samples, ${hotspots.length} active functions');
+      '[mcp:cpu_profile] Collected ${cpuSamples.sampleCount} samples, ${hotspots.length} active functions',
+    );
 
     if (hotspots.isEmpty) {
       mdBuffer.writeln('No CPU sampling ticks recorded in the window.');
     } else {
       mdBuffer.writeln(
-          '| Function | Exclusive Ticks | Inclusive Ticks | Source Location |');
+        '| Function | Exclusive Ticks | Inclusive Ticks | Source Location |',
+      );
       mdBuffer.writeln('| :--- | :--- | :--- | :--- |');
       for (final h in hotspots.take(15)) {
         mdBuffer.writeln(
-            '| ${h['name']} | ${h['exclusive_ticks']} | ${h['inclusive_ticks']} | `${h['location']}` |');
+          '| ${h['name']} | ${h['exclusive_ticks']} | ${h['inclusive_ticks']} | `${h['location']}` |',
+        );
       }
     }
 
@@ -372,8 +396,9 @@ base mixin PerformanceProfilingSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'A profiling session is already active. Call stop_profiling first.')
+            text:
+                'A profiling session is already active. Call stop_profiling first.',
+          ),
         ],
         isError: true,
       );
@@ -384,7 +409,7 @@ base mixin PerformanceProfilingSupport
     await vmService!
         .setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API', 'Compiler']);
 
-    double fpsVal = 60.0;
+    var fpsVal = 60.0;
     try {
       final fpsResponse = await vmService!.callServiceExtension(
         'ext.flutter.getDisplayRefreshRate',
@@ -404,7 +429,7 @@ base mixin PerformanceProfilingSupport
         TextContent(
           text:
               'Profiling started. Interact with the app now, then call `stop_profiling` to get the analysis.',
-        )
+        ),
       ],
     );
   }
@@ -415,7 +440,8 @@ base mixin PerformanceProfilingSupport
       return CallToolResult(
         content: [
           TextContent(
-              text: 'No active profiling session. Call start_profiling first.')
+            text: 'No active profiling session. Call start_profiling first.',
+          ),
         ],
         isError: true,
       );
@@ -514,8 +540,10 @@ base mixin PerformanceProfilingSupport
       });
     });
 
-    cpuHotspots.sort((a, b) => (b['totalDurationMs'] as double)
-        .compareTo(a['totalDurationMs'] as double));
+    cpuHotspots.sort(
+      (a, b) => (b['totalDurationMs'] as double)
+          .compareTo(a['totalDurationMs'] as double),
+    );
 
     Map<String, dynamic> analyzePhase(String phaseName, List<String> patterns) {
       final phaseDurations = <double>[];
@@ -525,7 +553,7 @@ base mixin PerformanceProfilingSupport
         final name = event.json?['name'] as String?;
         if (ph == 'X' && dur != null && name != null) {
           final lower = name.toLowerCase();
-          if (patterns.any((p) => lower.contains(p))) {
+          if (patterns.any(lower.contains)) {
             phaseDurations.add(dur / 1000.0);
           }
         }
@@ -546,12 +574,18 @@ base mixin PerformanceProfilingSupport
       };
     }
 
-    final buildPhase = analyzePhase('Build',
-        ['build', 'widget', 'createelement', 'updatechild', 'performrebuild']);
-    final layoutPhase = analyzePhase('Layout',
-        ['layout', 'performlayout', 'flushlayout', 'renderflex', 'renderbox']);
+    final buildPhase = analyzePhase(
+      'Build',
+      ['build', 'widget', 'createelement', 'updatechild', 'performrebuild'],
+    );
+    final layoutPhase = analyzePhase(
+      'Layout',
+      ['layout', 'performlayout', 'flushlayout', 'renderflex', 'renderbox'],
+    );
     final paintPhase = analyzePhase(
-        'Paint', ['paint', 'flushpaint', 'compositeframe', 'rasterizer']);
+      'Paint',
+      ['paint', 'flushpaint', 'compositeframe', 'rasterizer'],
+    );
 
     final output = [
       'FLUTTER PERFORMANCE ANALYSIS',
@@ -594,7 +628,8 @@ base mixin PerformanceProfilingSupport
                     : '[LOW]';
         output.add('$severityLabel ${h['name']}');
         output.add(
-            'Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}');
+          'Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}',
+        );
       }
       output.add('');
     }
@@ -602,37 +637,45 @@ base mixin PerformanceProfilingSupport
     final recommendations = <String>[];
     if (events.isEmpty) {
       recommendations.add(
-          'No timeline events were captured. Make sure to interact with the app.');
+        'No timeline events were captured. Make sure to interact with the app.',
+      );
     } else {
       if (jankPct > 10.0) {
         recommendations.add(
-            'Significant jank detected. Profile in release/profile mode to get accurate numbers.');
+          'Significant jank detected. Profile in release/profile mode to get accurate numbers.',
+        );
       }
       if ((buildPhase['maxTimeMs'] as double) > 16.0) {
         recommendations.add(
-            'Build phase exceeds frame budget. Use const constructors and break up large widget trees.');
+          'Build phase exceeds frame budget. Use const constructors and break up large widget trees.',
+        );
       }
       if ((buildPhase['count'] as int) > totalFrames * 3) {
         recommendations.add(
-            'Excessive widget rebuilds detected. Wrap in const constructors or use context.select().');
+          'Excessive widget rebuilds detected. Wrap in const constructors or use context.select().',
+        );
       }
       if ((layoutPhase['maxTimeMs'] as double) > 16.0) {
         recommendations.add(
-            'Layout phase is slow. Look for intrinsic dimensions or deeply nested flex layouts.');
+          'Layout phase is slow. Look for intrinsic dimensions or deeply nested flex layouts.',
+        );
       }
       if ((paintPhase['maxTimeMs'] as double) > 16.0) {
         recommendations.add(
-            'Paint phase is slow. Use RepaintBoundary to isolate repainting of heavy animated components.');
+          'Paint phase is slow. Use RepaintBoundary to isolate repainting of heavy animated components.',
+        );
       }
       for (final h
           in cpuHotspots.where((h) => h['severity'] == 'critical').take(3)) {
         recommendations.add(
-            'Critical hotspot: "${h['name']}" taking ${h['maxDurationMs']}ms.');
+          'Critical hotspot: "${h['name']}" taking ${h['maxDurationMs']}ms.',
+        );
       }
     }
     if (recommendations.isEmpty) {
       recommendations.add(
-          'Performance looks good! No major issues detected in this session.');
+        'Performance looks good! No major issues detected in this session.',
+      );
     }
 
     output.add('RECOMMENDATIONS');

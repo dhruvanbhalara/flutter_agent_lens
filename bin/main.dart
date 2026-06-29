@@ -10,7 +10,8 @@ void main() async {
   );
 
   stderr.writeln(
-      '[flutter_agent_lens] Server initialized. Listening on Stdio...');
+    '[flutter_agent_lens] Server initialized. Listening on Stdio...',
+  );
   await server.done;
   exit(0);
 }

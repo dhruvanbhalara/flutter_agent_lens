@@ -53,7 +53,10 @@ void main() {
               id: 'func-1',
               name: 'calculateTotal',
               owner: LibraryRef(
-                  id: 'lib-1', name: 'main', uri: 'package:app/main.dart'),
+                id: 'lib-1',
+                name: 'main',
+                uri: 'package:app/main.dart',
+              ),
             ),
             code: CodeRef(id: 'code-1', name: 'calculateTotal'),
             location: SourceLocation(
@@ -62,22 +65,26 @@ void main() {
               line: 45,
               column: 12,
             ),
-          )
+          ),
         ],
         messages: [],
       );
 
       // Stub getStack with any arguments
-      when(() => testServer.mockVmService.getStack(
-            any(),
-            limit: any(named: 'limit'),
-          )).thenAnswer((_) async => mockStack);
+      when(
+        () => testServer.mockVmService.getStack(
+          any(),
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => mockStack);
 
       final res = await testServer.callTool(McpTool.getCallStack.name);
       expect(res.isError, isNot(isTrue));
       expect(res.content.first.toString(), contains('calculateTotal'));
       expect(
-          res.content.first.toString(), contains('package:app/main.dart:45'));
+        res.content.first.toString(),
+        contains('package:app/main.dart:45'),
+      );
     });
   });
 }

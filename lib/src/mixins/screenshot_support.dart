@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
-import 'package:path/path.dart' as p;
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:image/image.dart' as img;
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
+import 'package:path/path.dart' as p;
 
 /// Support mixin providing tools for taking and visually comparing screenshots.
 base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers screenshot-related tools.
   void registerScreenshotTools() {
-
     registerTool(
       Tool(
         name: McpTool.compareLayoutScreenshots.name,
@@ -75,21 +75,23 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the compare_layout_screenshots tool request.
   Future<CallToolResult> _handleCompareLayoutScreenshots(
-      CallToolRequest req) async {
+    CallToolRequest req,
+  ) async {
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Workspace root is not configured. Run connect first to set it.')
+            text:
+                'Workspace root is not configured. Run connect first to set it.',
+          ),
         ],
         isError: true,
       );
     }
 
-    final baselineName = req.arguments!['baseline_name'] as String;
-    final actionStr = req.arguments!['action'] as String;
+    final baselineName = req.arguments!['baseline_name']! as String;
+    final actionStr = req.arguments!['action']! as String;
     final threshold = (req.arguments?['threshold'] as num?)?.toDouble() ?? 0.98;
     final screenshotTypeStr = req.arguments?['screenshot_type'] as String?;
     final deviceId = req.arguments?['device_id'] as String?;
@@ -107,7 +109,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final screenshotType = ScreenshotType.fromString(screenshotTypeStr);
 
     stderr.writeln(
-        '[mcp:screenshot] Action=${action.value}, baselineName=$baselineName, type=${screenshotType.value}, deviceId=$deviceId');
+      '[mcp:screenshot] Action=${action.value}, baselineName=$baselineName, type=${screenshotType.value}, deviceId=$deviceId',
+    );
 
     final screenshotDir = Directory(p.join(root, 'build', 'mcp_screenshots'));
     if (!screenshotDir.existsSync()) {
@@ -132,8 +135,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Successfully captured and saved baseline screenshot to $baselinePath$notice')
+              text:
+                  'Successfully captured and saved baseline screenshot to $baselinePath$notice',
+            ),
           ],
         );
       } catch (e) {
@@ -153,8 +157,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Baseline screenshot not found for "$baselineName". Run capture_baseline first.')
+              text:
+                  'Baseline screenshot not found for "$baselineName". Run capture_baseline first.',
+            ),
           ],
           isError: true,
         );
@@ -187,8 +192,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Failed to decode screenshots. Ensure the captured files are valid PNGs.')
+              text:
+                  'Failed to decode screenshots. Ensure the captured files are valid PNGs.',
+            ),
           ],
           isError: true,
         );
@@ -201,7 +207,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               text:
                   'Layout size mismatch: Baseline is ${img1.width}x${img1.height}, '
                   'but current screen is ${img2.width}x${img2.height}.',
-            )
+            ),
           ],
           isError: true,
         );
@@ -235,11 +241,13 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           StringBuffer('Layout Screenshot Comparison: $baselineName\n\n');
       md.writeln('- Status: ${passed ? "PASS" : "FAIL"}');
       md.writeln(
-          '- Similarity Score: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)');
+        '- Similarity Score: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)',
+      );
       md.writeln('- Matching Pixels: $matchingPixels / $totalPixels');
       if (screenshotType == ScreenshotType.skia && actualType == 'device') {
         md.writeln(
-            '- Notice: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.');
+          '- Notice: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.',
+        );
       }
       md.writeln();
       md.writeln('FILES GENERATED');
@@ -273,7 +281,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Workspace root is not configured. Run connect first.')
+            text: 'Workspace root is not configured. Run connect first.',
+          ),
         ],
         isError: true,
       );
@@ -320,7 +329,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     required String? deviceId,
   }) async {
     if (vmService != null) {
-      String? effectiveDeviceId = deviceId;
+      var effectiveDeviceId = deviceId;
       String? os;
 
       try {
@@ -334,13 +343,17 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         }
       } catch (e) {
         stderr.writeln(
-            '[mcp:screenshot] Error detecting VM OS or auto-detecting device: $e');
+          '[mcp:screenshot] Error detecting VM OS or auto-detecting device: $e',
+        );
       }
 
       final flutterRoot = Platform.environment['FLUTTER_ROOT'];
       final executable = flutterRoot != null
-          ? p.join(flutterRoot, 'bin',
-              Platform.isWindows ? 'flutter.bat' : 'flutter')
+          ? p.join(
+              flutterRoot,
+              'bin',
+              Platform.isWindows ? 'flutter.bat' : 'flutter',
+            )
           : (Platform.isWindows ? 'flutter.bat' : 'flutter');
 
       final args = [
@@ -361,9 +374,11 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         final errorMsg = result.stderr.toString();
         if (screenshotType == 'skia' &&
             errorMsg.contains(
-                'Cannot capture SKP screenshot with Impeller enabled.')) {
+              'Cannot capture SKP screenshot with Impeller enabled.',
+            )) {
           stderr.writeln(
-              '[mcp:screenshot] Skia capture blocked by Impeller. Retrying as device screenshot.');
+            '[mcp:screenshot] Skia capture blocked by Impeller. Retrying as device screenshot.',
+          );
           return _captureDeviceScreenshot(
             targetPath: targetPath,
             screenshotType: 'device',
@@ -387,8 +402,11 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     try {
       final flutterRoot = Platform.environment['FLUTTER_ROOT'];
       final executable = flutterRoot != null
-          ? p.join(flutterRoot, 'bin',
-              Platform.isWindows ? 'flutter.bat' : 'flutter')
+          ? p.join(
+              flutterRoot,
+              'bin',
+              Platform.isWindows ? 'flutter.bat' : 'flutter',
+            )
           : (Platform.isWindows ? 'flutter.bat' : 'flutter');
 
       final result = await Process.run(executable, ['devices', '--machine']);

@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:path/path.dart' as p;
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for validating Android App Links and iOS Universal Links.
 base mixin DeeplinkValidationSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers the deep link validation tool.
   void registerDeeplinkTools() {
-
     registerTool(
       Tool(
         name: McpTool.validateDeepLinks.name,
@@ -47,14 +47,15 @@ base mixin DeeplinkValidationSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Workspace root is not configured. Run connect first to set it.')
+            text:
+                'Workspace root is not configured. Run connect first to set it.',
+          ),
         ],
         isError: true,
       );
     }
 
-    final platformStr = req.arguments!['platform'] as String;
+    final platformStr = req.arguments!['platform']! as String;
     final TargetPlatform platform;
     try {
       platform = TargetPlatform.fromString(platformStr);
@@ -69,29 +70,35 @@ base mixin DeeplinkValidationSupport
     final configuration = req.arguments?['configuration'] as String?;
     final target = req.arguments?['target'] as String? ?? 'Runner';
 
-    stderr.writeln('[mcp:deeplinks] Validating deep links, platform=${platform.value}');
+    stderr.writeln(
+      '[mcp:deeplinks] Validating deep links, platform=${platform.value}',
+    );
 
     final flutterRoot = Platform.environment['FLUTTER_ROOT'];
     final executable = flutterRoot != null
         ? p.join(
-            flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter')
+            flutterRoot,
+            'bin',
+            Platform.isWindows ? 'flutter.bat' : 'flutter',
+          )
         : (Platform.isWindows ? 'flutter.bat' : 'flutter');
 
-    final List<String> args = switch (platform) {
-      TargetPlatform.android => (buildVariant != null && buildVariant.isNotEmpty)
-          ? [
-              'analyze',
-              '--android',
-              '--output-app-link-settings',
-              '--build-variant=$buildVariant',
-              root,
-            ]
-          : [
-              'analyze',
-              '--android',
-              '--list-build-variants',
-              root,
-            ],
+    final args = switch (platform) {
+      TargetPlatform.android =>
+        (buildVariant != null && buildVariant.isNotEmpty)
+            ? [
+                'analyze',
+                '--android',
+                '--output-app-link-settings',
+                '--build-variant=$buildVariant',
+                root,
+              ]
+            : [
+                'analyze',
+                '--android',
+                '--list-build-variants',
+                root,
+              ],
       TargetPlatform.ios => (configuration != null && configuration.isNotEmpty)
           ? [
               'analyze',
@@ -120,7 +127,7 @@ base mixin DeeplinkValidationSupport
                 'Flutter deep link analysis failed (Exit Code ${result.exitCode}):\n'
                 '${result.stderr}\n'
                 'Stdout:\n${result.stdout}',
-          )
+          ),
         ],
         isError: true,
       );

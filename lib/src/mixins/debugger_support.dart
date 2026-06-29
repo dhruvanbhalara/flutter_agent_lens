@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:vm_service/vm_service.dart';
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
 
 /// Support mixin providing debugger capabilities including call stack retrieval,
 /// breakpoint management, pause configuration, and expression evaluation.
 base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers all debugger-related tools.
   void registerDebuggerTools() {
-
     registerTool(
       Tool(
         name: McpTool.getCallStack.name,
@@ -18,7 +18,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'Fetch the active call stack frames for the running application (when paused).',
         inputSchema: ObjectSchema(
           properties: {
-            'limit': limitSchema(defaultValue: 20.0),
+            'limit': limitSchema(),
             'format': formatSchema,
           },
         ),
@@ -135,13 +135,15 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       markdownBody: md.toString(),
       structuredData: {
         'frames': frames
-            .map((f) => {
-                  'index': f.index,
-                  'function': f.function?.name,
-                  'script': f.location?.script?.uri,
-                  'line': f.location?.line,
-                  'column': f.location?.column,
-                })
+            .map(
+              (f) => {
+                'index': f.index,
+                'function': f.function?.name,
+                'script': f.location?.script?.uri,
+                'line': f.location?.line,
+                'column': f.location?.column,
+              },
+            )
             .toList(),
       },
       format: req.arguments?['format'] as String?,
@@ -150,32 +152,38 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the set_exception_pause_mode tool request.
   Future<CallToolResult> _handleSetExceptionPauseMode(
-      CallToolRequest req) async {
-    final modeStr = req.arguments!['mode'] as String;
+    CallToolRequest req,
+  ) async {
+    final modeStr = req.arguments!['mode']! as String;
     final mode = ExceptionPauseMode.fromString(modeStr);
     stderr.writeln(
-        '[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
+      '[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}',
+    );
 
     try {
       await vmService!
           .setIsolatePauseMode(isolateId!, exceptionPauseMode: mode.value);
     } catch (e) {
       stderr.writeln(
-          '[mcp:debugger] setIsolatePauseMode failed: $e. Trying deprecated fallback.');
+        '[mcp:debugger] setIsolatePauseMode failed: $e. Trying deprecated fallback.',
+      );
       // Fallback for older VM Service versions
       // ignore: deprecated_member_use
       await vmService!.setExceptionPauseMode(isolateId!, mode.value);
     }
-    return CallToolResult(content: [
-      TextContent(
-          text: 'Successfully set exception pause mode to: ${mode.value}')
-    ]);
+    return CallToolResult(
+      content: [
+        TextContent(
+          text: 'Successfully set exception pause mode to: ${mode.value}',
+        ),
+      ],
+    );
   }
 
   /// Handles the add_breakpoint tool request.
   Future<CallToolResult> _handleAddBreakpoint(CallToolRequest req) async {
-    final filePath = req.arguments!['file_path'] as String;
-    final line = (req.arguments!['line'] as num).toInt();
+    final filePath = req.arguments!['file_path']! as String;
+    final line = (req.arguments!['line']! as num).toInt();
     final column = (req.arguments?['column'] as num?)?.toInt();
     stderr
         .writeln('[mcp:add_breakpoint] Setting breakpoint on: $filePath:$line');
@@ -211,27 +219,31 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the remove_breakpoint tool request.
   Future<CallToolResult> _handleRemoveBreakpoint(CallToolRequest req) async {
-    final breakpointId = req.arguments!['breakpoint_id'] as String;
+    final breakpointId = req.arguments!['breakpoint_id']! as String;
     stderr
         .writeln('[mcp:remove_breakpoint] Removing breakpoint: $breakpointId');
 
     await vmService!.removeBreakpoint(isolateId!, breakpointId);
-    return CallToolResult(content: [
-      TextContent(text: 'Successfully removed breakpoint `$breakpointId`.')
-    ]);
+    return CallToolResult(
+      content: [
+        TextContent(text: 'Successfully removed breakpoint `$breakpointId`.'),
+      ],
+    );
   }
 
   /// Handles the evaluate_expression tool request.
   Future<CallToolResult> _handleEvalExpression(CallToolRequest req) async {
-    final expression = req.arguments!['expression'] as String;
+    final expression = req.arguments!['expression']! as String;
     final frameIndex = (req.arguments?['frame_index'] as num?)?.toInt();
 
     if (frameIndex != null) {
       stderr.writeln(
-          '[mcp:evaluate_expression] Evaluating in frame $frameIndex: $expression');
+        '[mcp:evaluate_expression] Evaluating in frame $frameIndex: $expression',
+      );
     } else {
       stderr.writeln(
-          '[mcp:evaluate_expression] Evaluating in library: $expression');
+        '[mcp:evaluate_expression] Evaluating in library: $expression',
+      );
     }
 
     final dynamic res;
@@ -249,10 +261,11 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     return CallToolResult(
       content: [
         TextContent(
-            text: 'Evaluation Result\n'
-                '- Kind: $kindStr\n'
-                '- Value: $valStr\n'
-                '- Class: $classStr')
+          text: 'Evaluation Result\n'
+              '- Kind: $kindStr\n'
+              '- Value: $valStr\n'
+              '- Class: $classStr',
+        ),
       ],
     );
   }

@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:vm_service/vm_service.dart';
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for fetching and statefully buffering console
 /// stdout, stderr, and developer log streams from the connected application.
@@ -37,7 +38,7 @@ base mixin ConsoleLoggingSupport
             'Read recent console logs from stdout, stderr, and developer streams.',
         inputSchema: ObjectSchema(
           properties: {
-            'limit': limitSchema(defaultValue: 50.0),
+            'limit': limitSchema(defaultValue: 50),
             'format': StringSchema(
               description:
                   'Response format: markdown or json (default: markdown).',
@@ -58,15 +59,19 @@ base mixin ConsoleLoggingSupport
 
     // Subscribe to stdout and stderr streams using helper
     _listenToByteStream(
-            EventStreams.kStdout, '[STDOUT]', vmService!.onStdoutEvent)
-        .then((sub) => stdoutSub = sub);
+      EventStreams.kStdout,
+      '[STDOUT]',
+      vmService!.onStdoutEvent,
+    ).then((sub) => stdoutSub = sub);
     _listenToByteStream(
-            EventStreams.kStderr, '[STDERR]', vmService!.onStderrEvent)
-        .then((sub) => stderrSub = sub);
+      EventStreams.kStderr,
+      '[STDERR]',
+      vmService!.onStderrEvent,
+    ).then((sub) => stderrSub = sub);
 
     // Subscribe to developer logs stream
     vmService!.streamListen(EventStreams.kLogging).then((_) {
-      loggingSub = vmService!.onLoggingEvent.listen((Event event) {
+      loggingSub = vmService!.onLoggingEvent.listen((event) {
         final logRecord = event.logRecord;
         if (logRecord != null) {
           final messageRef = logRecord.message;
@@ -124,7 +129,7 @@ base mixin ConsoleLoggingSupport
     if (vmService == null) return null;
     try {
       await vmService!.streamListen(streamId);
-      return eventStream.listen((Event event) {
+      return eventStream.listen((event) {
         final bytes = event.bytes;
         if (bytes != null) {
           try {
@@ -137,7 +142,8 @@ base mixin ConsoleLoggingSupport
       });
     } catch (e) {
       stderr.writeln(
-          '[mcp:logging] Error listening to byte stream $streamId: $e');
+        '[mcp:logging] Error listening to byte stream $streamId: $e',
+      );
       return null;
     }
   }
@@ -147,7 +153,8 @@ base mixin ConsoleLoggingSupport
     final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 50;
     final maxLimit = limit.clamp(1, 200);
     stderr.writeln(
-        '[mcp:fetch_console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$maxLimit');
+      '[mcp:fetch_console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$maxLimit',
+    );
 
     final totalLines = logBuffer.length;
     final startIndex = totalLines > maxLimit ? totalLines - maxLimit : 0;

@@ -19,8 +19,10 @@ void main() {
   group('PathResolver', () {
     test('passes system/internal/non-path URIs through unchanged', () {
       expect(resolver.resolveToAbsolutePath('dart:core'), equals('dart:core'));
-      expect(resolver.resolveToAbsolutePath('org-dartlang-sdk:///sdk.dart'),
-          equals('org-dartlang-sdk:///sdk.dart'));
+      expect(
+        resolver.resolveToAbsolutePath('org-dartlang-sdk:///sdk.dart'),
+        equals('org-dartlang-sdk:///sdk.dart'),
+      );
       expect(resolver.resolveToAbsolutePath('native'), equals('native'));
     });
 
@@ -66,11 +68,17 @@ void main() {
       await nodeModulesFile.create(recursive: true);
 
       expect(
-          resolver.resolveToAbsolutePath('pkg/config'), equals('pkg/config'));
-      expect(resolver.resolveToAbsolutePath('pkg/main.dart'),
-          equals('pkg/main.dart'));
-      expect(resolver.resolveToAbsolutePath('pkg/index.js'),
-          equals('pkg/index.js'));
+        resolver.resolveToAbsolutePath('pkg/config'),
+        equals('pkg/config'),
+      );
+      expect(
+        resolver.resolveToAbsolutePath('pkg/main.dart'),
+        equals('pkg/main.dart'),
+      );
+      expect(
+        resolver.resolveToAbsolutePath('pkg/index.js'),
+        equals('pkg/index.js'),
+      );
     });
 
     test('caches resolved paths', () async {

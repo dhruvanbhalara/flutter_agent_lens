@@ -1,16 +1,19 @@
 import 'dart:async';
-import 'package:stream_channel/stream_channel.dart';
-import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
-import 'package:test/test.dart';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:stream_channel/stream_channel.dart';
+import 'package:test/test.dart';
 
 // Create a concrete class implementing VmConnectionSupport to test it.
 final class TestVmConnectionSupport extends MCPServer
     with ToolsSupport, VmConnectionSupport {
   TestVmConnectionSupport()
       : super.fromStreamChannel(
-          StreamChannel<String>(StreamController<String>().stream,
-              StreamController<String>().sink),
+          StreamChannel<String>(
+            StreamController<String>().stream,
+            StreamController<String>().sink,
+          ),
           implementation: Implementation(name: 'test', version: '1.0.0'),
         );
 }

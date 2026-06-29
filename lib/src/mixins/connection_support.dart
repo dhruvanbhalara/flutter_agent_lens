@@ -1,15 +1,16 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:dtd/dtd.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/console_logging_support.dart';
+import 'package:flutter_agent_lens/src/mixins/dtd_support.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/path_resolver.dart';
+import 'package:flutter_agent_lens/src/port_discovery.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
-import 'package:dtd/dtd.dart';
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
-import 'console_logging_support.dart';
-import 'dtd_support.dart';
-import '../port_discovery.dart';
-import '../path_resolver.dart';
 
 /// Support mixin providing tools for connecting, disconnecting, retrieving
 /// app information, and autodiscovering running Flutter/Dart applications.
@@ -22,7 +23,6 @@ base mixin ConnectionSupport
         RootsTrackingSupport {
   /// Registers all connection-related tools in the MCP server.
   void registerConnectionTools() {
-
     registerTool(
       Tool(
         name: McpTool.connect.name,
@@ -98,10 +98,11 @@ base mixin ConnectionSupport
   /// Handles the connect tool request.
   Future<CallToolResult> _handleConnect(CallToolRequest req) async {
     final rawUri = switch (req.arguments) {
-      {'uri': String uri} => uri,
-      {'vmServiceUri': String uri} => uri,
+      {'uri': final String uri} => uri,
+      {'vmServiceUri': final String uri} => uri,
       _ => throw ArgumentError(
-          'Required parameter "uri" or "vmServiceUri" is missing.'),
+          'Required parameter "uri" or "vmServiceUri" is missing.',
+        ),
     };
     try {
       stderr.writeln('[mcp:connect] Attempting connection to: $rawUri');
@@ -116,7 +117,8 @@ base mixin ConnectionSupport
             if (firstUri.isScheme('file')) {
               workspaceRoot = firstUri.toFilePath();
               stderr.writeln(
-                  '[mcp:connect] Resolved workspace root from client: $workspaceRoot');
+                '[mcp:connect] Resolved workspace root from client: $workspaceRoot',
+              );
             }
           }
         } catch (e) {
@@ -128,27 +130,31 @@ base mixin ConnectionSupport
         pathResolver = PathResolver(workspaceRoot!);
       }
 
-      String uriToConnect = rawUri;
+      var uriToConnect = rawUri;
       if (isDtdUri(rawUri)) {
         try {
           uriToConnect = await resolveDtdToVmServiceUri(rawUri);
           stderr.writeln(
-              '[mcp:connect] DTD resolved VM Service URI: $uriToConnect');
+            '[mcp:connect] DTD resolved VM Service URI: $uriToConnect',
+          );
 
           if (this is DtdSupport) {
             final dtd = this as DtdSupport;
             try {
               stderr.writeln(
-                  '[mcp:connect] Initializing DTD client for DTD URI: $rawUri');
+                '[mcp:connect] Initializing DTD client for DTD URI: $rawUri',
+              );
               final parsedDtdUri = Uri.parse(rawUri);
               await dtd.dtdClient?.close();
               dtd.dtdClient = await DartToolingDaemon.connect(parsedDtdUri);
               dtd.dtdUri = rawUri;
               stderr.writeln(
-                  '[mcp:connect] DTD client initialized successfully.');
+                '[mcp:connect] DTD client initialized successfully.',
+              );
             } catch (dtdErr) {
               stderr.writeln(
-                  '[mcp:connect] Failed to initialize DTD client: $dtdErr');
+                '[mcp:connect] Failed to initialize DTD client: $dtdErr',
+              );
             }
           }
         } catch (e) {
@@ -158,7 +164,7 @@ base mixin ConnectionSupport
                 text:
                     'Connection failed: Failed to resolve DTD URI to VM Service URI: $e\n'
                     'Please verify that DTD is running and has connected apps.',
-              )
+              ),
             ],
             isError: true,
           );
@@ -171,7 +177,8 @@ base mixin ConnectionSupport
       vmService = await vmServiceConnectUri(wsUri).timeout(
         const Duration(seconds: 10),
         onTimeout: () => throw TimeoutException(
-            'Timed out connecting to VM Service at $wsUri'),
+          'Timed out connecting to VM Service at $wsUri',
+        ),
       );
 
       final vm = await vmService!.getVM();
@@ -179,8 +186,9 @@ base mixin ConnectionSupport
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Connection failed: No active isolates found in the Dart VM.')
+              text:
+                  'Connection failed: No active isolates found in the Dart VM.',
+            ),
           ],
           isError: true,
         );
@@ -188,21 +196,22 @@ base mixin ConnectionSupport
       final activeIsolates =
           vm.isolates!.where((i) => i.isSystemIsolate != true).toList();
       if (activeIsolates.isNotEmpty) {
-        isolateId = activeIsolates.first.id!;
+        isolateId = activeIsolates.first.id;
       } else {
-        isolateId = vm.isolates!.first.id!;
+        isolateId = vm.isolates!.first.id;
       }
       final ver = await vmService!.getVersion();
 
       try {
-        serviceStreamSub = vmService!.onServiceEvent.listen((Event event) {
+        serviceStreamSub = vmService!.onServiceEvent.listen((event) {
           final service = event.service;
           final method = event.method;
           if (service == null || method == null) return;
           if (event.kind == EventKind.kServiceRegistered) {
             registeredMethodsForService[service] = method;
             stderr.writeln(
-                '[mcp:service] Registered service: $service -> $method');
+              '[mcp:service] Registered service: $service -> $method',
+            );
           } else if (event.kind == EventKind.kServiceUnregistered) {
             registeredMethodsForService.remove(service);
             stderr.writeln('[mcp:service] Unregistered service: $service');
@@ -211,7 +220,8 @@ base mixin ConnectionSupport
         await vmService!.streamListen(EventStreams.kService);
         await Future<void>.delayed(const Duration(milliseconds: 100));
         stderr.writeln(
-            '[mcp:connect] Service stream seeded: ${registeredMethodsForService.keys.toList()}');
+          '[mcp:connect] Service stream seeded: ${registeredMethodsForService.keys.toList()}',
+        );
       } catch (e) {
         stderr.writeln('[mcp:connect] Error seeding service stream: $e');
       }
@@ -232,17 +242,20 @@ base mixin ConnectionSupport
       }
 
       final selectedIsolateName = vm.isolates!
-          .firstWhere((i) => i.id == isolateId,
-              orElse: () => vm.isolates!.first)
+          .firstWhere(
+            (i) => i.id == isolateId,
+            orElse: () => vm.isolates!.first,
+          )
           .name;
 
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Successfully connected to VM Service.\n'
-                  '- VM version: ${ver.major}.${ver.minor}\n'
-                  '- Main Isolate: $selectedIsolateName ($isolateId)\n'
-                  '- Workspace Root configured: ${workspaceRoot ?? "None"}')
+            text: 'Successfully connected to VM Service.\n'
+                '- VM version: ${ver.major}.${ver.minor}\n'
+                '- Main Isolate: $selectedIsolateName ($isolateId)\n'
+                '- Workspace Root configured: ${workspaceRoot ?? "None"}',
+          ),
         ],
       );
     } catch (e) {
@@ -254,7 +267,7 @@ base mixin ConnectionSupport
                   'Connection failed: the URI does not respond as a VM Service endpoint.\n'
                   'If you passed a Dart Tooling Daemon URI, run discover_apps instead.\n'
                   'URI tried: $rawUri',
-            )
+            ),
           ],
           isError: true,
         );
@@ -296,7 +309,7 @@ base mixin ConnectionSupport
     final vm = await vmService!.getVM();
     final isolate = await vmService!.getIsolate(isolateId!);
 
-    double fpsVal = 60.0;
+    var fpsVal = 60.0;
     try {
       final fpsResponse = await vmService!.callServiceExtension(
         'ext.flutter.getDisplayRefreshRate',
@@ -331,11 +344,13 @@ base mixin ConnectionSupport
       },
       if (includeExtensions) 'flutterExtensions': flutterExtensions,
       'isolates': (vm.isolates ?? [])
-          .map((i) => {
-                'id': i.id,
-                'name': i.name,
-                'isSystem': i.isSystemIsolate ?? false,
-              })
+          .map(
+            (i) => {
+              'id': i.id,
+              'name': i.name,
+              'isSystem': i.isSystemIsolate ?? false,
+            },
+          )
           .toList(),
     };
 
@@ -357,18 +372,24 @@ base mixin ConnectionSupport
     if (includeExtensions) {
       md
         ..writeln('FLUTTER EXTENSIONS')
-        ..writeln(flutterExtensions.isEmpty
-            ? 'None'
-            : flutterExtensions.map((e) => '- $e').join('\n'))
+        ..writeln(
+          flutterExtensions.isEmpty
+              ? 'None'
+              : flutterExtensions.map((e) => '- $e').join('\n'),
+        )
         ..writeln();
     }
 
     md
       ..writeln('ISOLATES')
-      ..writeln((vm.isolates ?? [])
-          .map((i) =>
-              '- ${i.name} (${i.id}, system: ${i.isSystemIsolate ?? false})')
-          .join('\n'));
+      ..writeln(
+        (vm.isolates ?? [])
+            .map(
+              (i) =>
+                  '- ${i.name} (${i.id}, system: ${i.isSystemIsolate ?? false})',
+            )
+            .join('\n'),
+      );
 
     return serializeDualFormat(
       title: 'App Information Details',
@@ -383,7 +404,8 @@ base mixin ConnectionSupport
     final workspace = req.arguments?['workspace_root'] as String?;
     final autoConnect = req.arguments?['autoConnect'] as bool? ?? true;
     stderr.writeln(
-        '[mcp:autodiscover] Starting auto-discovery, workspace=$workspace, autoConnect=$autoConnect');
+      '[mcp:autodiscover] Starting auto-discovery, workspace=$workspace, autoConnect=$autoConnect',
+    );
     final runningApps = await discoverActiveApps();
     stderr.writeln('[mcp:autodiscover] Found ${runningApps.length} app(s)');
 
@@ -391,8 +413,9 @@ base mixin ConnectionSupport
       return CallToolResult(
         content: [
           TextContent(
-              text: 'No active Flutter applications were discovered. '
-                  'Please make sure your app is running in debug mode, or connect manually using connect.')
+            text: 'No active Flutter applications were discovered. '
+                'Please make sure your app is running in debug mode, or connect manually using connect.',
+          ),
         ],
         isError: true,
       );
@@ -427,9 +450,10 @@ base mixin ConnectionSupport
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Found one application (${app.projectName}) at ${app.serviceUri}, but connection failed.\n'
-                    'Error: ${connectResult.content.map((c) => c is TextContent ? c.text : c.toString()).join("\n")}')
+              text:
+                  'Found one application (${app.projectName}) at ${app.serviceUri}, but connection failed.\n'
+                  'Error: ${connectResult.content.map((c) => c is TextContent ? c.text : c.toString()).join("\n")}',
+            ),
           ],
           isError: true,
         );
@@ -438,10 +462,11 @@ base mixin ConnectionSupport
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Successfully discovered and connected to application:\n'
-                  '- Project Name: ${app.projectName}\n'
-                  '- Service URI: ${app.serviceUri}\n'
-                  '- Workspace Root: ${workspace ?? "None"}')
+            text: 'Successfully discovered and connected to application:\n'
+                '- Project Name: ${app.projectName}\n'
+                '- Service URI: ${app.serviceUri}\n'
+                '- Workspace Root: ${workspace ?? "None"}',
+          ),
         ],
       );
     }

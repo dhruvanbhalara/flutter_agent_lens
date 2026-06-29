@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/path_resolver.dart';
 import 'package:vm_service/vm_service.dart';
-import '../enums/mcp_tool.dart';
-import '../path_resolver.dart';
 
 /// Base support mixin providing VM connection management, isolate management,
 /// and common schema definitions for Flutter Agent Lens MCP tools.
@@ -30,7 +31,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   /// Tracks dynamically registered service methods (e.g. 'hotRestart' -> 's0.hotRestart').
   final Map<String, String> registeredMethodsForService = {};
 
-  /// Subscription to the VM Service's stream of service registration events.
+  // Subscription persists for the lifetime of the server connection.
+  // ignore: cancel_subscriptions
   StreamSubscription? serviceStreamSub;
 
   /// Performs cleanup operations on active streams and daemon clients.
@@ -65,7 +67,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     return CallToolResult(
       content: [
         TextContent(
-            text: 'Not connected to a running application. Run connect first.')
+          text: 'Not connected to a running application. Run connect first.',
+        ),
       ],
       isError: true,
     );
@@ -98,7 +101,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
         } catch (e, st) {
           if (requiresConnection && _isCollectedError(e)) {
             stderr.writeln(
-                '[mcp:${mcpTool.name}] Detected collected/sentinel error, attempting to refresh isolate ID and retry...');
+              '[mcp:${mcpTool.name}] Detected collected/sentinel error, attempting to refresh isolate ID and retry...',
+            );
             final refreshed = await refreshIsolateId();
             if (refreshed) {
               try {
@@ -109,8 +113,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
                 return CallToolResult(
                   content: [
                     TextContent(
-                        text:
-                            '${mcpTool.name} execution failed (retry): $retryErr')
+                      text:
+                          '${mcpTool.name} execution failed (retry): $retryErr',
+                    ),
                   ],
                   isError: true,
                 );
@@ -121,7 +126,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
           stderr.writeln('[mcp:${mcpTool.name}] STACKTRACE: $st');
           return CallToolResult(
             content: [
-              TextContent(text: '${mcpTool.name} execution failed: $e')
+              TextContent(text: '${mcpTool.name} execution failed: $e'),
             ],
             isError: true,
           );
@@ -156,7 +161,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
         }
         cachedLibraryId = null;
         stderr.writeln(
-            '[mcp] Dynamically refreshed active isolate ID: $isolateId');
+          '[mcp] Dynamically refreshed active isolate ID: $isolateId',
+        );
         return true;
       }
     } catch (err) {
@@ -228,7 +234,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   Future<String> resolveDtdToVmServiceUri(String dtdUri) async {
     final wsDtd = normalizeToWsUri(dtdUri);
     stderr.writeln(
-        '[mcp:connect] Connecting to DTD WebSocket to resolve VM Service: $wsDtd');
+      '[mcp:connect] Connecting to DTD WebSocket to resolve VM Service: $wsDtd',
+    );
     WebSocket ws;
     try {
       ws = await WebSocket.connect(wsDtd).timeout(const Duration(seconds: 3));
@@ -237,45 +244,53 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     }
 
     final completer = Completer<String>();
-    ws.listen((message) {
-      try {
-        final decoded = jsonDecode(message as String);
-        if (decoded
-            case {
-              'id': 1001,
-              'result': {
-                'vmServices': [
-                  {'exposedUri': String vmUri} || {'uri': String vmUri},
-                  ...
-                ]
-              }
-            }) {
-          completer.complete(vmUri);
-          ws.close();
-        } else if (decoded case {'id': 1001, 'result': {'vmServices': []}}) {
-          completer.completeError(
-              StateError('DTD reports no running VM Services connected.'));
-          ws.close();
-        } else if (decoded case {'id': 1001, 'error': final error}) {
-          completer.completeError(StateError('DTD returned RPC error: $error'));
-          ws.close();
-        } else if (decoded case {'id': 1001}) {
-          completer
-              .completeError(StateError('Invalid response format from DTD.'));
+    ws.listen(
+      (message) {
+        try {
+          final decoded = jsonDecode(message as String);
+          if (decoded
+              case {
+                'id': 1001,
+                'result': {
+                  'vmServices': [
+                    {'exposedUri': final String vmUri} ||
+                        {'uri': final String vmUri},
+                    ...
+                  ]
+                }
+              }) {
+            completer.complete(vmUri);
+            ws.close();
+          } else if (decoded case {'id': 1001, 'result': {'vmServices': []}}) {
+            completer.completeError(
+              StateError('DTD reports no running VM Services connected.'),
+            );
+            ws.close();
+          } else if (decoded case {'id': 1001, 'error': final error}) {
+            completer
+                .completeError(StateError('DTD returned RPC error: $error'));
+            ws.close();
+          } else if (decoded case {'id': 1001}) {
+            completer
+                .completeError(StateError('Invalid response format from DTD.'));
+            ws.close();
+          }
+        } catch (e) {
+          if (!completer.isCompleted) completer.completeError(e);
           ws.close();
         }
-      } catch (e) {
-        if (!completer.isCompleted) completer.completeError(e);
-        ws.close();
-      }
-    }, onError: (e) {
-      if (!completer.isCompleted) completer.completeError(e as Object);
-    }, onDone: () {
-      if (!completer.isCompleted) {
-        completer.completeError(
-            StateError('DTD connection closed before response was received.'));
-      }
-    });
+      },
+      onError: (e) {
+        if (!completer.isCompleted) completer.completeError(e as Object);
+      },
+      onDone: () {
+        if (!completer.isCompleted) {
+          completer.completeError(
+            StateError('DTD connection closed before response was received.'),
+          );
+        }
+      },
+    );
 
     final request = {
       'jsonrpc': '2.0',
@@ -285,11 +300,15 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     };
     ws.add(jsonEncode(request));
 
-    return completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-      ws.close();
-      throw TimeoutException(
-          'Timed out waiting for DTD getVmServices response.');
-    });
+    return completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        ws.close();
+        throw TimeoutException(
+          'Timed out waiting for DTD getVmServices response.',
+        );
+      },
+    );
   }
 
   /// Locates the library ID corresponding to the main application package to run expression evaluations.

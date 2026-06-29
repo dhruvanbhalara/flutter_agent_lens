@@ -4,6 +4,13 @@ import 'package:path/path.dart' as p;
 
 /// Represents a running Flutter or Dart application discovered on the local machine.
 final class DiscoveredApp {
+  /// Creates a new [DiscoveredApp] instance.
+  DiscoveredApp({
+    required this.serviceUri,
+    required this.projectName,
+    required this.configPath,
+  });
+
   /// The WebSocket VM Service URI of the application (e.g. `ws://127.0.0.1:8181/auth_token/ws`).
   final String serviceUri;
 
@@ -12,13 +19,6 @@ final class DiscoveredApp {
 
   /// A descriptive identifier indicating how this app was discovered.
   final String configPath;
-
-  /// Creates a new [DiscoveredApp] instance.
-  DiscoveredApp({
-    required this.serviceUri,
-    required this.projectName,
-    required this.configPath,
-  });
 }
 
 /// Finds running Flutter/Dart applications by scanning OS processes.
@@ -33,11 +33,12 @@ Future<List<DiscoveredApp>> discoverActiveApps() async {
     if (Platform.isWindows) {
       final result = await Process.run('powershell', [
         '-Command',
-        'Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like "*development-service*" } | Select-Object CommandLine, ProcessId, WorkingDirectory | ConvertTo-Json'
+        r'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*development-service*" } | Select-Object CommandLine, ProcessId, WorkingDirectory | ConvertTo-Json',
       ]);
       if (result.exitCode != 0) {
         stderr.writeln(
-            '[discovery] PowerShell command failed: ${result.exitCode}');
+          '[discovery] PowerShell command failed: ${result.exitCode}',
+        );
         return apps;
       }
 
@@ -52,7 +53,7 @@ Future<List<DiscoveredApp>> discoverActiveApps() async {
         return apps;
       }
 
-      final List<dynamic> processes = decoded is List ? decoded : [decoded];
+      final processes = decoded is List ? decoded : [decoded];
       final vmUriPattern = RegExp(r'--vm-service-uri=(http://\S+)');
 
       for (final proc in processes) {
@@ -70,7 +71,11 @@ Future<List<DiscoveredApp>> discoverActiveApps() async {
             : 'Flutter App (pid $pid)';
 
         await _probeAndAddApp(
-            rawVmUri, projectName, 'process scan (DDS pid $pid)', apps);
+          rawVmUri,
+          projectName,
+          'process scan (DDS pid $pid)',
+          apps,
+        );
       }
     } else {
       final psResult = await Process.run('ps', ['aux']);
@@ -92,17 +97,19 @@ Future<List<DiscoveredApp>> discoverActiveApps() async {
         final pidMatch = pidPattern.firstMatch(line);
         if (uriMatch == null || pidMatch == null) {
           stderr.writeln(
-              '[discovery] DDS process found but could not parse: $line');
+            '[discovery] DDS process found but could not parse: $line',
+          );
           continue;
         }
 
         final rawVmUri = uriMatch.group(1)!;
         final pid = pidMatch.group(1)!;
         stderr.writeln(
-            '[discovery] Found DDS process pid=$pid, rawVmUri=$rawVmUri');
+          '[discovery] Found DDS process pid=$pid, rawVmUri=$rawVmUri',
+        );
 
         // Get project name from the process's working directory.
-        String projectName = 'Flutter App (pid $pid)';
+        var projectName = 'Flutter App (pid $pid)';
         try {
           final cwdResult =
               await Process.run('lsof', ['-p', pid, '-Fn', '-d', 'cwd']);
@@ -123,10 +130,15 @@ Future<List<DiscoveredApp>> discoverActiveApps() async {
         }
 
         await _probeAndAddApp(
-            rawVmUri, projectName, 'process scan (DDS pid $pid)', apps);
+          rawVmUri,
+          projectName,
+          'process scan (DDS pid $pid)',
+          apps,
+        );
       }
       stderr.writeln(
-          '[discovery] Scanned $ddsCount DDS processes, found ${apps.length} app(s)');
+        '[discovery] Scanned $ddsCount DDS processes, found ${apps.length} app(s)',
+      );
     }
   } catch (e) {
     stderr.writeln('[discovery] Process scan failed: $e');
@@ -157,11 +169,13 @@ Future<void> _probeAndAddApp(
       final locationUri = Uri.parse(location);
       final wsUriParam = locationUri.queryParameters['uri'];
       if (wsUriParam != null && wsUriParam.isNotEmpty) {
-        apps.add(DiscoveredApp(
-          serviceUri: wsUriParam,
-          projectName: projectName,
-          configPath: configPath,
-        ));
+        apps.add(
+          DiscoveredApp(
+            serviceUri: wsUriParam,
+            projectName: projectName,
+            configPath: configPath,
+          ),
+        );
       } else {
         final locPath = locationUri.path;
         final pathSegments =
@@ -171,11 +185,13 @@ Future<void> _probeAndAddApp(
           final ddsPort = locationUri.port;
           final ddsHost = locationUri.host;
           final wsUri = 'ws://$ddsHost:$ddsPort/$ddsToken/ws';
-          apps.add(DiscoveredApp(
-            serviceUri: wsUri,
-            projectName: projectName,
-            configPath: configPath,
-          ));
+          apps.add(
+            DiscoveredApp(
+              serviceUri: wsUri,
+              projectName: projectName,
+              configPath: configPath,
+            ),
+          );
         }
       }
     } else if (statusCode == 200) {
@@ -183,14 +199,17 @@ Future<void> _probeAndAddApp(
       final pathSegments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
       final authToken = pathSegments.isNotEmpty ? pathSegments.first : '';
       final wsUri = 'ws://${uri.host}:${uri.port}/$authToken/ws';
-      apps.add(DiscoveredApp(
-        serviceUri: wsUri,
-        projectName: projectName,
-        configPath: configPath,
-      ));
+      apps.add(
+        DiscoveredApp(
+          serviceUri: wsUri,
+          projectName: projectName,
+          configPath: configPath,
+        ),
+      );
     } else {
       stderr.writeln(
-          '[discovery] Unexpected response from raw VM service: status=$statusCode');
+        '[discovery] Unexpected response from raw VM service: status=$statusCode',
+      );
     }
   } catch (e) {
     stderr

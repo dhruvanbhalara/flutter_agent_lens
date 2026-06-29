@@ -1,19 +1,19 @@
 import 'dart:async';
-import 'package:dart_mcp/server.dart';
-import 'package:stream_channel/stream_channel.dart';
 
-import 'src/mixins/vm_connection_support.dart';
-import 'src/mixins/connection_support.dart';
-import 'src/mixins/console_logging_support.dart';
-import 'src/mixins/debugger_support.dart';
-import 'src/mixins/memory_debugging_support.dart';
-import 'src/mixins/network_capture_support.dart';
-import 'src/mixins/performance_profiling_support.dart';
-import 'src/mixins/screenshot_support.dart';
-import 'src/mixins/widget_inspection_support.dart';
-import 'src/mixins/bundle_analysis_support.dart';
-import 'src/mixins/deeplink_validation_support.dart';
-import 'src/mixins/dtd_support.dart';
+import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/mixins/bundle_analysis_support.dart';
+import 'package:flutter_agent_lens/src/mixins/connection_support.dart';
+import 'package:flutter_agent_lens/src/mixins/console_logging_support.dart';
+import 'package:flutter_agent_lens/src/mixins/debugger_support.dart';
+import 'package:flutter_agent_lens/src/mixins/deeplink_validation_support.dart';
+import 'package:flutter_agent_lens/src/mixins/dtd_support.dart';
+import 'package:flutter_agent_lens/src/mixins/memory_debugging_support.dart';
+import 'package:flutter_agent_lens/src/mixins/network_capture_support.dart';
+import 'package:flutter_agent_lens/src/mixins/performance_profiling_support.dart';
+import 'package:flutter_agent_lens/src/mixins/screenshot_support.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/mixins/widget_inspection_support.dart';
+import 'package:stream_channel/stream_channel.dart';
 
 /// Flutter Agent Lens MCP Server class.
 ///
@@ -36,7 +36,6 @@ final class FlutterAgentLensServer extends MCPServer
         BundleAnalysisSupport,
         DeeplinkValidationSupport,
         DtdSupport {
-  
   /// Creates a new [FlutterAgentLensServer] instance communicating over the given [channel].
   FlutterAgentLensServer({required StreamChannel<String> channel})
       : super.fromStreamChannel(

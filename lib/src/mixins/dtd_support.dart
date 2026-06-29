@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:dtd/dtd.dart';
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 
 /// Support mixin providing tools for connecting to and interacting with the
 /// Dart Tooling Daemon (DTD) to query IDE status and running VM services.
@@ -17,7 +17,6 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Registers all DTD-related tools.
   void registerDtdTools() {
-
     registerTool(
       Tool(
         name: McpTool.connectDtd.name,
@@ -53,7 +52,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the connect_dtd tool request.
   Future<CallToolResult> _handleConnectDtd(CallToolRequest req) async {
-    final uriStr = req.arguments!['uri'] as String;
+    final uriStr = req.arguments!['uri']! as String;
     try {
       stderr.writeln('[mcp:dtd] Connecting to DTD at: $uriStr');
       final uri = Uri.parse(uriStr);
@@ -99,7 +98,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     if (client == null) {
       return CallToolResult(
         content: [
-          TextContent(text: 'Not connected to DTD. Run connect_dtd first.')
+          TextContent(text: 'Not connected to DTD. Run connect_dtd first.'),
         ],
         isError: true,
       );
@@ -126,7 +125,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               text: 'No active editor/IDE service is registered in DTD. '
                   'Ensure your IDE is running and connected to DTD.\n'
                   'Registered services: ${registered.clientServices.map((s) => s.name).join(", ")}',
-            )
+            ),
           ],
           isError: true,
         );

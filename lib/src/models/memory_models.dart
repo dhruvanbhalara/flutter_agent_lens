@@ -1,5 +1,12 @@
 /// Represents the allocations and byte counts of a single Dart/Flutter class.
 final class ClassAllocation {
+  /// Creates a new [ClassAllocation] data container.
+  ClassAllocation({
+    required this.name,
+    required this.bytes,
+    required this.instances,
+  });
+
   /// The fully-qualified name of the class.
   final String name;
 
@@ -8,13 +15,6 @@ final class ClassAllocation {
 
   /// Total number of active instances of this class on the heap.
   final int instances;
-
-  /// Creates a new [ClassAllocation] data container.
-  ClassAllocation({
-    required this.name,
-    required this.bytes,
-    required this.instances,
-  });
 
   /// Serializes class allocation details into a key-value Map.
   Map<String, dynamic> toMap() {
@@ -28,6 +28,16 @@ final class ClassAllocation {
 
 /// Represents a captured heap allocation state at a point in time.
 final class MemorySnapshot {
+  /// Creates a new [MemorySnapshot] container.
+  MemorySnapshot({
+    required this.name,
+    required this.timestamp,
+    required this.heapUsage,
+    required this.heapCapacity,
+    required this.externalUsage,
+    required this.topClasses,
+  });
+
   /// Descriptive name of the snapshot.
   final String name;
 
@@ -45,16 +55,6 @@ final class MemorySnapshot {
 
   /// Allocation stats for the top classes by byte size.
   final List<ClassAllocation> topClasses;
-
-  /// Creates a new [MemorySnapshot] container.
-  MemorySnapshot({
-    required this.name,
-    required this.timestamp,
-    required this.heapUsage,
-    required this.heapCapacity,
-    required this.externalUsage,
-    required this.topClasses,
-  });
 
   /// Serializes the memory snapshot details into a nested Map.
   Map<String, dynamic> toMap() {

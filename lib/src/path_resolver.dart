@@ -3,6 +3,9 @@ import 'package:path/path.dart' as p;
 
 /// Maps VM-reported file URIs (such as `package:foo/main.dart` or `file://`) to local absolute paths.
 final class PathResolver {
+  /// Creates a new [PathResolver] instance centered around the given [workspaceRoot].
+  PathResolver(this.workspaceRoot);
+
   /// The absolute path of the local Flutter workspace root.
   final String workspaceRoot;
 
@@ -11,9 +14,6 @@ final class PathResolver {
 
   /// Cached dictionary of all files in the workspace (for fallback lookups).
   Map<String, String>? _allWorkspaceFiles;
-
-  /// Creates a new [PathResolver] instance centered around the given [workspaceRoot].
-  PathResolver(this.workspaceRoot);
 
   /// Resolves a VM-reported URI to a local absolute path.
   String resolveToAbsolutePath(String vmUri) {
@@ -32,7 +32,7 @@ final class PathResolver {
       return vmUri;
     }
 
-    String relativePath = vmUri;
+    var relativePath = vmUri;
 
     // 1. Convert package URIs: package:my_app/src/home.dart -> lib/src/home.dart
     if (vmUri.startsWith('package:')) {

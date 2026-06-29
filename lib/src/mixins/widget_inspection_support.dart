@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
-import 'package:vm_service/vm_service.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:path/path.dart' as p;
-import '../enums/mcp_tool.dart';
-import 'vm_connection_support.dart';
+import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for widget inspection, layout diagnostics, and rebuild tracking.
 base mixin WidgetInspectionSupport
@@ -30,7 +31,6 @@ base mixin WidgetInspectionSupport
 
   /// Registers all widget inspection and diagnostic tools.
   void registerWidgetTools() {
-
     registerTool(
       Tool(
         name: McpTool.getWidgetRebuildCounts.name,
@@ -208,17 +208,19 @@ base mixin WidgetInspectionSupport
   Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
     final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
     stderr.writeln(
-        '[mcp:widget_rebuild_counts] Starting rebuild tracking, duration=${duration}s');
+      '[mcp:widget_rebuild_counts] Starting rebuild tracking, duration=${duration}s',
+    );
 
     if (!await _isTrackRebuildSupported()) {
       stderr.writeln(
-          '[mcp:widget_rebuild_counts] trackRebuildDirtyWidgets NOT available');
+        '[mcp:widget_rebuild_counts] trackRebuildDirtyWidgets NOT available',
+      );
       return CallToolResult(
         content: [
           TextContent(
             text: 'Widget rebuild tracking is not available.\n'
                 'This extension requires a debug-mode Flutter app.',
-          )
+          ),
         ],
         isError: true,
       );
@@ -228,11 +230,12 @@ base mixin WidgetInspectionSupport
     final idToFile = <String, String>{};
 
     stderr.writeln(
-        '[mcp:widget_rebuild_counts] Enabling trackRebuildDirtyWidgets...');
+      '[mcp:widget_rebuild_counts] Enabling trackRebuildDirtyWidgets...',
+    );
     await _enableRebuildTracking(idToName, idToFile);
 
     final rebuildEvents = <Map<String, dynamic>>[];
-    final extSub = vmService!.onExtensionEvent.listen((Event event) {
+    final extSub = vmService!.onExtensionEvent.listen((event) {
       if (event.extensionKind == 'Flutter.RebuiltWidgets') {
         final data = event.extensionData?.data;
         if (data != null) {
@@ -242,7 +245,8 @@ base mixin WidgetInspectionSupport
     });
 
     stderr.writeln(
-        '[mcp:widget_rebuild_counts] Collecting rebuild events for ${duration}s...');
+      '[mcp:widget_rebuild_counts] Collecting rebuild events for ${duration}s...',
+    );
     await Future.delayed(Duration(seconds: duration));
 
     await extSub.cancel();
@@ -253,7 +257,8 @@ base mixin WidgetInspectionSupport
     );
 
     stderr.writeln(
-        '[mcp:widget_rebuild_counts] Collected ${rebuildEvents.length} rebuild events');
+      '[mcp:widget_rebuild_counts] Collected ${rebuildEvents.length} rebuild events',
+    );
 
     final widgetCounts = <String, int>{};
     for (final event in rebuildEvents) {
@@ -271,7 +276,8 @@ base mixin WidgetInspectionSupport
     }
 
     stderr.writeln(
-        '[mcp:widget_rebuild_counts] Location map: ${idToName.length} named, ${idToFile.length} with files');
+      '[mcp:widget_rebuild_counts] Location map: ${idToName.length} named, ${idToFile.length} with files',
+    );
 
     final widgets = <Map<String, dynamic>>[];
     widgetCounts.forEach((locId, count) {
@@ -293,13 +299,15 @@ base mixin WidgetInspectionSupport
     final mdBuffer = StringBuffer('Top Rebuilding Widgets\n\n');
     if (widgets.isEmpty) {
       mdBuffer.writeln(
-          'No rebuilds captured. Make sure you interacted with the app while tracking.');
+        'No rebuilds captured. Make sure you interacted with the app while tracking.',
+      );
     } else {
       mdBuffer.writeln('| Widget | Count | Location |');
       mdBuffer.writeln('| :--- | :--- | :--- |');
       for (final w in widgets) {
         mdBuffer.writeln(
-            '| `${w['widget']}` | `${w['count']}x` | `${w['location']}` |');
+          '| `${w['widget']}` | `${w['count']}x` | `${w['location']}` |',
+        );
       }
     }
 
@@ -315,8 +323,9 @@ base mixin WidgetInspectionSupport
 
   /// Handles the inspect_widget tool request.
   Future<CallToolResult> _handleInspectLayoutConstraints(
-      CallToolRequest req) async {
-    final widgetId = req.arguments!['widgetId'] as String;
+    CallToolRequest req,
+  ) async {
+    final widgetId = req.arguments!['widgetId']! as String;
     stderr.writeln('[mcp:inspect_layout] Inspecting widget: $widgetId');
 
     final response = await vmService!.callServiceExtension(
@@ -407,8 +416,9 @@ base mixin WidgetInspectionSupport
 
   /// Handles the toggle_widget_selection tool request.
   Future<CallToolResult> _handleToggleWidgetSelection(
-      CallToolRequest req) async {
-    final enabled = req.arguments!['enabled'] as bool;
+    CallToolRequest req,
+  ) async {
+    final enabled = req.arguments!['enabled']! as bool;
     stderr.writeln('[mcp:toggle_widget_selection] Setting enabled = $enabled');
 
     await vmService!.callServiceExtension(
@@ -419,16 +429,18 @@ base mixin WidgetInspectionSupport
     return CallToolResult(
       content: [
         TextContent(
-            text:
-                'On-device widget selection overlay is now ${enabled ? "enabled" : "disabled"}.')
+          text:
+              'On-device widget selection overlay is now ${enabled ? "enabled" : "disabled"}.',
+        ),
       ],
     );
   }
 
   /// Handles the toggle_package_widgets tool request.
   Future<CallToolResult> _handleTogglePackageWidgets(
-      CallToolRequest req) async {
-    final enabled = req.arguments!['enabled'] as bool;
+    CallToolRequest req,
+  ) async {
+    final enabled = req.arguments!['enabled']! as bool;
     stderr.writeln('[mcp:toggle_package_widgets] Setting enabled = $enabled');
 
     final root = workspaceRoot;
@@ -465,18 +477,20 @@ base mixin WidgetInspectionSupport
     final widgetInspectorLib = isolate.libraries?.firstWhere(
       (lib) => lib.uri == 'package:flutter/src/widgets/widget_inspector.dart',
       orElse: () => throw StateError(
-          'WidgetInspectorService library not found in target isolate.'),
+        'WidgetInspectorService library not found in target isolate.',
+      ),
     );
 
     final libId = widgetInspectorLib!.id!;
     final pathsLiteral = packagePaths
-        .map((p) => "'${p.replaceAll("'", "\\'")}'")
+        .map((p) => "'${p.replaceAll("'", r"\'")}'")
         .toList()
         .toString();
 
     if (enabled) {
       stderr.writeln(
-          '[mcp:toggle_package_widgets] Adding ${packagePaths.length} pub root directories');
+        '[mcp:toggle_package_widgets] Adding ${packagePaths.length} pub root directories',
+      );
       await vmService!.evaluate(
         isolateId!,
         libId,
@@ -484,7 +498,8 @@ base mixin WidgetInspectionSupport
       );
     } else {
       stderr.writeln(
-          '[mcp:toggle_package_widgets] Removing ${packagePaths.length} pub root directories');
+        '[mcp:toggle_package_widgets] Removing ${packagePaths.length} pub root directories',
+      );
       await vmService!.evaluate(
         isolateId!,
         libId,
@@ -527,7 +542,8 @@ base mixin WidgetInspectionSupport
     final file = File(configPath);
     if (!file.existsSync()) {
       stderr.writeln(
-          '[mcp:package_resolver] package_config.json not found at $configPath');
+        '[mcp:package_resolver] package_config.json not found at $configPath',
+      );
       return directories;
     }
 
@@ -542,7 +558,7 @@ base mixin WidgetInspectionSupport
       final rootUriStr = package['rootUri'] as String?;
       if (rootUriStr == null) continue;
 
-      var uri = Uri.parse(rootUriStr);
+      final uri = Uri.parse(rootUriStr);
       if (!uri.isAbsolute) {
         final absolutePath =
             p.canonicalize(p.join(configDir.path, uri.toFilePath()));
@@ -557,11 +573,12 @@ base mixin WidgetInspectionSupport
 
   /// Handles the toggle_debug_flag tool request.
   Future<CallToolResult> _handleToggleDebugFlag(CallToolRequest req) async {
-    final flagNameInput = req.arguments!['flag_name'] as String;
-    final value = req.arguments!['value'] as String;
+    final flagNameInput = req.arguments!['flag_name']! as String;
+    final value = req.arguments!['value']! as String;
     final flag = FlutterDebugFlag.fromString(flagNameInput);
     stderr.writeln(
-        '[mcp:toggle_debug_flag] Resolved flag $flagNameInput to ${flag.flagName}, setting to value=$value');
+      '[mcp:toggle_debug_flag] Resolved flag $flagNameInput to ${flag.flagName}, setting to value=$value',
+    );
 
     final extensionName = 'ext.flutter.${flag.extensionSuffix}';
     final Map<String, dynamic> args;
@@ -582,7 +599,8 @@ base mixin WidgetInspectionSupport
     return CallToolResult(
       content: [
         TextContent(
-            text: 'Successfully set debug flag `${flag.flagName}` to `$value`.')
+          text: 'Successfully set debug flag `${flag.flagName}` to `$value`.',
+        ),
       ],
     );
   }
@@ -629,7 +647,7 @@ base mixin WidgetInspectionSupport
     } else {
       return CallToolResult(
         content: [
-          TextContent(text: 'Unexpected response format for root widget node.')
+          TextContent(text: 'Unexpected response format for root widget node.'),
         ],
         isError: true,
       );
@@ -698,7 +716,8 @@ base mixin WidgetInspectionSupport
           }
         } catch (e) {
           stderr.writeln(
-              '[mcp:widget] Error resolving child details subtree: $e');
+            '[mcp:widget] Error resolving child details subtree: $e',
+          );
         }
       }
     }
@@ -710,7 +729,11 @@ base mixin WidgetInspectionSupport
           final childMap = Map<String, dynamic>.from(child);
           childrenList[i] = childMap;
           await _expandWidgetChildren(
-              childMap, objectGroup, depth + 1, maxDepth);
+            childMap,
+            objectGroup,
+            depth + 1,
+            maxDepth,
+          );
         }
       }
     }
@@ -733,7 +756,11 @@ base mixin WidgetInspectionSupport
         if (child is Map) {
           childResults.addAll(
             _flattenWidgetTree(
-                Map<String, dynamic>.from(child), depth, maxDepth, projectOnly),
+              Map<String, dynamic>.from(child),
+              depth,
+              maxDepth,
+              projectOnly,
+            ),
           );
         }
       }
@@ -794,8 +821,12 @@ base mixin WidgetInspectionSupport
     for (final child in children) {
       if (child is Map) {
         results.addAll(
-          _flattenWidgetTree(Map<String, dynamic>.from(child), depth + 1,
-              maxDepth, projectOnly),
+          _flattenWidgetTree(
+            Map<String, dynamic>.from(child),
+            depth + 1,
+            maxDepth,
+            projectOnly,
+          ),
         );
       }
     }
@@ -827,20 +858,23 @@ base mixin WidgetInspectionSupport
 
   /// Handles the start_tracking_rebuilds tool request.
   Future<CallToolResult> _handleStartTrackingRebuilds(
-      CallToolRequest req) async {
+    CallToolRequest req,
+  ) async {
     if (isTrackingRebuilds) {
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Already tracking rebuilds. Call stop_tracking_rebuilds first.')
+            text:
+                'Already tracking rebuilds. Call stop_tracking_rebuilds first.',
+          ),
         ],
         isError: true,
       );
     }
 
     stderr.writeln(
-        '[mcp:widget_rebuild_counts] Starting rebuild tracking session...');
+      '[mcp:widget_rebuild_counts] Starting rebuild tracking session...',
+    );
 
     if (!await _isTrackRebuildSupported()) {
       return CallToolResult(
@@ -848,7 +882,7 @@ base mixin WidgetInspectionSupport
           TextContent(
             text: 'Widget rebuild tracking is not available.\n'
                 'This extension requires a debug-mode Flutter app.',
-          )
+          ),
         ],
         isError: true,
       );
@@ -862,12 +896,15 @@ base mixin WidgetInspectionSupport
 
     await _enableRebuildTracking(rebuildIdToName, rebuildIdToFile);
 
-    rebuildSub = vmService!.onExtensionEvent.listen((Event event) {
+    rebuildSub = vmService!.onExtensionEvent.listen((event) {
       if (event.extensionKind == 'Flutter.RebuiltWidgets') {
         final data = event.extensionData?.data;
         if (data != null) {
           _parseLocationsMap(
-              data['locations'], rebuildIdToName, rebuildIdToFile);
+            data['locations'],
+            rebuildIdToName,
+            rebuildIdToFile,
+          );
           _parseNewLocationsMap(data['newLocations'], rebuildIdToFile);
 
           final events = data['events'] as List<dynamic>?;
@@ -887,20 +924,21 @@ base mixin WidgetInspectionSupport
         TextContent(
           text:
               'Rebuild tracking started. Interact with the app now, then call `stop_tracking_rebuilds` to see the report.',
-        )
+        ),
       ],
     );
   }
 
   /// Handles the stop_tracking_rebuilds tool request.
   Future<CallToolResult> _handleStopTrackingRebuilds(
-      CallToolRequest req) async {
+    CallToolRequest req,
+  ) async {
     if (!isTrackingRebuilds) {
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Not tracking rebuilds. Call start_tracking_rebuilds first.')
+            text: 'Not tracking rebuilds. Call start_tracking_rebuilds first.',
+          ),
         ],
         isError: true,
       );
@@ -909,7 +947,8 @@ base mixin WidgetInspectionSupport
     final topN = (req.arguments?['topN'] as num?)?.toInt() ?? 30;
 
     stderr.writeln(
-        '[mcp:widget_rebuild_counts] Stopping rebuild tracking session...');
+      '[mcp:widget_rebuild_counts] Stopping rebuild tracking session...',
+    );
     isTrackingRebuilds = false;
     await rebuildSub?.cancel();
     rebuildSub = null;
@@ -973,10 +1012,12 @@ base mixin WidgetInspectionSupport
 
     if (widgets.isEmpty) {
       output.add(
-          'No rebuilds captured. Make sure you interacted with the app while tracking.');
+        'No rebuilds captured. Make sure you interacted with the app while tracking.',
+      );
     } else {
       output.add(
-          'TOP ${widgets.length < topN ? widgets.length : topN} REBUILDING WIDGETS');
+        'TOP ${widgets.length < topN ? widgets.length : topN} REBUILDING WIDGETS',
+      );
       String getShortFile(String fileLoc) {
         final pathParts = p.split(fileLoc);
         final libIdx = pathParts.indexOf('lib');
@@ -1013,10 +1054,12 @@ base mixin WidgetInspectionSupport
           output.add('- $name rebuilt ${count}x [$shortFile]');
           if (count > 100) {
             output.add(
-                '  -> Wrap in a const constructor, or extract to limit rebuild scope.');
+              '  -> Wrap in a const constructor, or extract to limit rebuild scope.',
+            );
           } else {
             output.add(
-                '  -> Consider optimizing state dependencies or using context.select().');
+              '  -> Consider optimizing state dependencies or using context.select().',
+            );
           }
         }
       }
@@ -1084,15 +1127,17 @@ base mixin WidgetInspectionSupport
 
   /// Handles the trigger_scroll_gesture tool request.
   Future<CallToolResult> _handleScrollGesture(CallToolRequest req) async {
-    final controller = req.arguments!['scroll_controller_expression'] as String;
+    final controller =
+        req.arguments!['scroll_controller_expression']! as String;
     final offset = (req.arguments?['offset'] as num?)?.toDouble() ?? 500.0;
     stderr.writeln(
-        '[mcp:scroll_gesture] Controller: $controller, offset: $offset');
+      '[mcp:scroll_gesture] Controller: $controller, offset: $offset',
+    );
 
-    final script = '$controller.animateTo('
-        '$offset,'
-        'duration: const Duration(milliseconds: 300),'
-        'curve: Curves.easeInOut,'
+    final script = '$controller.animateTo( '
+        '$offset, '
+        'duration: const Duration(milliseconds: 300), '
+        'curve: Curves.easeInOut, '
         ')';
 
     final libraryId = await getEvaluationLibraryId();
@@ -1101,8 +1146,9 @@ base mixin WidgetInspectionSupport
     return CallToolResult(
       content: [
         TextContent(
-            text:
-                'Scroll gesture driven successfully. Evaluation result: `$evalStr`')
+          text:
+              'Scroll gesture driven successfully. Evaluation result: `$evalStr`',
+        ),
       ],
     );
   }
@@ -1137,7 +1183,8 @@ base mixin WidgetInspectionSupport
       }
     } catch (e) {
       stderr.writeln(
-          '[mcp:widget] Error enabling rebuild tracking locations: $e');
+        '[mcp:widget] Error enabling rebuild tracking locations: $e',
+      );
     }
     try {
       await vmService!.streamListen(EventStreams.kExtension);
@@ -1148,7 +1195,8 @@ base mixin WidgetInspectionSupport
 
   /// Extracts project source location (file path and line number) from a creation location map.
   (String? file, int? line) _extractSourceLocation(
-      Map<dynamic, dynamic> creationLocation) {
+    Map<dynamic, dynamic> creationLocation,
+  ) {
     String? sourceFile;
     final fileUri = creationLocation['file'] as String?;
     if (fileUri != null) {
@@ -1163,8 +1211,9 @@ base mixin WidgetInspectionSupport
         }
       } catch (e) {
         stderr.writeln(
-            '[mcp:widget] Fallback parsing file path for $fileUri: $e');
-        final cleanFile = fileUri.replaceFirst(RegExp(r'^file://'), '');
+          '[mcp:widget] Fallback parsing file path for $fileUri: $e',
+        );
+        final cleanFile = fileUri.replaceFirst(RegExp('^file://'), '');
         final parts = cleanFile.split('/lib/');
         if (parts.length > 1) {
           sourceFile = parts.last;
@@ -1180,6 +1229,18 @@ base mixin WidgetInspectionSupport
 
 /// Represents a flattened, simplified widget node from the widget tree.
 final class _FlatWidget {
+  /// Creates a new [_FlatWidget] data container.
+  _FlatWidget({
+    required this.type,
+    required this.depth,
+    required this.isProjectWidget,
+    required this.childCount,
+    this.id,
+    this.sourceFile,
+    this.sourceLine,
+    this.properties,
+  });
+
   /// The class type/name of the widget.
   final String type;
 
@@ -1204,18 +1265,6 @@ final class _FlatWidget {
   /// Key-value properties of the widget extracted from diagnostic details.
   final List<Map<String, String>>? properties;
 
-  /// Creates a new [_FlatWidget] data container.
-  _FlatWidget({
-    required this.type,
-    required this.depth,
-    this.id,
-    required this.isProjectWidget,
-    required this.childCount,
-    this.sourceFile,
-    this.sourceLine,
-    this.properties,
-  });
-
   /// Serializes the widget data into a Map.
   Map<String, dynamic> toMap() {
     return {
@@ -1238,7 +1287,9 @@ enum FlutterDebugFlag {
 
   /// Toggle visual baselines of text widgets.
   debugPaintBaselines(
-      'debugPaintBaselinesEnabled', 'debugPaintBaselinesEnabled'),
+    'debugPaintBaselinesEnabled',
+    'debugPaintBaselinesEnabled',
+  ),
 
   /// Force repaint showing visual boundaries.
   repaintRainbow('repaintRainbow', 'repaintRainbow'),
@@ -1260,11 +1311,13 @@ enum FlutterDebugFlag {
   /// Resolves the debug flag from the tool parameter name input, defaulting to [debugPaint].
   static FlutterDebugFlag fromString(String name) {
     final lower = name.toLowerCase();
-    if (lower.contains('paintbaselines'))
+    if (lower.contains('paintbaselines')) {
       return FlutterDebugFlag.debugPaintBaselines;
+    }
     if (lower.contains('rainbow')) return FlutterDebugFlag.repaintRainbow;
-    if (lower.contains('oversized'))
+    if (lower.contains('oversized')) {
       return FlutterDebugFlag.invertOversizedImages;
+    }
     if (lower.contains('dilation')) return FlutterDebugFlag.timeDilation;
     return FlutterDebugFlag.debugPaint;
   }

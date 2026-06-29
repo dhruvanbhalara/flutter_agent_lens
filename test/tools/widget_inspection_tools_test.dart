@@ -47,11 +47,13 @@ void main() {
       );
 
       // Stub callServiceExtension dynamically
-      when(() => testServer.mockVmService.callServiceExtension(
-            any(),
-            isolateId: any(named: 'isolateId'),
-            args: any(named: 'args'),
-          )).thenAnswer((invocation) async {
+      when(
+        () => testServer.mockVmService.callServiceExtension(
+          any(),
+          isolateId: any(named: 'isolateId'),
+          args: any(named: 'args'),
+        ),
+      ).thenAnswer((invocation) async {
         final method = invocation.positionalArguments[0] as String;
         if (method == 'ext.flutter.inspector.getRootWidgetSummaryTree' ||
             method == 'ext.flutter.inspector.getRootWidgetTree') {
@@ -73,8 +75,8 @@ void main() {
                       'line': 15,
                     },
                   }
-                ]
-              })
+                ],
+              }),
             };
         }
         return Response();
@@ -115,11 +117,13 @@ void main() {
       );
 
       // Stub callServiceExtension dynamically
-      when(() => testServer.mockVmService.callServiceExtension(
-            any(),
-            isolateId: any(named: 'isolateId'),
-            args: any(named: 'args'),
-          )).thenAnswer((invocation) async {
+      when(
+        () => testServer.mockVmService.callServiceExtension(
+          any(),
+          isolateId: any(named: 'isolateId'),
+          args: any(named: 'args'),
+        ),
+      ).thenAnswer((invocation) async {
         final method = invocation.positionalArguments[0] as String;
         if (method == 'ext.flutter.inspector.getDetailsSubtree') {
           return Response()
@@ -132,8 +136,8 @@ void main() {
                     'name': 'constraints',
                     'description': 'BoxConstraints(w=100, h=100)',
                   }
-                ]
-              })
+                ],
+              }),
             };
         }
         return Response();

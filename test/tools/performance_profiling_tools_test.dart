@@ -65,15 +65,18 @@ void main() {
         };
 
       when(() => testServer.mockVmService.getVMTimeline()).thenAnswer(
-          (_) async =>
-              Timeline(traceEvents: [event1, event2], timeOriginMicros: 0));
+        (_) async =>
+            Timeline(traceEvents: [event1, event2], timeOriginMicros: 0),
+      );
 
       // Stub callServiceExtension dynamically
-      when(() => testServer.mockVmService.callServiceExtension(
-            any(),
-            isolateId: any(named: 'isolateId'),
-            args: any(named: 'args'),
-          )).thenAnswer((invocation) async {
+      when(
+        () => testServer.mockVmService.callServiceExtension(
+          any(),
+          isolateId: any(named: 'isolateId'),
+          args: any(named: 'args'),
+        ),
+      ).thenAnswer((invocation) async {
         final method = invocation.positionalArguments[0] as String;
         if (method == 'ext.flutter.getDisplayRefreshRate') {
           return Response()..json = {'fps': 60.0};
@@ -94,7 +97,7 @@ void main() {
                   'raster': 15000,
                   'elapsed': 27000, // Over 16.67ms -> Jank!
                 }
-              ]
+              ],
             };
         }
         return Response();
@@ -105,10 +108,14 @@ void main() {
         {'duration_seconds': 0}, // Wait 0 seconds to run fast
       );
       expect(res.isError, isNot(isTrue));
-      expect(res.content.first.toString(),
-          contains('Total Frame Events Sampled: 2'));
-      expect(res.content.first.toString(),
-          contains('Janky Frame Events (> 16.6ms): 1'));
+      expect(
+        res.content.first.toString(),
+        contains('Total Frame Events Sampled: 2'),
+      );
+      expect(
+        res.content.first.toString(),
+        contains('Janky Frame Events (> 16.6ms): 1'),
+      );
     });
   });
 }

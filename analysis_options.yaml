@@ -11,20 +11,27 @@
 # (the recommended set includes the core lints).
 # The core lints are also what is used by pub.dev for scoring packages.
 
-include: package:lints/recommended.yaml
+include: package:very_good_analysis/analysis_options.yaml
 
 # Uncomment the following section to specify additional rules.
 
-# linter:
-#   rules:
-#     - camel_case_types
+linter:
+  rules:
+    public_member_api_docs: false
+    lines_longer_than_80_chars: false
+    avoid_catches_without_on_clauses: false
+    cascade_invocations: false
+    sort_constructors_first: false
+    avoid_dynamic_calls: false
+    discarded_futures: false
+    avoid_print: false
+    prefer_foreach: false
+    sort_pub_dependencies: false
 
-# analyzer:
-#   exclude:
-#     - path/to/excluded/files/**
+analyzer:
+  exclude:
+    - bin/**
+  language:
+    strict-raw-types: false
+    strict-inference: false
 
-# For more information about the core and recommended set of lints, see
-# https://dart.dev/go/core-lints
-
-# For additional information about configuring this file, see
-# https://dart.dev/guides/language/analysis-options
