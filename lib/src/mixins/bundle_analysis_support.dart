@@ -9,8 +9,7 @@ base mixin BundleAnalysisSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   void registerBundleAnalysisTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -64,7 +63,10 @@ base mixin BundleAnalysisSupport
         } else if (os == 'linux') {
           defaultTarget = 'linux';
         }
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:bundle_size] Error auto-detecting target OS from VM: $e');
+      }
     }
 
     final target = req.arguments?['build_target'] as String? ?? defaultTarget;
