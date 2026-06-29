@@ -38,7 +38,8 @@ Future<List<DiscoveredApp>> discoverActiveApps() async {
       dynamic decoded;
       try {
         decoded = jsonDecode(rawJson);
-      } catch (_) {
+      } catch (e) {
+        stderr.writeln('[discovery] Failed to decode PowerShell JSON: $e');
         return apps;
       }
 
