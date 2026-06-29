@@ -11,9 +11,6 @@ base mixin BundleAnalysisSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers all application bundle size analysis tools.
   void registerBundleAnalysisTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
 
     registerTool(
       Tool(
