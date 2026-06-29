@@ -135,9 +135,8 @@ base mixin ConnectionSupport
           stderr.writeln(
               '[mcp:connect] DTD resolved VM Service URI: $uriToConnect');
 
-          final self = this;
-          if (self is DtdSupport) {
-            final dtd = self as DtdSupport;
+          if (this is DtdSupport) {
+            final dtd = this as DtdSupport;
             try {
               stderr.writeln(
                   '[mcp:connect] Initializing DTD client for DTD URI: $rawUri');
