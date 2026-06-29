@@ -115,7 +115,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
                 return CallToolResult(
                   content: [
                     TextContent(
-                        text: '${mcpTool.name} execution failed (retry): $retryErr')
+                        text:
+                            '${mcpTool.name} execution failed (retry): $retryErr')
                   ],
                   isError: true,
                 );
@@ -125,7 +126,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
           stderr.writeln('[mcp:${mcpTool.name}] ERROR: $e');
           stderr.writeln('[mcp:${mcpTool.name}] STACKTRACE: $st');
           return CallToolResult(
-            content: [TextContent(text: '${mcpTool.name} execution failed: $e')],
+            content: [
+              TextContent(text: '${mcpTool.name} execution failed: $e')
+            ],
             isError: true,
           );
         }
@@ -133,7 +136,6 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       validateArguments: validateArguments,
     );
   }
-
 
   /// Helper to determine if an error is related to garbage collection or isolate sentinels.
   bool _isCollectedError(Object e) {
@@ -203,9 +205,15 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   /// Checks if a URI is a Dart Tooling Daemon (DTD) endpoint or a direct VM Service URI.
   bool isDtdUri(String uri) {
     final cleaned = uri.trim().toLowerCase();
-    return !cleaned.endsWith('/ws') &&
-        !cleaned.endsWith('/ws/') &&
-        !cleaned.contains('/ws?');
+    if (cleaned.endsWith('/ws') ||
+        cleaned.endsWith('/ws/') ||
+        cleaned.contains('/ws?')) {
+      return false;
+    }
+    if (cleaned.contains('auth_token=')) {
+      return false;
+    }
+    return true;
   }
 
   /// Normalizes HTTP or raw WS URIs to standardized WebSocket connection schemes.
@@ -238,34 +246,28 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     ws.listen((message) {
       try {
         final decoded = jsonDecode(message as String);
-        if (decoded case {
-          'id': 1001,
-          'result': {
-            'vmServices': [
-              {'exposedUri': String vmUri} || {'uri': String vmUri},
-              ...
-            ]
-          }
-        }) {
+        if (decoded
+            case {
+              'id': 1001,
+              'result': {
+                'vmServices': [
+                  {'exposedUri': String vmUri} || {'uri': String vmUri},
+                  ...
+                ]
+              }
+            }) {
           completer.complete(vmUri);
           ws.close();
-        } else if (decoded case {
-          'id': 1001,
-          'result': {'vmServices': []}
-        }) {
+        } else if (decoded case {'id': 1001, 'result': {'vmServices': []}}) {
           completer.completeError(
               StateError('DTD reports no running VM Services connected.'));
           ws.close();
-        } else if (decoded case {
-          'id': 1001,
-          'error': final error
-        }) {
-          completer.completeError(
-              StateError('DTD returned RPC error: $error'));
+        } else if (decoded case {'id': 1001, 'error': final error}) {
+          completer.completeError(StateError('DTD returned RPC error: $error'));
           ws.close();
         } else if (decoded case {'id': 1001}) {
-          completer.completeError(
-              StateError('Invalid response format from DTD.'));
+          completer
+              .completeError(StateError('Invalid response format from DTD.'));
           ws.close();
         }
       } catch (e) {
