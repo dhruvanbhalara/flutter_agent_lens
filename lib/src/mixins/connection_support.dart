@@ -162,8 +162,11 @@ base mixin ConnectionSupport
       vmServiceUri = uriToConnect;
       final wsUri = normalizeToWsUri(uriToConnect);
       stderr.writeln('[mcp] Connecting to VM Service: $wsUri');
-
-      vmService = await vmServiceConnectUri(wsUri);
+      vmService = await vmServiceConnectUri(wsUri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException(
+            'Timed out connecting to VM Service at $wsUri'),
+      );
 
       final vm = await vmService!.getVM();
       if (vm.isolates == null || vm.isolates!.isEmpty) {
