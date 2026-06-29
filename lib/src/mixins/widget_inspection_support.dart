@@ -17,8 +17,7 @@ base mixin WidgetInspectionSupport
 
   void registerWidgetTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -303,8 +302,7 @@ base mixin WidgetInspectionSupport
 
   Future<CallToolResult> _handleInspectLayoutConstraints(
       CallToolRequest req) async {
-    final widgetId =
-        (req.arguments!['widget_id'] ?? req.arguments!['widgetId']) as String;
+    final widgetId = req.arguments!['widgetId'] as String;
     stderr.writeln('[mcp:inspect_layout] Inspecting widget: $widgetId');
 
     final response = await vmService!.callServiceExtension(
