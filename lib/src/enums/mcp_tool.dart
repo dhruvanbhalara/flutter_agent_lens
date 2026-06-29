@@ -1,7 +1,7 @@
 /// Represents all tools registered by the Flutter Agent Lens MCP server.
 enum McpTool {
   /// Connect to a running Flutter app via its VM Service URI.
-  connect('connect'),
+  connect('connect', requiresConnection: false),
 
   /// Disconnect from the currently connected Flutter app.
   disconnect('disconnect'),
@@ -10,7 +10,7 @@ enum McpTool {
   getAppInfo('get_app_info'),
 
   /// Automatically discover running Flutter apps on this machine.
-  discoverApps('discover_apps'),
+  discoverApps('discover_apps', requiresConnection: false),
 
   /// Read recent console logs from stdout, stderr, and developer streams.
   fetchConsoleLogs('fetch_console_logs'),
@@ -31,13 +31,13 @@ enum McpTool {
   evaluateExpression('evaluate_expression'),
 
   /// Validate deep link configurations on Android or iOS.
-  validateDeepLinks('validate_deep_links'),
+  validateDeepLinks('validate_deep_links', requiresConnection: false),
 
   /// Connect to the Dart Tooling Daemon (DTD).
-  connectDtd('connect_dtd'),
+  connectDtd('connect_dtd', requiresConnection: false),
 
   /// Get the active editor file path and cursor position when connected via DTD.
-  getActiveLocation('get_active_location'),
+  getActiveLocation('get_active_location', requiresConnection: false),
 
   /// Get a general snapshot overview of application and framework class allocations.
   getMemorySnapshot('get_memory_snapshot'),
@@ -49,7 +49,7 @@ enum McpTool {
   compareSnapshots('compare_snapshots'),
 
   /// List all saved memory snapshots.
-  listSnapshots('list_snapshots'),
+  listSnapshots('list_snapshots', requiresConnection: false),
 
   /// Audit class instances to find potential memory leaks.
   auditClassMemoryLeak('audit_class_memory_leak'),
@@ -88,7 +88,7 @@ enum McpTool {
   hotRestart('hot_restart'),
 
   /// Analyze build size details from size mapping files in the build/ directory.
-  analyzeBundleSize('analyze_bundle_size'),
+  analyzeBundleSize('analyze_bundle_size', requiresConnection: false),
 
   /// Compare two screenshots and check for visual differences.
   compareLayoutScreenshots('compare_layout_screenshots'),
@@ -126,7 +126,10 @@ enum McpTool {
   /// The name of the tool as registered in the MCP server.
   final String name;
 
-  const McpTool(this.name);
+  /// Whether this tool requires an active application VM connection.
+  final bool requiresConnection;
+
+  const McpTool(this.name, {this.requiresConnection = true});
 
   @override
   String toString() => name;
