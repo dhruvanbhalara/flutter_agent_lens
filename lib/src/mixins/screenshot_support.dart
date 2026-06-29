@@ -9,8 +9,7 @@ import 'vm_connection_support.dart';
 base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   void registerScreenshotTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -347,7 +346,10 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             effectiveDeviceId = await _detectDeviceForOs(os);
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:screenshot] Error detecting VM OS or auto-detecting device: $e');
+      }
 
       final flutterRoot = Platform.environment['FLUTTER_ROOT'];
       final executable = flutterRoot != null
@@ -439,7 +441,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           return emulator['id'] as String?;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:screenshot] Error listing/matching devices: $e');
+    }
     return null;
   }
 }
