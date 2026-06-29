@@ -10,8 +10,7 @@ base mixin MemoryDebuggingSupport
 
   void registerMemoryTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -175,11 +174,16 @@ base mixin MemoryDebuggingSupport
 
     for (final instanceRef in instances) {
       final instanceId = instanceRef.id!;
-      final evalResult =
-          await vmService!.evaluate(isolateId!, instanceId, 'this.mounted');
-
-      final isMounted =
-          evalResult is InstanceRef && evalResult.valueAsString == 'true';
+      bool isMounted = true;
+      try {
+        final evalResult =
+            await vmService!.evaluate(isolateId!, instanceId, 'this.mounted');
+        isMounted =
+            evalResult is InstanceRef && evalResult.valueAsString == 'true';
+      } catch (_) {
+        // Class doesn't have a mounted property, skip it
+        continue;
+      }
       if (!isMounted) {
         final retainingPath =
             await vmService!.getRetainingPath(isolateId!, instanceId, 15);
