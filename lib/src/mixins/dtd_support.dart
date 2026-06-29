@@ -11,8 +11,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   void registerDtdTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(

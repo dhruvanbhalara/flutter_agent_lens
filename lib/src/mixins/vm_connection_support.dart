@@ -45,7 +45,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     );
   }
 
-    Future<CallToolResult> Function(CallToolRequest) wrapToolCall(
+  Future<CallToolResult> Function(CallToolRequest) wrapToolCall(
     String toolName,
     FutureOr<CallToolResult> Function(CallToolRequest) handler, {
     bool requiresConnection = true,
@@ -89,6 +89,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       }
     };
   }
+
   bool _isCollectedError(Object e) {
     final str = e.toString();
     return str.contains('Collected') ||
