@@ -30,9 +30,6 @@ base mixin WidgetInspectionSupport
 
   /// Registers all widget inspection and diagnostic tools.
   void registerWidgetTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
 
     registerTool(
       Tool(
