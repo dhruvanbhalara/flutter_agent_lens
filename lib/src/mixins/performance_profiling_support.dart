@@ -20,9 +20,6 @@ base mixin PerformanceProfilingSupport
 
   /// Registers all performance profiling and trigger tools.
   void registerPerformanceTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
 
     registerTool(
       Tool(
