@@ -156,6 +156,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     stderr.writeln('[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
 
     try {
+      await vmService!
           .setIsolatePauseMode(isolateId!, exceptionPauseMode: mode.value);
     } catch (e) {
       stderr.writeln(
