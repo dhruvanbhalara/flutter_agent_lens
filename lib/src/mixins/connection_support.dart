@@ -217,12 +217,17 @@ base mixin ConnectionSupport
         );
       } catch (_) {}
 
+      final selectedIsolateName = vm.isolates!
+          .firstWhere((i) => i.id == isolateId,
+              orElse: () => vm.isolates!.first)
+          .name;
+
       return CallToolResult(
         content: [
           TextContent(
               text: 'Successfully connected to VM Service.\n'
                   '- VM version: ${ver.major}.${ver.minor}\n'
-                  '- Main Isolate: ${vm.isolates!.first.name} ($isolateId)\n'
+                  '- Main Isolate: $selectedIsolateName ($isolateId)\n'
                   '- Workspace Root configured: ${workspaceRoot ?? "None"}')
         ],
       );
