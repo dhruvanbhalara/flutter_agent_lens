@@ -19,8 +19,7 @@ base mixin ConnectionSupport
         RootsTrackingSupport {
   void registerConnectionTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -268,6 +267,9 @@ base mixin ConnectionSupport
   }
 
   Future<CallToolResult> _handleGetAppInfo(CallToolRequest req) async {
+    if (vmService == null || isolateId == null) {
+      return notConnected();
+    }
     final vm = await vmService!.getVM();
     final isolate = await vmService!.getIsolate(isolateId!);
 
