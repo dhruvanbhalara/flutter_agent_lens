@@ -11,8 +11,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers all debugger-related tools.
   void registerDebuggerTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -145,7 +144,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
                   'script': f.location?.script?.uri,
                   'line': f.location?.line,
                   'column': f.location?.column,
-                 })
+                })
             .toList(),
       },
       format: req.arguments?['format'] as String?,
@@ -157,18 +156,22 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       CallToolRequest req) async {
     final modeStr = req.arguments!['mode'] as String;
     final mode = ExceptionPauseMode.fromString(modeStr);
-    stderr.writeln('[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
+    stderr.writeln(
+        '[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
 
     try {
       await vmService!
           .setIsolatePauseMode(isolateId!, exceptionPauseMode: mode.value);
-    } catch (_) {
+    } catch (e) {
+      stderr.writeln(
+          '[mcp:debugger] setIsolatePauseMode failed: $e. Trying deprecated fallback.');
       // Fallback for older VM Service versions
       // ignore: deprecated_member_use
       await vmService!.setExceptionPauseMode(isolateId!, mode.value);
     }
     return CallToolResult(content: [
-      TextContent(text: 'Successfully set exception pause mode to: ${mode.value}')
+      TextContent(
+          text: 'Successfully set exception pause mode to: ${mode.value}')
     ]);
   }
 
