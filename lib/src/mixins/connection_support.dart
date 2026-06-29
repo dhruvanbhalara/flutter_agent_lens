@@ -177,7 +177,13 @@ base mixin ConnectionSupport
           isError: true,
         );
       }
-      isolateId = vm.isolates!.first.id!;
+      final activeIsolates =
+          vm.isolates!.where((i) => i.isSystemIsolate != true).toList();
+      if (activeIsolates.isNotEmpty) {
+        isolateId = activeIsolates.first.id!;
+      } else {
+        isolateId = vm.isolates!.first.id!;
+      }
       final ver = await vmService!.getVersion();
 
       try {

@@ -1,7 +1,11 @@
+## 1.5.3
+
+- Filtered out system isolates when connecting to the VM service to avoid selecting non-user code.
+- Implemented automatic recovery and retry logic when encountering sentinel or collected isolate ID errors.
+
 ## 1.5.2
 
 - Deprecated and removed the redundant `dual` format option across all tools to optimize token usage.
-- Updated tool schemas and `test_all_tools.dart` to specify either `markdown` or `json`.
 
 ## 1.5.1
 

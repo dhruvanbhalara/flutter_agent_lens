@@ -51,12 +51,35 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     bool requiresConnection = true,
   }) {
     return (CallToolRequest req) async {
+      if (requiresConnection && vmService != null && isolateId == null) {
+        await refreshIsolateId();
+      }
       if (requiresConnection && (vmService == null || isolateId == null)) {
         return notConnected();
       }
       try {
         return await handler(req);
       } catch (e, st) {
+        if (requiresConnection && _isCollectedError(e)) {
+          stderr.writeln(
+              '[mcp:$toolName] Detected collected/sentinel error, attempting to refresh isolate ID and retry...');
+          final refreshed = await refreshIsolateId();
+          if (refreshed) {
+            try {
+              return await handler(req);
+            } catch (retryErr, retrySt) {
+              stderr.writeln('[mcp:$toolName] Retry failed: $retryErr');
+              stderr.writeln('[mcp:$toolName] STACKTRACE: $retrySt');
+              return CallToolResult(
+                content: [
+                  TextContent(
+                      text: '$toolName execution failed (retry): $retryErr')
+                ],
+                isError: true,
+              );
+            }
+          }
+        }
         stderr.writeln('[mcp:$toolName] ERROR: $e');
         stderr.writeln('[mcp:$toolName] STACKTRACE: $st');
         return CallToolResult(
@@ -65,6 +88,36 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
         );
       }
     };
+  }
+
+  bool _isCollectedError(Object e) {
+    final str = e.toString();
+    return str.contains('Collected') ||
+        str.contains('Sentinel') ||
+        str.contains('sentinel');
+  }
+
+  Future<bool> refreshIsolateId() async {
+    if (vmService == null) return false;
+    try {
+      final vm = await vmService!.getVM();
+      if (vm.isolates != null && vm.isolates!.isNotEmpty) {
+        final activeIsolates =
+            vm.isolates!.where((i) => i.isSystemIsolate != true).toList();
+        if (activeIsolates.isNotEmpty) {
+          isolateId = activeIsolates.first.id;
+        } else {
+          isolateId = vm.isolates!.first.id;
+        }
+        cachedLibraryId = null;
+        stderr.writeln(
+            '[mcp] Dynamically refreshed active isolate ID: $isolateId');
+        return true;
+      }
+    } catch (err) {
+      stderr.writeln('[mcp] Failed to refresh isolate ID: $err');
+    }
+    return false;
   }
 
   CallToolResult serializeDualFormat({
