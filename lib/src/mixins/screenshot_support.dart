@@ -11,9 +11,6 @@ import 'vm_connection_support.dart';
 base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers screenshot-related tools.
   void registerScreenshotTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
 
     registerTool(
       Tool(
