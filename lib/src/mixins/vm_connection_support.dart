@@ -45,7 +45,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     );
   }
 
-  Future<CallToolResult> Function(CallToolRequest) wrapToolCall(
+    Future<CallToolResult> Function(CallToolRequest) wrapToolCall(
     String toolName,
     FutureOr<CallToolResult> Function(CallToolRequest) handler, {
     bool requiresConnection = true,
@@ -89,7 +89,6 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       }
     };
   }
-
   bool _isCollectedError(Object e) {
     final str = e.toString();
     return str.contains('Collected') ||
@@ -151,9 +150,15 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
 
   bool isDtdUri(String uri) {
     final cleaned = uri.trim().toLowerCase();
-    return !cleaned.endsWith('/ws') &&
-        !cleaned.endsWith('/ws/') &&
-        !cleaned.contains('/ws?');
+    if (cleaned.endsWith('/ws') ||
+        cleaned.endsWith('/ws/') ||
+        cleaned.contains('/ws?')) {
+      return false;
+    }
+    if (cleaned.contains('auth_token=')) {
+      return false;
+    }
+    return true;
   }
 
   String normalizeToWsUri(String uri) {
