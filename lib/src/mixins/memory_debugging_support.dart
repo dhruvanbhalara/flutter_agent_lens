@@ -15,8 +15,7 @@ base mixin MemoryDebuggingSupport
   /// Registers all memory debugging and profiling tools.
   void registerMemoryTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -181,11 +180,16 @@ base mixin MemoryDebuggingSupport
 
     for (final instanceRef in instances) {
       final instanceId = instanceRef.id!;
-      final evalResult =
-          await vmService!.evaluate(isolateId!, instanceId, 'this.mounted');
-
-      final isMounted =
-          evalResult is InstanceRef && evalResult.valueAsString == 'true';
+      bool isMounted = true;
+      try {
+        final evalResult =
+            await vmService!.evaluate(isolateId!, instanceId, 'this.mounted');
+        isMounted =
+            evalResult is InstanceRef && evalResult.valueAsString == 'true';
+      } catch (_) {
+        // Class doesn't have a mounted property, skip it
+        continue;
+      }
       if (!isMounted) {
         final retainingPath =
             await vmService!.getRetainingPath(isolateId!, instanceId, 15);
@@ -503,8 +507,10 @@ base mixin MemoryDebuggingSupport
     md.writeln();
     md.writeln('VERDICT');
     final verdict = switch (heapDiff) {
-      < -1000000 => 'Memory improved by ${formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}).',
-      > 1000000 => 'Warning: Memory increased by ${formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.',
+      < -1000000 =>
+        'Memory improved by ${formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}).',
+      > 1000000 =>
+        'Warning: Memory increased by ${formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.',
       _ => 'No significant change in memory usage between snapshots.',
     };
     md.writeln(verdict);
