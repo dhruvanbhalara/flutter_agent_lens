@@ -130,10 +130,14 @@ base mixin ConsoleLoggingSupport
           try {
             final decoded = utf8.decode(base64.decode(bytes));
             addToLogBuffer(logPrefix, decoded);
-          } catch (_) {}
+          } catch (e) {
+            stderr.writeln('[mcp:logging] Error decoding byte stream: $e');
+          }
         }
       });
-    } catch (_) {
+    } catch (e) {
+      stderr.writeln(
+          '[mcp:logging] Error listening to byte stream $streamId: $e');
       return null;
     }
   }
