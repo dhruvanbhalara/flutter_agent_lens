@@ -507,7 +507,9 @@ base mixin WidgetInspectionSupport
       } else {
         currentDirs = res.toString();
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:widget] Error fetching pubRootDirectories: $e');
+    }
 
     return CallToolResult(
       content: [
@@ -697,7 +699,10 @@ base mixin WidgetInspectionSupport
             node['children'] = result;
             childrenList = result;
           }
-        } catch (_) {}
+        } catch (e) {
+          stderr.writeln(
+              '[mcp:widget] Error resolving child details subtree: $e');
+        }
       }
     }
 
@@ -935,7 +940,9 @@ base mixin WidgetInspectionSupport
       } else if (rawLocationResult is Map) {
         _parseLocationsMap(rawLocationResult, rebuildIdToName, rebuildIdToFile);
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:widget] Error fetching widget location ID map: $e');
+    }
 
     final widgets = <Map<String, dynamic>>[];
     var totalRebuilds = 0;
@@ -1131,10 +1138,15 @@ base mixin WidgetInspectionSupport
       } else if (rawLocationResult is Map) {
         _parseLocationsMap(rawLocationResult, idToName, idToFile);
       }
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln(
+          '[mcp:widget] Error enabling rebuild tracking locations: $e');
+    }
     try {
       await vmService!.streamListen(EventStreams.kExtension);
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:widget] Error listening to extension stream: $e');
+    }
   }
 
   /// Extracts project source location (file path and line number) from a creation location map.
@@ -1152,7 +1164,9 @@ base mixin WidgetInspectionSupport
         } else {
           sourceFile = p.basename(cleanFile);
         }
-      } catch (_) {
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:widget] Fallback parsing file path for $fileUri: $e');
         final cleanFile = fileUri.replaceFirst(RegExp(r'^file://'), '');
         final parts = cleanFile.split('/lib/');
         if (parts.length > 1) {
