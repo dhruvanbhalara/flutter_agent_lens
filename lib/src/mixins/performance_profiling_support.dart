@@ -20,7 +20,6 @@ base mixin PerformanceProfilingSupport
 
   /// Registers all performance profiling and trigger tools.
   void registerPerformanceTools() {
-
     registerTool(
       Tool(
         name: McpTool.diagnoseJank.name,
@@ -173,20 +172,17 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the hot_reload tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotReload(CallToolRequest req) async {
-    final self = this;
     bool dtdSuccess = false;
-
-    // Use DTD ConnectedApp service if available to delegate compilation and UI reassembly to the host editor/process.
-    if (self is DtdSupport) {
-      final dtd = self as DtdSupport;
-      if (dtd.dtdClient != null && self.vmServiceUri != null) {
+    if (this is DtdSupport) {
+      final dtd = this as DtdSupport;
+      if (dtd.dtdClient != null && vmServiceUri != null) {
         stderr.writeln(
             '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...');
         try {
           await dtd.dtdClient!.call(
             'ConnectedApp',
             'hotReload',
-            params: {'vmServiceUri': self.vmServiceUri},
+            params: {'vmServiceUri': vmServiceUri},
           );
           dtdSuccess = true;
         } catch (e) {
@@ -226,20 +222,17 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the hot_restart tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotRestart(CallToolRequest req) async {
-    final self = this;
     bool dtdSuccess = false;
-
-    // Use DTD ConnectedApp service if available to delegate compilation, reset in-memory state, and rerun main() via the host.
-    if (self is DtdSupport) {
-      final dtd = self as DtdSupport;
-      if (dtd.dtdClient != null && self.vmServiceUri != null) {
+    if (this is DtdSupport) {
+      final dtd = this as DtdSupport;
+      if (dtd.dtdClient != null && vmServiceUri != null) {
         stderr.writeln(
             '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...');
         try {
           await dtd.dtdClient!.call(
             'ConnectedApp',
             'hotRestart',
-            params: {'vmServiceUri': self.vmServiceUri},
+            params: {'vmServiceUri': vmServiceUri},
           );
           dtdSuccess = true;
         } catch (e) {
