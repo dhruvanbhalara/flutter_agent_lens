@@ -26,9 +26,6 @@ base mixin NetworkCaptureSupport
 
   /// Registers all network capture and diagnostic tools.
   void registerNetworkTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
 
     registerTool(
       Tool(
