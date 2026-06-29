@@ -73,7 +73,9 @@ final class PathResolver {
             }
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('[mcp:path_resolver] Error walking workspace: $e');
+      }
     }
 
     final matchedPath = _allWorkspaceFiles![fileName];
