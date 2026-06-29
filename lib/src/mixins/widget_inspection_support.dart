@@ -31,8 +31,7 @@ base mixin WidgetInspectionSupport
   /// Registers all widget inspection and diagnostic tools.
   void registerWidgetTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -320,8 +319,7 @@ base mixin WidgetInspectionSupport
   /// Handles the inspect_widget tool request.
   Future<CallToolResult> _handleInspectLayoutConstraints(
       CallToolRequest req) async {
-    final widgetId =
-        (req.arguments!['widget_id'] ?? req.arguments!['widgetId']) as String;
+    final widgetId = req.arguments!['widgetId'] as String;
     stderr.writeln('[mcp:inspect_layout] Inspecting widget: $widgetId');
 
     final response = await vmService!.callServiceExtension(
@@ -752,9 +750,10 @@ base mixin WidgetInspectionSupport
         typeStr ??
         'Unknown';
 
-    final (sourceFile, sourceLine) = (isProjectWidget && creationLocation != null)
-        ? _extractSourceLocation(creationLocation)
-        : (null, null);
+    final (sourceFile, sourceLine) =
+        (isProjectWidget && creationLocation != null)
+            ? _extractSourceLocation(creationLocation)
+            : (null, null);
 
     final rawProperties = node['properties'] as List<dynamic>?;
     List<Map<String, String>>? properties;
@@ -1139,7 +1138,8 @@ base mixin WidgetInspectionSupport
   }
 
   /// Extracts project source location (file path and line number) from a creation location map.
-  (String? file, int? line) _extractSourceLocation(Map<dynamic, dynamic> creationLocation) {
+  (String? file, int? line) _extractSourceLocation(
+      Map<dynamic, dynamic> creationLocation) {
     String? sourceFile;
     final fileUri = creationLocation['file'] as String?;
     if (fileUri != null) {
@@ -1226,7 +1226,8 @@ enum FlutterDebugFlag {
   debugPaint('debugPaintSizeEnabled', 'debugPaint'),
 
   /// Toggle visual baselines of text widgets.
-  debugPaintBaselines('debugPaintBaselinesEnabled', 'debugPaintBaselinesEnabled'),
+  debugPaintBaselines(
+      'debugPaintBaselinesEnabled', 'debugPaintBaselinesEnabled'),
 
   /// Force repaint showing visual boundaries.
   repaintRainbow('repaintRainbow', 'repaintRainbow'),
@@ -1248,9 +1249,11 @@ enum FlutterDebugFlag {
   /// Resolves the debug flag from the tool parameter name input, defaulting to [debugPaint].
   static FlutterDebugFlag fromString(String name) {
     final lower = name.toLowerCase();
-    if (lower.contains('paintbaselines')) return FlutterDebugFlag.debugPaintBaselines;
+    if (lower.contains('paintbaselines'))
+      return FlutterDebugFlag.debugPaintBaselines;
     if (lower.contains('rainbow')) return FlutterDebugFlag.repaintRainbow;
-    if (lower.contains('oversized')) return FlutterDebugFlag.invertOversizedImages;
+    if (lower.contains('oversized'))
+      return FlutterDebugFlag.invertOversizedImages;
     if (lower.contains('dilation')) return FlutterDebugFlag.timeDilation;
     return FlutterDebugFlag.debugPaint;
   }
