@@ -19,8 +19,7 @@ base mixin ConnectionSupport
         RootsTrackingSupport {
   void registerConnectionTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -115,7 +114,9 @@ base mixin ConnectionSupport
                   '[mcp:connect] Resolved workspace root from client: $workspaceRoot');
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          stderr.writeln('[mcp:connect] Error fetching client roots: $e');
+        }
       }
 
       if (workspaceRoot != null) {
@@ -163,8 +164,11 @@ base mixin ConnectionSupport
       vmServiceUri = uriToConnect;
       final wsUri = normalizeToWsUri(uriToConnect);
       stderr.writeln('[mcp] Connecting to VM Service: $wsUri');
-
-      vmService = await vmServiceConnectUri(wsUri);
+      vmService = await vmServiceConnectUri(wsUri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException(
+            'Timed out connecting to VM Service at $wsUri'),
+      );
 
       final vm = await vmService!.getVM();
       if (vm.isolates == null || vm.isolates!.isEmpty) {
@@ -204,7 +208,9 @@ base mixin ConnectionSupport
         await Future<void>.delayed(const Duration(milliseconds: 100));
         stderr.writeln(
             '[mcp:connect] Service stream seeded: ${registeredMethodsForService.keys.toList()}');
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('[mcp:connect] Error seeding service stream: $e');
+      }
 
       // Clear existing I/O subscriptions and start buffering streams
       startLogging();
@@ -216,14 +222,22 @@ base mixin ConnectionSupport
           isolateId: isolateId,
           args: {'enabled': 'true'},
         );
-      } catch (_) {}
+      } catch (e) {
+        stderr
+            .writeln('[mcp:connect] Error enabling HTTP timeline logging: $e');
+      }
+
+      final selectedIsolateName = vm.isolates!
+          .firstWhere((i) => i.id == isolateId,
+              orElse: () => vm.isolates!.first)
+          .name;
 
       return CallToolResult(
         content: [
           TextContent(
               text: 'Successfully connected to VM Service.\n'
                   '- VM version: ${ver.major}.${ver.minor}\n'
-                  '- Main Isolate: ${vm.isolates!.first.name} ($isolateId)\n'
+                  '- Main Isolate: $selectedIsolateName ($isolateId)\n'
                   '- Workspace Root configured: ${workspaceRoot ?? "None"}')
         ],
       );
@@ -258,7 +272,9 @@ base mixin ConnectionSupport
 
     try {
       await vmService!.dispose();
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:connect] Error disposing VM Service: $e');
+    }
     vmService = null;
     vmServiceUri = null;
     isolateId = null;
@@ -268,6 +284,9 @@ base mixin ConnectionSupport
   }
 
   Future<CallToolResult> _handleGetAppInfo(CallToolRequest req) async {
+    if (vmService == null || isolateId == null) {
+      return notConnected();
+    }
     final vm = await vmService!.getVM();
     final isolate = await vmService!.getIsolate(isolateId!);
 
@@ -278,7 +297,9 @@ base mixin ConnectionSupport
         isolateId: isolateId,
       );
       fpsVal = (fpsResponse.json?['fps'] as num?)?.toDouble() ?? 60.0;
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:connect] Error getting display refresh rate: $e');
+    }
 
     final extensionRPCs = isolate.extensionRPCs ?? [];
     final flutterExtensions =

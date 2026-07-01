@@ -151,9 +151,15 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
 
   bool isDtdUri(String uri) {
     final cleaned = uri.trim().toLowerCase();
-    return !cleaned.endsWith('/ws') &&
-        !cleaned.endsWith('/ws/') &&
-        !cleaned.contains('/ws?');
+    if (cleaned.endsWith('/ws') ||
+        cleaned.endsWith('/ws/') ||
+        cleaned.contains('/ws?')) {
+      return false;
+    }
+    if (cleaned.contains('auth_token=')) {
+      return false;
+    }
+    return true;
   }
 
   String normalizeToWsUri(String uri) {

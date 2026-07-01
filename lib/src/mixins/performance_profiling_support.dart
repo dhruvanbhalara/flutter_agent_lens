@@ -13,8 +13,7 @@ base mixin PerformanceProfilingSupport
 
   void registerPerformanceTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -388,7 +387,9 @@ base mixin PerformanceProfilingSupport
         isolateId: isolateId,
       );
       fpsVal = (fpsResponse.json?['fps'] as num?)?.toDouble() ?? 60.0;
-    } catch (_) {}
+    } catch (e) {
+      stderr.writeln('[mcp:profile] Error getting display refresh rate: $e');
+    }
 
     isProfiling = true;
     profilingStartTime = DateTime.now().millisecondsSinceEpoch;

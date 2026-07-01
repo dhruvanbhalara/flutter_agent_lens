@@ -7,8 +7,7 @@ import 'vm_connection_support.dart';
 base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   void registerDebuggerTools() {
     final formatSchema = StringSchema(
-      description:
-          'Response format: markdown or json (default: markdown).',
+      description: 'Response format: markdown or json (default: markdown).',
     );
 
     registerTool(
@@ -155,7 +154,9 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     try {
       await vmService!
           .setIsolatePauseMode(isolateId!, exceptionPauseMode: mode);
-    } catch (_) {
+    } catch (e) {
+      stderr.writeln(
+          '[mcp:debugger] setIsolatePauseMode failed: $e. Trying deprecated fallback.');
       // Fallback for older VM Service versions
       // ignore: deprecated_member_use
       await vmService!.setExceptionPauseMode(isolateId!, mode);
