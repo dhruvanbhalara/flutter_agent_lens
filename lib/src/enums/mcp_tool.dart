@@ -131,6 +131,13 @@ enum McpTool {
 
   const McpTool(this.name, {this.requiresConnection = true});
 
+  static final Map<String, McpTool> _lookup = {
+    for (final tool in McpTool.values) tool.name: tool,
+  };
+
+  /// Resolves an [McpTool] from its string name. Returns `null` if not found.
+  static McpTool? fromName(String name) => _lookup[name];
+
   @override
   String toString() => name;
 }
