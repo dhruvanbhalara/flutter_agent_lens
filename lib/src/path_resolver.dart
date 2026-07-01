@@ -60,43 +60,56 @@ final class PathResolver {
     final fileName = p.basename(relativePath);
     if (_allWorkspaceFiles == null) {
       _allWorkspaceFiles = {};
-      try {
-        final directory = Directory(workspaceRoot);
-        if (directory.existsSync()) {
-          final entities =
-              directory.listSync(recursive: true, followLinks: false);
-          for (final entity in entities) {
-            if (entity is File) {
-              final filePath = entity.path;
-              final separator = p.separator;
-              if (filePath.contains('$separator.git$separator') ||
-                  filePath.contains('$separator.dart_tool$separator') ||
-                  filePath.contains('$separator.github$separator') ||
-                  filePath.contains('$separator.idea$separator') ||
-                  filePath.contains('$separator.vscode$separator') ||
-                  filePath.contains('${separator}build$separator') ||
-                  filePath.contains('${separator}node_modules$separator')) {
-                continue;
-              }
-              final name = p.basename(filePath);
-              _allWorkspaceFiles!
-                  .putIfAbsent(name, () => p.canonicalize(filePath));
-            }
-          }
-        }
-      } catch (e) {
-        stderr.writeln('[mcp:path_resolver] Error walking workspace: $e');
+      final directory = Directory(workspaceRoot);
+      if (directory.existsSync()) {
+        _scanDirectory(directory);
       }
     }
 
     final matchedPath = _allWorkspaceFiles![fileName];
     if (matchedPath != null) {
-      _pathCache[vmUri] = matchedPath;
+      _cachePath(vmUri, matchedPath);
       return matchedPath;
     }
 
     // Return original URI as fallback if unmapped
-    _pathCache[vmUri] = vmUri;
+    _cachePath(vmUri, vmUri);
     return vmUri;
+  }
+
+  /// Recursively walks a directory, skipping large/unwanted system folders.
+  void _scanDirectory(Directory dir) {
+    try {
+      final entities = dir.listSync(followLinks: false);
+      for (final entity in entities) {
+        if (entity is Directory) {
+          final name = p.basename(entity.path);
+          if (name == '.git' ||
+              name == '.dart_tool' ||
+              name == '.github' ||
+              name == '.idea' ||
+              name == '.vscode' ||
+              name == 'build' ||
+              name == 'node_modules') {
+            continue;
+          }
+          _scanDirectory(entity);
+        } else if (entity is File) {
+          final name = p.basename(entity.path);
+          _allWorkspaceFiles!
+              .putIfAbsent(name, () => p.canonicalize(entity.path));
+        }
+      }
+    } catch (e) {
+      // Swallowed to prevent crashing on unreadable directories/permissions
+    }
+  }
+
+  /// Caches a resolved URI path while enforcing a maximum cache size.
+  void _cachePath(String key, String value) {
+    if (_pathCache.length >= 1000) {
+      _pathCache.clear();
+    }
+    _pathCache[key] = value;
   }
 }

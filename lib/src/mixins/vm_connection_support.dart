@@ -31,7 +31,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   final Map<String, String> registeredMethodsForService = {};
 
   /// Subscription to the VM Service's stream of service registration events.
-  StreamSubscription? serviceStreamSub;
+  StreamSubscription<Event>? serviceStreamSub;
 
   /// Performs cleanup operations on active streams and daemon clients.
   void cleanupStreams() {}
@@ -77,10 +77,10 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     FutureOr<CallToolResult> Function(CallToolRequest) impl, {
     bool validateArguments = true,
   }) {
-    final mcpTool = McpTool.values.firstWhere(
-      (e) => e.name == tool.name,
-      orElse: () => throw ArgumentError('Unknown tool name: ${tool.name}'),
-    );
+    final mcpTool = McpTool.fromName(tool.name);
+    if (mcpTool == null) {
+      throw ArgumentError('Unknown tool name: ${tool.name}');
+    }
 
     final requiresConnection = mcpTool.requiresConnection;
 
@@ -131,6 +131,15 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
 
   /// Helper to determine if an error is related to garbage collection or isolate sentinels.
   bool _isCollectedError(Object e) {
+    if (e is SentinelException) return true;
+    if (e is RPCError) {
+      if (e.code == 106 ||
+          e.message.contains('collected') ||
+          e.message.contains('Sentinel') ||
+          e.message.contains('sentinel')) {
+        return true;
+      }
+    }
     final str = e.toString();
     return str.contains('Collected') ||
         str.contains('Sentinel') ||
@@ -144,13 +153,13 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     if (vmService == null) return false;
     try {
       final vm = await vmService!.getVM();
-      if (vm.isolates != null && vm.isolates!.isNotEmpty) {
+      if (vm.isolates case final isolates? when isolates.isNotEmpty) {
         final activeIsolates =
-            vm.isolates!.where((i) => i.isSystemIsolate != true).toList();
+            isolates.where((i) => i.isSystemIsolate != true).toList();
         if (activeIsolates.isNotEmpty) {
           isolateId = activeIsolates.first.id;
         } else {
-          isolateId = vm.isolates!.first.id;
+          isolateId = isolates.first.id;
         }
         cachedLibraryId = null;
         stderr.writeln(
@@ -315,13 +324,20 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     for (final lib in libraries) {
       final uri = lib.uri ?? '';
       if (uri.startsWith('package:') && !uri.contains('package:flutter/')) {
-        cachedLibraryId = lib.id;
-        return lib.id!;
+        final libId = lib.id;
+        if (libId != null) {
+          cachedLibraryId = libId;
+          return libId;
+        }
       }
     }
 
-    cachedLibraryId = libraries.first.id;
-    return libraries.first.id!;
+    final firstId = libraries.first.id;
+    if (firstId == null) {
+      throw StateError('Library has no ID');
+    }
+    cachedLibraryId = firstId;
+    return firstId;
   }
 
   /// Formats raw byte counts into human-readable strings (e.g. KB, MB, GB).

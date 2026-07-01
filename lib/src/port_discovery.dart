@@ -14,7 +14,7 @@ final class DiscoveredApp {
   final String configPath;
 
   /// Creates a new [DiscoveredApp] instance.
-  DiscoveredApp({
+  const DiscoveredApp({
     required this.serviceUri,
     required this.projectName,
     required this.configPath,
@@ -143,15 +143,14 @@ Future<void> _probeAndAddApp(
   String configPath,
   List<DiscoveredApp> apps,
 ) async {
+  final client = HttpClient();
   try {
-    final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 3);
     final request = await client.getUrl(Uri.parse(rawVmUri));
     request.followRedirects = false;
     final response = await request.close();
     final statusCode = response.statusCode;
     final location = response.headers.value('location') ?? '';
-    client.close(force: true);
 
     if (statusCode == 302 && location.isNotEmpty) {
       final locationUri = Uri.parse(location);
@@ -195,5 +194,7 @@ Future<void> _probeAndAddApp(
   } catch (e) {
     stderr
         .writeln('[discovery] Failed to probe raw VM service at $rawVmUri: $e');
+  } finally {
+    client.close(force: true);
   }
 }
