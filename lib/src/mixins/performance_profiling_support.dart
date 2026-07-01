@@ -2,23 +2,30 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
+import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 import 'dtd_support.dart';
 
+/// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
 base mixin PerformanceProfilingSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  static const int _kFrameBudgetUs = 16666;
+
+  /// Whether the CPU timeline sampling or profiling is active.
   bool isProfiling = false;
+
+  /// Timestamp in milliseconds when the performance profiling session was started.
   int? profilingStartTime;
+
+  /// The target display refresh rate (FPS) of the connected device.
   double? targetFps;
 
+  /// Registers all performance profiling and trigger tools.
   void registerPerformanceTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
-
     registerTool(
       Tool(
-        name: 'diagnose_jank',
+        name: McpTool.diagnoseJank.name,
         description: 'Check frame times to find rendering slowdowns (jank).',
         inputSchema: ObjectSchema(
           properties: {
@@ -27,12 +34,12 @@ base mixin PerformanceProfilingSupport
           },
         ),
       ),
-      wrapToolCall('diagnose_jank', _handleDiagnoseJank),
+      _handleDiagnoseJank,
     );
 
     registerTool(
       Tool(
-        name: 'get_cpu_profile',
+        name: McpTool.getCpuProfile.name,
         description:
             'Sample CPU usage and find execution hotspots in Dart functions.',
         inputSchema: ObjectSchema(
@@ -42,22 +49,22 @@ base mixin PerformanceProfilingSupport
           },
         ),
       ),
-      wrapToolCall('get_cpu_profile', _handleGetCpuProfile),
+      _handleGetCpuProfile,
     );
 
     registerTool(
       Tool(
-        name: 'start_profiling',
+        name: McpTool.startProfiling.name,
         description:
             'Start a stateful performance profiling session (CPU & Jank).',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('start_profiling', _handleStartProfiling),
+      _handleStartProfiling,
     );
 
     registerTool(
       Tool(
-        name: 'stop_profiling',
+        name: McpTool.stopProfiling.name,
         description:
             'Stop the active performance profiling session and get the analysis report.',
         inputSchema: ObjectSchema(
@@ -66,36 +73,47 @@ base mixin PerformanceProfilingSupport
           },
         ),
       ),
-      wrapToolCall('stop_profiling', _handleStopProfiling),
+      _handleStopProfiling,
     );
 
     registerTool(
       Tool(
-        name: 'hot_reload',
+        name: McpTool.hotReload.name,
         description: 'Trigger a hot reload.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('hot_reload', handleHotReload),
+      handleHotReload,
     );
 
     registerTool(
       Tool(
-        name: 'hot_restart',
+        name: McpTool.hotRestart.name,
         description: 'Trigger a hot restart of the application.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('hot_restart', handleHotRestart),
+      handleHotRestart,
     );
   }
 
-  void cleanupPerformanceProfiling() {
+  /// Clears performance profiling state and resets targets.
+  Future<void> cleanupPerformanceProfiling() async {
     isProfiling = false;
     profilingStartTime = null;
     targetFps = null;
+    final service = vmService;
+    if (service != null) {
+      try {
+        await service.setVMTimelineFlags([]);
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:profiling] Error resetting timeline flags on cleanup: $e');
+      }
+    }
   }
 
+  /// Handles the diagnose_jank tool request.
   Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
-    final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
+    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
     stderr.writeln(
         '[mcp:diagnose_jank] Starting jank diagnosis, duration=${duration}s');
 
@@ -103,9 +121,18 @@ base mixin PerformanceProfilingSupport
     await vmService!.setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API']);
     await vmService!.clearVMTimeline();
 
-    await Future.delayed(Duration(seconds: duration));
-
-    final timeline = await vmService!.getVMTimeline();
+    Timeline timeline;
+    try {
+      await Future<void>.delayed(Duration(seconds: duration));
+      timeline = await vmService!.getVMTimeline();
+    } finally {
+      try {
+        await vmService!.setVMTimelineFlags([]);
+      } catch (e) {
+        stderr
+            .writeln('[mcp:diagnose_jank] Error resetting timeline flags: $e');
+      }
+    }
     final events = timeline.traceEvents ?? [];
     var jankyFrames = 0;
     var totalFrames = 0;
@@ -116,7 +143,7 @@ base mixin PerformanceProfilingSupport
           eventName == 'Animator::BeginFrame') {
         totalFrames++;
         final dur = event.json?['dur'] as num? ?? 0;
-        if (dur > 16666) {
+        if (dur > _kFrameBudgetUs) {
           jankyFrames++;
           frameEvents.add({
             'event': eventName,
@@ -160,25 +187,23 @@ base mixin PerformanceProfilingSupport
         'jank_percentage': jankPercentage,
         'critical_events': frameEvents,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
+  /// Handles the hot_reload tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotReload(CallToolRequest req) async {
-    final self = this;
     bool dtdSuccess = false;
-
-    // Use DTD ConnectedApp service if available to delegate compilation and UI reassembly to the host editor/process.
-    if (self is DtdSupport) {
-      final dtd = self as DtdSupport;
-      if (dtd.dtdClient != null && self.vmServiceUri != null) {
+    if (this is DtdSupport) {
+      final dtd = this as DtdSupport;
+      if (dtd.dtdClient != null && vmServiceUri != null) {
         stderr.writeln(
             '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...');
         try {
           await dtd.dtdClient!.call(
             'ConnectedApp',
             'hotReload',
-            params: {'vmServiceUri': self.vmServiceUri},
+            params: {'vmServiceUri': vmServiceUri},
           );
           dtdSuccess = true;
         } catch (e) {
@@ -216,21 +241,19 @@ base mixin PerformanceProfilingSupport
     ]);
   }
 
+  /// Handles the hot_restart tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotRestart(CallToolRequest req) async {
-    final self = this;
     bool dtdSuccess = false;
-
-    // Use DTD ConnectedApp service if available to delegate compilation, reset in-memory state, and rerun main() via the host.
-    if (self is DtdSupport) {
-      final dtd = self as DtdSupport;
-      if (dtd.dtdClient != null && self.vmServiceUri != null) {
+    if (this is DtdSupport) {
+      final dtd = this as DtdSupport;
+      if (dtd.dtdClient != null && vmServiceUri != null) {
         stderr.writeln(
             '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...');
         try {
           await dtd.dtdClient!.call(
             'ConnectedApp',
             'hotRestart',
-            params: {'vmServiceUri': self.vmServiceUri},
+            params: {'vmServiceUri': vmServiceUri},
           );
           dtdSuccess = true;
         } catch (e) {
@@ -271,7 +294,7 @@ base mixin PerformanceProfilingSupport
     }
 
     // Wait briefly for the isolate to restart before querying the VM
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future<void>.delayed(const Duration(milliseconds: 800));
 
     // Refresh the isolate ID and cache after the restart
     final vm = await vmService!.getVM();
@@ -290,13 +313,14 @@ base mixin PerformanceProfilingSupport
     ]);
   }
 
+  /// Handles the get_cpu_profile tool request.
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
-    final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
+    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
     stderr.writeln(
         '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
 
     await vmService!.clearCpuSamples(isolateId!);
-    await Future.delayed(Duration(seconds: duration));
+    await Future<void>.delayed(Duration(seconds: duration));
 
     final endTime = DateTime.now().microsecondsSinceEpoch;
     final cpuSamples = await vmService!.getCpuSamples(isolateId!, 0, endTime);
@@ -359,10 +383,11 @@ base mixin PerformanceProfilingSupport
         'total_samples': cpuSamples.sampleCount ?? 0,
         'hotspots': hotspots.take(100).toList(),
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
+  /// Handles the start_profiling tool request.
   Future<CallToolResult> _handleStartProfiling(CallToolRequest req) async {
     if (isProfiling) {
       return CallToolResult(
@@ -405,6 +430,7 @@ base mixin PerformanceProfilingSupport
     );
   }
 
+  /// Handles the stop_profiling tool request.
   Future<CallToolResult> _handleStopProfiling(CallToolRequest req) async {
     if (!isProfiling) {
       return CallToolResult(
@@ -418,13 +444,22 @@ base mixin PerformanceProfilingSupport
 
     stderr.writeln('[mcp:profiling] Stopping performance profiling session...');
     isProfiling = false;
-    final durationMs =
-        DateTime.now().millisecondsSinceEpoch - profilingStartTime!;
+    final startTime = profilingStartTime;
+    final durationMs = startTime != null
+        ? DateTime.now().millisecondsSinceEpoch - startTime
+        : 0;
 
-    final timeline = await vmService!.getVMTimeline();
+    Timeline timeline;
+    try {
+      timeline = await vmService!.getVMTimeline();
+    } finally {
+      try {
+        await vmService!.setVMTimelineFlags([]);
+      } catch (e) {
+        stderr.writeln('[mcp:profiling] Error resetting timeline flags: $e');
+      }
+    }
     final events = timeline.traceEvents ?? [];
-
-    await vmService!.setVMTimelineFlags([]);
 
     final targetFpsVal = targetFps ?? 60.0;
     final targetFrameTimeMs = 1000.0 / targetFpsVal;
@@ -436,16 +471,20 @@ base mixin PerformanceProfilingSupport
 
     bool isFrameEvent(String name) {
       final n = name.toLowerCase();
-      return n == 'frame' ||
-          n == 'vsync' ||
-          n.contains('animator') ||
-          n.contains('beginframe') ||
-          n.contains('onanimatorbeginframe') ||
-          n.contains('shell::onanimatorbeginframe') ||
-          n == 'gpurasterizer::draw' ||
-          n == 'rasterizer::dodraw' ||
-          n.contains('pipeline produce') ||
-          n.contains('pipeline consume');
+      return switch (n) {
+        'frame' ||
+        'vsync' ||
+        'gpurasterizer::draw' ||
+        'rasterizer::dodraw' =>
+          true,
+        _
+            when n.contains('animator') ||
+                n.contains('beginframe') ||
+                n.contains('pipeline produce') ||
+                n.contains('pipeline consume') =>
+          true,
+        _ => false,
+      };
     }
 
     for (final event in events) {
@@ -492,14 +531,12 @@ base mixin PerformanceProfilingSupport
       final maxDur = durations.reduce((a, b) => a > b ? a : b);
       final avgDur = totalDur / durations.length;
 
-      String severity = 'low';
-      if (maxDur > 100.0) {
-        severity = 'critical';
-      } else if (maxDur > 32.0) {
-        severity = 'high';
-      } else if (maxDur > 16.0) {
-        severity = 'medium';
-      }
+      final severity = switch (maxDur) {
+        > 100.0 => 'critical',
+        > 32.0 => 'high',
+        > 16.0 => 'medium',
+        _ => 'low',
+      };
 
       cpuHotspots.add({
         'name': name,
@@ -658,7 +695,7 @@ base mixin PerformanceProfilingSupport
         'cpu_hotspots': cpuHotspots,
         'recommendations': recommendations,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 }
