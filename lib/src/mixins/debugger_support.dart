@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
-import 'package:vm_service/vm_service.dart';
+import 'package:vm_service/vm_service.dart' hide ExceptionPauseMode;
+import '../enums/exception_pause_mode.dart';
 import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
 /// Support mixin providing debugger capabilities including call stack retrieval,
@@ -106,7 +108,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the get_call_stack tool request.
   Future<CallToolResult> _handleGetCallStack(CallToolRequest req) async {
-    final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 20;
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 20;
     stderr.writeln('[mcp:get_call_stack] Fetching stack frames (limit=$limit)');
 
     final stack = await vmService!.getStack(isolateId!, limit: limit);
@@ -144,14 +146,14 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
                  })
             .toList(),
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
   /// Handles the set_exception_pause_mode tool request.
   Future<CallToolResult> _handleSetExceptionPauseMode(
       CallToolRequest req) async {
-    final modeStr = req.arguments!['mode'] as String;
+    final modeStr = req.requireArg<String>('mode');
     final mode = ExceptionPauseMode.fromString(modeStr);
     stderr.writeln('[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
 
@@ -172,9 +174,9 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the add_breakpoint tool request.
   Future<CallToolResult> _handleAddBreakpoint(CallToolRequest req) async {
-    final filePath = req.arguments!['file_path'] as String;
-    final line = (req.arguments!['line'] as num).toInt();
-    final column = (req.arguments?['column'] as num?)?.toInt();
+    final filePath = req.requireArg<String>('file_path');
+    final line = (req.requireArg<num>('line')).toInt();
+    final column = (req.arg<num>('column'))?.toInt();
     stderr
         .writeln('[mcp:add_breakpoint] Setting breakpoint on: $filePath:$line');
 
@@ -203,13 +205,13 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         'resolved': bp.resolved ?? false,
         'raw_response': bp.json,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
   /// Handles the remove_breakpoint tool request.
   Future<CallToolResult> _handleRemoveBreakpoint(CallToolRequest req) async {
-    final breakpointId = req.arguments!['breakpoint_id'] as String;
+    final breakpointId = req.requireArg<String>('breakpoint_id');
     stderr
         .writeln('[mcp:remove_breakpoint] Removing breakpoint: $breakpointId');
 
@@ -221,8 +223,8 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the evaluate_expression tool request.
   Future<CallToolResult> _handleEvalExpression(CallToolRequest req) async {
-    final expression = req.arguments!['expression'] as String;
-    final frameIndex = (req.arguments?['frame_index'] as num?)?.toInt();
+    final expression = req.requireArg<String>('expression');
+    final frameIndex = (req.arg<num>('frame_index'))?.toInt();
 
     if (frameIndex != null) {
       stderr.writeln(
@@ -252,31 +254,6 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
                 '- Value: $valStr\n'
                 '- Class: $classStr')
       ],
-    );
-  }
-}
-
-/// Modes for pausing the execution on exceptions.
-enum ExceptionPauseMode {
-  /// Do not pause on any exceptions.
-  none('None'),
-
-  /// Pause on all exceptions.
-  all('All'),
-
-  /// Pause only on unhandled exceptions.
-  unhandled('Unhandled');
-
-  /// The raw String identifier used by the Dart VM Service.
-  final String value;
-
-  const ExceptionPauseMode(this.value);
-
-  /// Resolves the enum from a raw string input, case-insensitively, defaulting to [none] if unresolved.
-  static ExceptionPauseMode fromString(String modeStr) {
-    return ExceptionPauseMode.values.firstWhere(
-      (e) => e.value.toLowerCase() == modeStr.toLowerCase(),
-      orElse: () => ExceptionPauseMode.none,
     );
   }
 }

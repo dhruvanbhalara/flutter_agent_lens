@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
 import '../enums/mcp_tool.dart';
+import '../enums/network_sort_by.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for capturing and analyzing HTTP traffic details.
@@ -19,10 +21,10 @@ base mixin NetworkCaptureSupport
   final Map<String, Map<String, dynamic>> capturedRequests = {};
 
   /// Subscription to the VM Service's extension event stream.
-  StreamSubscription? networkExtensionSub;
+  StreamSubscription<Event>? networkExtensionSub;
 
   /// Subscription to the VM Service's log event stream.
-  StreamSubscription? networkLoggingSub;
+  StreamSubscription<Event>? networkLoggingSub;
 
   /// Registers all network capture and diagnostic tools.
   void registerNetworkTools() {
@@ -92,7 +94,9 @@ base mixin NetworkCaptureSupport
   /// Handles the get_network_profile tool request.
   Future<CallToolResult> _handleGetNetworkProfile(CallToolRequest req) async {
     stderr.writeln('[mcp:network_profile] Fetching HTTP profile...');
-    final response = await vmService!.callServiceExtension(
+    final vm = vmService;
+    if (vm == null) return notConnected();
+    final response = await vm.callServiceExtension(
       'ext.dart.io.getHttpProfile',
       isolateId: isolateId,
     );
@@ -172,8 +176,7 @@ base mixin NetworkCaptureSupport
       }
     }
 
-    final includeRawResponse =
-        req.arguments?['includeRawResponse'] as bool? ?? false;
+    final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     return serializeDualFormat(
       title: 'Network Diagnostics Report',
       markdownBody: md.toString(),
@@ -182,7 +185,7 @@ base mixin NetworkCaptureSupport
         'requests': formattedRequests,
         if (includeRawResponse) 'raw_response': result,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
@@ -281,7 +284,7 @@ base mixin NetworkCaptureSupport
       );
     }
 
-    final sortByStr = req.arguments?['sortBy'] as String? ?? 'time';
+    final sortByStr = req.arg<String>('sortBy') ?? 'time';
     final sortBy = NetworkSortBy.fromString(sortByStr);
 
     stderr.writeln('[mcp:network_capture] Stopping network capture...');
@@ -301,8 +304,9 @@ base mixin NetworkCaptureSupport
       stderr.writeln('[mcp:network] Error disabling HTTP timeline logging: $e');
     }
 
+    final start = networkCaptureStartTime ?? DateTime.now().millisecondsSinceEpoch;
     final durationMs =
-        DateTime.now().millisecondsSinceEpoch - networkCaptureStartTime!;
+        DateTime.now().millisecondsSinceEpoch - start;
     final allRequests = capturedRequests.values.toList();
 
     if (allRequests.isEmpty) {
@@ -440,32 +444,7 @@ base mixin NetworkCaptureSupport
         'total_requests': allRequests.length,
         'requests': allRequests,
       },
-      format: req.arguments?['format'] as String?,
-    );
-  }
-}
-
-/// Sorting strategies for captured network requests.
-enum NetworkSortBy {
-  /// Sort requests chronologically by start time.
-  time('time'),
-
-  /// Sort requests by request execution duration.
-  duration('duration'),
-
-  /// Sort requests by response content size.
-  size('size');
-
-  /// The raw String identifier of the sort strategy.
-  final String value;
-
-  const NetworkSortBy(this.value);
-
-  /// Resolves the sort enum from a nullable raw string, defaulting to [time].
-  static NetworkSortBy fromString(String? val) {
-    return NetworkSortBy.values.firstWhere(
-      (e) => e.value == val,
-      orElse: () => NetworkSortBy.time,
+      format: req.arg<String>('format'),
     );
   }
 }

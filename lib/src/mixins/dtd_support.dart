@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:dtd/dtd.dart';
 import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for connecting to and interacting with the
@@ -54,7 +55,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the connect_dtd tool request.
   Future<CallToolResult> _handleConnectDtd(CallToolRequest req) async {
-    final uriStr = req.arguments!['uri'] as String;
+    final uriStr = req.requireArg<String>('uri');
     try {
       stderr.writeln('[mcp:dtd] Connecting to DTD at: $uriStr');
       final uri = Uri.parse(uriStr);
@@ -141,7 +142,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         markdownBody: 'Active editor path and cursor: \n'
             '${const JsonEncoder.withIndent("  ").convert(result)}',
         structuredData: result,
-        format: req.arguments?['format'] as String?,
+        format: req.arg<String>('format'),
       );
     } catch (e) {
       return CallToolResult(

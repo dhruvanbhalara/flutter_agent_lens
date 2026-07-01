@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:path/path.dart' as p;
+import '../enums/flutter_debug_flag.dart';
 import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for widget inspection, layout diagnostics, and rebuild tracking.
@@ -26,7 +28,7 @@ base mixin WidgetInspectionSupport
   final Map<String, String> rebuildIdToFile = {};
 
   /// Subscription to the VM Service's extension event stream for rebuilt widgets.
-  StreamSubscription? rebuildSub;
+  StreamSubscription<Event>? rebuildSub;
 
   /// Registers all widget inspection and diagnostic tools.
   void registerWidgetTools() {
@@ -206,7 +208,7 @@ base mixin WidgetInspectionSupport
 
   /// Handles the get_widget_rebuild_counts tool request.
   Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
-    final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
+    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Starting rebuild tracking, duration=${duration}s');
 
@@ -309,14 +311,14 @@ base mixin WidgetInspectionSupport
       structuredData: {
         'widgets': widgets,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
   /// Handles the inspect_widget tool request.
   Future<CallToolResult> _handleInspectLayoutConstraints(
       CallToolRequest req) async {
-    final widgetId = req.arguments!['widgetId'] as String;
+    final widgetId = req.requireArg<String>('widgetId');
     stderr.writeln('[mcp:inspect_layout] Inspecting widget: $widgetId');
 
     final response = await vmService!.callServiceExtension(
@@ -389,7 +391,7 @@ base mixin WidgetInspectionSupport
       });
     }
 
-    final includeRawNode = req.arguments?['includeRawNode'] as bool? ?? false;
+    final includeRawNode = req.arg<bool>('includeRawNode') ?? false;
     return serializeDualFormat(
       title: 'Layout Diagnostics Report',
       markdownBody: md.toString(),
@@ -401,14 +403,14 @@ base mixin WidgetInspectionSupport
         'all_properties': properties,
         if (includeRawNode) 'raw_node': result,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
   /// Handles the toggle_widget_selection tool request.
   Future<CallToolResult> _handleToggleWidgetSelection(
       CallToolRequest req) async {
-    final enabled = req.arguments!['enabled'] as bool;
+    final enabled = req.requireArg<bool>('enabled');
     stderr.writeln('[mcp:toggle_widget_selection] Setting enabled = $enabled');
 
     await vmService!.callServiceExtension(
@@ -428,7 +430,7 @@ base mixin WidgetInspectionSupport
   /// Handles the toggle_package_widgets tool request.
   Future<CallToolResult> _handleTogglePackageWidgets(
       CallToolRequest req) async {
-    final enabled = req.arguments!['enabled'] as bool;
+    final enabled = req.requireArg<bool>('enabled');
     stderr.writeln('[mcp:toggle_package_widgets] Setting enabled = $enabled');
 
     final root = workspaceRoot;
@@ -462,13 +464,28 @@ base mixin WidgetInspectionSupport
     }
 
     final isolate = await vmService!.getIsolate(isolateId!);
-    final widgetInspectorLib = isolate.libraries?.firstWhere(
-      (lib) => lib.uri == 'package:flutter/src/widgets/widget_inspector.dart',
-      orElse: () => throw StateError(
-          'WidgetInspectorService library not found in target isolate.'),
-    );
+    final libraries = isolate.libraries ?? [];
+    LibraryRef? widgetInspectorLib;
+    for (final lib in libraries) {
+      if (lib.uri == 'package:flutter/src/widgets/widget_inspector.dart') {
+        widgetInspectorLib = lib;
+        break;
+      }
+    }
 
-    final libId = widgetInspectorLib!.id!;
+    if (widgetInspectorLib == null || widgetInspectorLib.id == null) {
+      return CallToolResult(
+        content: [
+          TextContent(
+            text:
+                'WidgetInspectorService library not found in target isolate. Make sure the app is running in debug mode.',
+          ),
+        ],
+        isError: true,
+      );
+    }
+
+    final libId = widgetInspectorLib.id!;
     final pathsLiteral = packagePaths
         .map((p) => "'${p.replaceAll("'", "\\'")}'")
         .toList()
@@ -557,8 +574,8 @@ base mixin WidgetInspectionSupport
 
   /// Handles the toggle_debug_flag tool request.
   Future<CallToolResult> _handleToggleDebugFlag(CallToolRequest req) async {
-    final flagNameInput = req.arguments!['flag_name'] as String;
-    final value = req.arguments!['value'] as String;
+    final flagNameInput = req.requireArg<String>('flag_name');
+    final value = req.requireArg<String>('value');
     final flag = FlutterDebugFlag.fromString(flagNameInput);
     stderr.writeln(
         '[mcp:toggle_debug_flag] Resolved flag $flagNameInput to ${flag.flagName}, setting to value=$value');
@@ -589,8 +606,8 @@ base mixin WidgetInspectionSupport
 
   /// Handles the get_widget_tree tool request.
   Future<CallToolResult> _handleGetWidgetTree(CallToolRequest req) async {
-    final maxDepth = (req.arguments?['maxDepth'] as num?)?.toInt() ?? 15;
-    final projectOnly = (req.arguments?['projectOnly'] as bool?) ?? false;
+    final maxDepth = (req.arg<num>('maxDepth'))?.toInt() ?? 15;
+    final projectOnly = req.arg<bool>('projectOnly') ?? false;
 
     final objectGroup =
         'mcp_inspector_${DateTime.now().millisecondsSinceEpoch}';
@@ -656,7 +673,7 @@ base mixin WidgetInspectionSupport
         'max_depth_reached': maxDepthReached,
         'widgets': flattened.map((w) => w.toMap()).toList(),
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
@@ -905,7 +922,7 @@ base mixin WidgetInspectionSupport
       );
     }
 
-    final topN = (req.arguments?['topN'] as num?)?.toInt() ?? 30;
+    final topN = (req.arg<num>('topN'))?.toInt() ?? 30;
 
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Stopping rebuild tracking session...');
@@ -1030,7 +1047,7 @@ base mixin WidgetInspectionSupport
         'total_rebuilds': totalRebuilds,
         'rebuilds': widgets.take(topN).toList(),
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
@@ -1083,8 +1100,8 @@ base mixin WidgetInspectionSupport
 
   /// Handles the trigger_scroll_gesture tool request.
   Future<CallToolResult> _handleScrollGesture(CallToolRequest req) async {
-    final controller = req.arguments!['scroll_controller_expression'] as String;
-    final offset = (req.arguments?['offset'] as num?)?.toDouble() ?? 500.0;
+    final controller = req.requireArg<String>('scroll_controller_expression');
+    final offset = (req.arg<num>('offset'))?.toDouble() ?? 500.0;
     stderr.writeln(
         '[mcp:scroll_gesture] Controller: $controller, offset: $offset');
 
@@ -1224,41 +1241,5 @@ final class _FlatWidget {
       if (sourceLine != null) 'sourceLine': sourceLine,
       if (properties != null) 'properties': properties,
     };
-  }
-}
-
-/// Flutter widget inspector/rendering debug flags.
-enum FlutterDebugFlag {
-  /// Toggle visual debugging layout sizes.
-  debugPaint('debugPaintSizeEnabled', 'debugPaint'),
-
-  /// Toggle visual baselines of text widgets.
-  debugPaintBaselines('debugPaintBaselinesEnabled', 'debugPaintBaselinesEnabled'),
-
-  /// Force repaint showing visual boundaries.
-  repaintRainbow('repaintRainbow', 'repaintRainbow'),
-
-  /// Invert oversized images to help performance optimization.
-  invertOversizedImages('invertOversizedImages', 'invertOversizedImages'),
-
-  /// Adjust animation time dilation (slow motion animations).
-  timeDilation('timeDilation', 'timeDilation');
-
-  /// The friendly flag name used in tool inputs.
-  final String flagName;
-
-  /// The actual suffix of the extension key under `ext.flutter.*`.
-  final String extensionSuffix;
-
-  const FlutterDebugFlag(this.flagName, this.extensionSuffix);
-
-  /// Resolves the debug flag from the tool parameter name input, defaulting to [debugPaint].
-  static FlutterDebugFlag fromString(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('paintbaselines')) return FlutterDebugFlag.debugPaintBaselines;
-    if (lower.contains('rainbow')) return FlutterDebugFlag.repaintRainbow;
-    if (lower.contains('oversized')) return FlutterDebugFlag.invertOversizedImages;
-    if (lower.contains('dilation')) return FlutterDebugFlag.timeDilation;
-    return FlutterDebugFlag.debugPaint;
   }
 }

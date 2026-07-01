@@ -5,13 +5,14 @@ import 'package:dart_mcp/server.dart';
 import 'package:path/path.dart' as p;
 import 'package:image/image.dart' as img;
 import '../enums/mcp_tool.dart';
+import '../enums/screenshot_types.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for taking and visually comparing screenshots.
 base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers screenshot-related tools.
   void registerScreenshotTools() {
-
     registerTool(
       Tool(
         name: McpTool.compareLayoutScreenshots.name,
@@ -88,11 +89,11 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     }
 
-    final baselineName = req.arguments!['baseline_name'] as String;
-    final actionStr = req.arguments!['action'] as String;
-    final threshold = (req.arguments?['threshold'] as num?)?.toDouble() ?? 0.98;
-    final screenshotTypeStr = req.arguments?['screenshot_type'] as String?;
-    final deviceId = req.arguments?['device_id'] as String?;
+    final baselineName = req.requireArg<String>('baseline_name');
+    final actionStr = req.requireArg<String>('action');
+    final threshold = (req.arg<num>('threshold'))?.toDouble() ?? 0.98;
+    final screenshotTypeStr = req.arg<String>('screenshot_type');
+    final deviceId = req.arg<String>('device_id');
 
     final ScreenshotAction action;
     try {
@@ -260,7 +261,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           'current_path': currentPath,
           'diff_path': diffPath,
         },
-        format: req.arguments?['format'] as String?,
+        format: req.arg<String>('format'),
       );
     }
   }
@@ -278,9 +279,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     }
 
-    final screenshotTypeStr = req.arguments?['screenshot_type'] as String?;
-    final deviceId = req.arguments?['device_id'] as String?;
-    final outputPath = req.arguments?['output_path'] as String?;
+    final screenshotTypeStr = req.arg<String>('screenshot_type');
+    final deviceId = req.arg<String>('device_id');
+    final outputPath = req.arg<String>('output_path');
 
     final screenshotType = ScreenshotType.fromString(screenshotTypeStr);
 
@@ -312,6 +313,16 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   }
 
   /// Helper to capture a screenshot via the Flutter CLI tool.
+  /// Resolves the path to the Flutter executable.
+  String _getFlutterExecutable() {
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    if (flutterRoot != null) {
+      return p.join(flutterRoot, 'bin',
+          Platform.isWindows ? 'flutter.bat' : 'flutter');
+    }
+    return Platform.isWindows ? 'flutter.bat' : 'flutter';
+  }
+
   Future<String> _captureDeviceScreenshot({
     required String targetPath,
     required String screenshotType,
@@ -335,11 +346,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             '[mcp:screenshot] Error detecting VM OS or auto-detecting device: $e');
       }
 
-      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
-      final executable = flutterRoot != null
-          ? p.join(flutterRoot, 'bin',
-              Platform.isWindows ? 'flutter.bat' : 'flutter')
-          : (Platform.isWindows ? 'flutter.bat' : 'flutter');
+      final executable = _getFlutterExecutable();
 
       final args = [
         'screenshot',
@@ -354,25 +361,42 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           '--device-id=$effectiveDeviceId',
       ];
 
-      final result = await Process.run(executable, args);
-      if (result.exitCode != 0) {
-        final errorMsg = result.stderr.toString();
-        if (screenshotType == 'skia' &&
-            errorMsg.contains(
-                'Cannot capture SKP screenshot with Impeller enabled.')) {
-          stderr.writeln(
-              '[mcp:screenshot] Skia capture blocked by Impeller. Retrying as device screenshot.');
-          return _captureDeviceScreenshot(
-            targetPath: targetPath,
-            screenshotType: 'device',
-            deviceId: deviceId,
+      try {
+        final result = await Process.run(executable, args).timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw TimeoutException(
+                'Flutter screenshot command timed out after 15 seconds.');
+          },
+        );
+
+        if (result.exitCode != 0) {
+          final errorMsg = result.stderr.toString();
+          if (screenshotType == 'skia' &&
+              errorMsg.contains(
+                  'Cannot capture SKP screenshot with Impeller enabled.')) {
+            stderr.writeln(
+                '[mcp:screenshot] Skia capture blocked by Impeller. Retrying as device screenshot.');
+            return _captureDeviceScreenshot(
+              targetPath: targetPath,
+              screenshotType: 'device',
+              deviceId: deviceId,
+            );
+          }
+          throw ProcessException(
+            executable,
+            args,
+            'Failed to capture screenshot (Exit Code ${result.exitCode}):\n${errorMsg.trim()}',
+            result.exitCode,
           );
         }
+      } on TimeoutException {
+        rethrow;
+      } catch (e) {
         throw ProcessException(
           executable,
           args,
-          'Failed to capture screenshot (Exit Code ${result.exitCode}):\n${errorMsg.trim()}',
-          result.exitCode,
+          'Failed to execute screenshot command: $e',
         );
       }
       return screenshotType;
@@ -383,13 +407,16 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Helper to detect the active device or emulator ID matching the given OS.
   Future<String?> _detectDeviceForOs(String targetOs) async {
     try {
-      final flutterRoot = Platform.environment['FLUTTER_ROOT'];
-      final executable = flutterRoot != null
-          ? p.join(flutterRoot, 'bin',
-              Platform.isWindows ? 'flutter.bat' : 'flutter')
-          : (Platform.isWindows ? 'flutter.bat' : 'flutter');
+      final executable = _getFlutterExecutable();
 
-      final result = await Process.run(executable, ['devices', '--machine']);
+      final result = await Process.run(executable, ['devices', '--machine']).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw TimeoutException(
+              'Flutter devices listing timed out after 15 seconds.');
+        },
+      );
+
       if (result.exitCode == 0) {
         final devices = jsonDecode(result.stdout.toString()) as List<dynamic>;
         final normalizedOs = targetOs.toLowerCase();
@@ -425,50 +452,5 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       stderr.writeln('[mcp:screenshot] Error listing/matching devices: $e');
     }
     return null;
-  }
-}
-
-/// The visual screenshot comparison action.
-enum ScreenshotAction {
-  /// Capture baseline screenshot.
-  captureBaseline('capture_baseline'),
-
-  /// Compare visual screen with baseline screenshot.
-  compare('compare');
-
-  /// The raw String identifier of the action.
-  final String value;
-
-  const ScreenshotAction(this.value);
-
-  /// Resolves the action from a raw string.
-  /// Throws an [ArgumentError] if the action is unsupported.
-  static ScreenshotAction fromString(String val) {
-    return ScreenshotAction.values.firstWhere(
-      (e) => e.value.toLowerCase() == val.toLowerCase(),
-      orElse: () => throw ArgumentError('Unsupported action: $val'),
-    );
-  }
-}
-
-/// The format/method used to capture screenshots.
-enum ScreenshotType {
-  /// Native device screenshot.
-  device('device'),
-
-  /// Skia Picture representation via VM service.
-  skia('skia');
-
-  /// The raw String identifier of the screenshot type.
-  final String value;
-
-  const ScreenshotType(this.value);
-
-  /// Resolves the type from a raw string, defaulting to [device].
-  static ScreenshotType fromString(String? val) {
-    return ScreenshotType.values.firstWhere(
-      (e) => e.value.toLowerCase() == val?.toLowerCase(),
-      orElse: () => ScreenshotType.device,
-    );
   }
 }

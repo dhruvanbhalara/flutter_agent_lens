@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
 import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import '../models/memory_models.dart';
 import 'vm_connection_support.dart';
 
@@ -159,14 +160,29 @@ base mixin MemoryDebuggingSupport
   /// Handles the audit_class_memory_leak tool request.
   Future<CallToolResult> _handleAuditClassMemoryLeak(
       CallToolRequest req) async {
-    final className = req.arguments!['class_name'] as String;
+    final className = req.requireArg<String>('class_name');
     stderr.writeln('[mcp:audit_memory] Auditing class: $className');
 
     final classList = await vmService!.getClassList(isolateId!);
-    final classRef = classList.classes!.firstWhere(
-      (c) => c.name == className,
-      orElse: () => throw Exception('Class $className not found.'),
-    );
+    final classes = classList.classes ?? [];
+    ClassRef? classRef;
+    for (final c in classes) {
+      if (c.name == className) {
+        classRef = c;
+        break;
+      }
+    }
+
+    if (classRef == null || classRef.id == null) {
+      return CallToolResult(
+        content: [
+          TextContent(
+            text: 'Class $className not found in target isolate.',
+          ),
+        ],
+        isError: true,
+      );
+    }
 
     final instancesResponse =
         await vmService!.getInstances(isolateId!, classRef.id!, 100);
@@ -237,15 +253,15 @@ base mixin MemoryDebuggingSupport
         'leaked_count': reports.length,
         'leaks': reports,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
   /// Handles the diff_heap_allocations tool request.
   Future<CallToolResult> _handleDiffHeapAllocations(CallToolRequest req) async {
-    final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
-    final expression = req.arguments?['expression'] as String?;
-    final forceGc = req.arguments?['force_gc'] as bool? ?? true;
+    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final expression = req.arg<String>('expression');
+    final forceGc = req.arg<bool>('force_gc') ?? true;
 
     stderr.writeln(
         '[mcp:diff_heap] Starting heap profiling (duration=${duration}s, forceGc=$forceGc)');
@@ -318,16 +334,15 @@ base mixin MemoryDebuggingSupport
         'force_gc': forceGc,
         'deltas': deltas.take(50).toList(),
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
   /// Handles the get_object_referrers tool request.
   Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
-    final objectId = req.arguments!['object_id'] as String;
-    final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 15;
-    final includeRawResponse =
-        req.arguments?['includeRawResponse'] as bool? ?? false;
+    final objectId = req.requireArg<String>('object_id');
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
+    final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     stderr.writeln(
         '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit');
 
@@ -366,14 +381,14 @@ base mixin MemoryDebuggingSupport
         'retaining_path': pathElements,
         if (includeRawResponse) 'raw_response': retainingPath.json,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
   /// Handles the save_snapshot tool request.
   Future<CallToolResult> _handleSaveSnapshot(CallToolRequest req) async {
-    final name = req.arguments!['name'] as String;
-    final forceGc = (req.arguments?['forceGC'] as bool?) ?? true;
+    final name = req.requireArg<String>('name');
+    final forceGc = req.arg<bool>('forceGC') ?? true;
 
     final snapshot = await _takeSnapshot(name, forceGc);
     memorySnapshots[name] = snapshot;
@@ -395,8 +410,8 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the compare_snapshots tool request.
   Future<CallToolResult> _handleCompareSnapshots(CallToolRequest req) async {
-    final before = req.arguments!['before'] as String;
-    final after = req.arguments!['after'] as String;
+    final before = req.requireArg<String>('before');
+    final after = req.requireArg<String>('after');
 
     final snap1 = memorySnapshots[before];
     final snap2 = memorySnapshots[after];
@@ -522,7 +537,7 @@ base mixin MemoryDebuggingSupport
         'grew': grew.take(10).toList(),
         'shrank': shrank.take(10).toList(),
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
@@ -599,8 +614,8 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the get_memory_snapshot tool request.
   Future<CallToolResult> _handleGetMemorySnapshot(CallToolRequest req) async {
-    final forceGc = (req.arguments?['forceGC'] as bool?) ?? false;
-    final topN = (req.arguments?['topN'] as num?)?.toInt() ?? 20;
+    final forceGc = req.arg<bool>('forceGC') ?? false;
+    final topN = (req.arg<num>('topN'))?.toInt() ?? 20;
 
     stderr.writeln(
         '[mcp:memory_snapshot] Fetching memory snapshot (forceGc=$forceGc, topN=$topN)');
@@ -817,7 +832,7 @@ base mixin MemoryDebuggingSupport
       title: 'Memory Snapshot Summary',
       markdownBody: output.join('\n'),
       structuredData: structuredData,
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 

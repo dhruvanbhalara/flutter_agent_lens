@@ -3,12 +3,15 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
 import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 import 'dtd_support.dart';
 
 /// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
 base mixin PerformanceProfilingSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  static const int _kFrameBudgetUs = 16666;
+
   /// Whether the CPU timeline sampling or profiling is active.
   bool isProfiling = false;
 
@@ -101,7 +104,7 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the diagnose_jank tool request.
   Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
-    final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
+    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
     stderr.writeln(
         '[mcp:diagnose_jank] Starting jank diagnosis, duration=${duration}s');
 
@@ -112,6 +115,11 @@ base mixin PerformanceProfilingSupport
     await Future.delayed(Duration(seconds: duration));
 
     final timeline = await vmService!.getVMTimeline();
+    try {
+      await vmService!.setVMTimelineFlags([]);
+    } catch (e) {
+      stderr.writeln('[mcp:diagnose_jank] Error resetting timeline flags: $e');
+    }
     final events = timeline.traceEvents ?? [];
     var jankyFrames = 0;
     var totalFrames = 0;
@@ -122,7 +130,7 @@ base mixin PerformanceProfilingSupport
           eventName == 'Animator::BeginFrame') {
         totalFrames++;
         final dur = event.json?['dur'] as num? ?? 0;
-        if (dur > 16666) {
+        if (dur > _kFrameBudgetUs) {
           jankyFrames++;
           frameEvents.add({
             'event': eventName,
@@ -166,7 +174,7 @@ base mixin PerformanceProfilingSupport
         'jank_percentage': jankPercentage,
         'critical_events': frameEvents,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
@@ -294,7 +302,7 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the get_cpu_profile tool request.
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
-    final duration = (req.arguments?['duration_seconds'] as num?)?.toInt() ?? 3;
+    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
     stderr.writeln(
         '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
 
@@ -362,7 +370,7 @@ base mixin PerformanceProfilingSupport
         'total_samples': cpuSamples.sampleCount ?? 0,
         'hotspots': hotspots.take(100).toList(),
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
@@ -423,8 +431,10 @@ base mixin PerformanceProfilingSupport
 
     stderr.writeln('[mcp:profiling] Stopping performance profiling session...');
     isProfiling = false;
-    final durationMs =
-        DateTime.now().millisecondsSinceEpoch - profilingStartTime!;
+    final startTime = profilingStartTime;
+    final durationMs = startTime != null
+        ? DateTime.now().millisecondsSinceEpoch - startTime
+        : 0;
 
     final timeline = await vmService!.getVMTimeline();
     final events = timeline.traceEvents ?? [];
@@ -661,7 +671,7 @@ base mixin PerformanceProfilingSupport
         'cpu_hotspots': cpuHotspots,
         'recommendations': recommendations,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 }

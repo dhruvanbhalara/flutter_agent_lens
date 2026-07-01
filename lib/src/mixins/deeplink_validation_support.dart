@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:path/path.dart' as p;
 import '../enums/mcp_tool.dart';
+import '../enums/target_platform.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for validating Android App Links and iOS Universal Links.
@@ -10,8 +12,6 @@ base mixin DeeplinkValidationSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers the deep link validation tool.
   void registerDeeplinkTools() {
-
-
     registerTool(
       Tool(
         name: McpTool.validateDeepLinks.name,
@@ -55,7 +55,7 @@ base mixin DeeplinkValidationSupport
       );
     }
 
-    final platformStr = req.arguments!['platform'] as String;
+    final platformStr = req.requireArg<String>('platform');
     final TargetPlatform platform;
     try {
       platform = TargetPlatform.fromString(platformStr);
@@ -66,9 +66,9 @@ base mixin DeeplinkValidationSupport
       );
     }
 
-    final buildVariant = req.arguments?['build_variant'] as String?;
-    final configuration = req.arguments?['configuration'] as String?;
-    final target = req.arguments?['target'] as String? ?? 'Runner';
+    final buildVariant = req.arg<String>('build_variant');
+    final configuration = req.arg<String>('configuration');
+    final target = req.arg<String>('target') ?? 'Runner';
 
     stderr.writeln('[mcp:deeplinks] Validating deep links, platform=${platform.value}');
 
@@ -144,30 +144,7 @@ base mixin DeeplinkValidationSupport
         'stdout': output,
         'stderr': result.stderr.toString(),
       },
-      format: req.arguments?['format'] as String?,
-    );
-  }
-}
-
-/// The target mobile operating system platform for deep link validation.
-enum TargetPlatform {
-  /// Android OS.
-  android('android'),
-
-  /// iOS OS.
-  ios('ios');
-
-  /// The raw String representation of the platform.
-  final String value;
-
-  const TargetPlatform(this.value);
-
-  /// Resolves the enum from a raw string input, case-insensitively.
-  /// Throws an [ArgumentError] if the platform is unsupported.
-  static TargetPlatform fromString(String val) {
-    return TargetPlatform.values.firstWhere(
-      (e) => e.value.toLowerCase() == val.toLowerCase(),
-      orElse: () => throw ArgumentError('Unsupported platform: $val'),
+      format: req.arg<String>('format'),
     );
   }
 }

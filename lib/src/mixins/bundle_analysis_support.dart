@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:path/path.dart' as p;
 import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for analyzing application bundle sizes.
@@ -68,8 +69,8 @@ base mixin BundleAnalysisSupport
       }
     }
 
-    final target = req.arguments?['build_target'] as String? ?? defaultTarget;
-    final targetPlatform = req.arguments?['target_platform'] as String? ??
+    final target = req.arg<String>('build_target') ?? defaultTarget;
+    final targetPlatform = req.arg<String>('target_platform') ??
         ((target == 'apk' || target == 'appbundle') ? 'android-arm64' : '');
 
     stderr.writeln(
@@ -208,7 +209,7 @@ base mixin BundleAnalysisSupport
         'total_bytes': totalSizeBytes,
         'components': leafComponents,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 }

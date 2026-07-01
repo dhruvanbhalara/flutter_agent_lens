@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
 import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for fetching and statefully buffering console
@@ -20,13 +21,13 @@ base mixin ConsoleLoggingSupport
   int duplicateLogCount = 0;
 
   /// Subscription to the VM Service's stdout stream.
-  StreamSubscription? stdoutSub;
+  StreamSubscription<Event>? stdoutSub;
 
   /// Subscription to the VM Service's stderr stream.
-  StreamSubscription? stderrSub;
+  StreamSubscription<Event>? stderrSub;
 
   /// Subscription to the VM Service's logging/developer stream.
-  StreamSubscription? loggingSub;
+  StreamSubscription<Event>? loggingSub;
 
   /// Registers the console log retrieval tool.
   void registerLoggingTools() {
@@ -38,10 +39,7 @@ base mixin ConsoleLoggingSupport
         inputSchema: ObjectSchema(
           properties: {
             'limit': limitSchema(defaultValue: 50.0),
-            'format': StringSchema(
-              description:
-                  'Response format: markdown or json (default: markdown).',
-            ),
+            'format': formatSchema,
           },
         ),
       ),
@@ -57,25 +55,36 @@ base mixin ConsoleLoggingSupport
     if (vmService == null) return;
 
     // Subscribe to stdout and stderr streams using helper
-    _listenToByteStream(
-            EventStreams.kStdout, '[STDOUT]', vmService!.onStdoutEvent)
-        .then((sub) => stdoutSub = sub);
-    _listenToByteStream(
-            EventStreams.kStderr, '[STDERR]', vmService!.onStderrEvent)
-        .then((sub) => stderrSub = sub);
+    () async {
+      try {
+        stdoutSub = await _listenToByteStream(
+            EventStreams.kStdout, '[STDOUT]', vmService!.onStdoutEvent);
+      } catch (e) {
+        stderr.writeln('[mcp:logging] Error starting stdout listener: $e');
+      }
 
-    // Subscribe to developer logs stream
-    vmService!.streamListen(EventStreams.kLogging).then((_) {
-      loggingSub = vmService!.onLoggingEvent.listen((Event event) {
-        final logRecord = event.logRecord;
-        if (logRecord != null) {
-          final messageRef = logRecord.message;
-          final value = messageRef?.valueAsString ?? '';
-          final loggerName = logRecord.loggerName?.valueAsString ?? 'log';
-          addToLogBuffer('[$loggerName]', value);
-        }
-      });
-    }).catchError((_) {});
+      try {
+        stderrSub = await _listenToByteStream(
+            EventStreams.kStderr, '[STDERR]', vmService!.onStderrEvent);
+      } catch (e) {
+        stderr.writeln('[mcp:logging] Error starting stderr listener: $e');
+      }
+
+      try {
+        await vmService!.streamListen(EventStreams.kLogging);
+        loggingSub = vmService!.onLoggingEvent.listen((Event event) {
+          final logRecord = event.logRecord;
+          if (logRecord != null) {
+            final messageRef = logRecord.message;
+            final value = messageRef?.valueAsString ?? '';
+            final loggerName = logRecord.loggerName?.valueAsString ?? 'log';
+            addToLogBuffer('[$loggerName]', value);
+          }
+        });
+      } catch (e) {
+        stderr.writeln('[mcp:logging] Error subscribing to logging stream: $e');
+      }
+    }();
   }
 
   /// Formats and adds a new log message to the log buffer, deduplicating identical lines.
@@ -116,7 +125,7 @@ base mixin ConsoleLoggingSupport
   }
 
   /// Subscribes to a VM service stream producing base64-encoded byte buffers (stdout/stderr).
-  Future<StreamSubscription?> _listenToByteStream(
+  Future<StreamSubscription<Event>?> _listenToByteStream(
     String streamId,
     String logPrefix,
     Stream<Event> eventStream,
@@ -144,7 +153,7 @@ base mixin ConsoleLoggingSupport
 
   /// Handles the fetch_console_logs tool request.
   Future<CallToolResult> _handleFetchConsoleLogs(CallToolRequest req) async {
-    final limit = (req.arguments?['limit'] as num?)?.toInt() ?? 50;
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 50;
     final maxLimit = limit.clamp(1, 200);
     stderr.writeln(
         '[mcp:fetch_console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$maxLimit');
@@ -170,7 +179,7 @@ base mixin ConsoleLoggingSupport
         'returned_lines': recentLogs.length,
         'logs': recentLogs,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 }

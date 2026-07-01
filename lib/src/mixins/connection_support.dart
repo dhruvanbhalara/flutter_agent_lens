@@ -5,6 +5,7 @@ import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 import 'package:dtd/dtd.dart';
 import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 import 'console_logging_support.dart';
 import 'dtd_support.dart';
@@ -104,7 +105,7 @@ base mixin ConnectionSupport
     };
     try {
       stderr.writeln('[mcp:connect] Attempting connection to: $rawUri');
-      workspaceRoot = req.arguments?['workspace_root'] as String?;
+      workspaceRoot = req.arg<String>('workspace_root');
 
       if (workspaceRoot == null || workspaceRoot!.isEmpty) {
         try {
@@ -174,7 +175,13 @@ base mixin ConnectionSupport
       );
 
       final vm = await vmService!.getVM();
-      if (vm.isolates == null || vm.isolates!.isEmpty) {
+      final isolates = vm.isolates;
+      if (isolates == null || isolates.isEmpty) {
+        try {
+          await vmService!.dispose();
+        } catch (_) {}
+        vmService = null;
+        vmServiceUri = null;
         return CallToolResult(
           content: [
             TextContent(
@@ -185,11 +192,19 @@ base mixin ConnectionSupport
         );
       }
       final activeIsolates =
-          vm.isolates!.where((i) => i.isSystemIsolate != true).toList();
+          isolates.where((i) => i.isSystemIsolate != true).toList();
       if (activeIsolates.isNotEmpty) {
-        isolateId = activeIsolates.first.id!;
+        final id = activeIsolates.first.id;
+        if (id == null) {
+          throw StateError('Isolate has no ID');
+        }
+        isolateId = id;
       } else {
-        isolateId = vm.isolates!.first.id!;
+        final id = isolates.first.id;
+        if (id == null) {
+          throw StateError('Isolate has no ID');
+        }
+        isolateId = id;
       }
       final ver = await vmService!.getVersion();
 
@@ -231,10 +246,11 @@ base mixin ConnectionSupport
       }
 
 
-      final selectedIsolateName = vm.isolates!
-          .firstWhere((i) => i.id == isolateId,
-              orElse: () => vm.isolates!.first)
-          .name;
+      final selectedIsolateName = vm.isolates
+              ?.firstWhere((i) => i.id == isolateId,
+                  orElse: () => vm.isolates!.first)
+              .name ??
+          'unknown';
 
       return CallToolResult(
         content: [
@@ -246,6 +262,13 @@ base mixin ConnectionSupport
         ],
       );
     } catch (e) {
+      try {
+        await vmService?.dispose();
+      } catch (_) {}
+      vmService = null;
+      vmServiceUri = null;
+      isolateId = null;
+
       if (e is RPCError && e.code == -32601) {
         return CallToolResult(
           content: [
@@ -311,7 +334,7 @@ base mixin ConnectionSupport
     final flutterExtensions =
         extensionRPCs.where((e) => e.startsWith('ext.flutter.')).toList();
     final includeExtensions =
-        req.arguments?['includeExtensions'] as bool? ?? false;
+        req.arg<bool>('includeExtensions') ?? false;
 
     final appInfo = {
       'vm': {
@@ -374,14 +397,14 @@ base mixin ConnectionSupport
       title: 'App Information Details',
       markdownBody: md.toString(),
       structuredData: appInfo,
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
   /// Handles the discover_apps tool request.
   Future<CallToolResult> _handleAutodiscover(CallToolRequest req) async {
-    final workspace = req.arguments?['workspace_root'] as String?;
-    final autoConnect = req.arguments?['autoConnect'] as bool? ?? true;
+    final workspace = req.arg<String>('workspace_root');
+    final autoConnect = req.arg<bool>('autoConnect') ?? true;
     stderr.writeln(
         '[mcp:autodiscover] Starting auto-discovery, workspace=$workspace, autoConnect=$autoConnect');
     final runningApps = await discoverActiveApps();
