@@ -11,12 +11,17 @@ enum TargetPlatform {
 
   const TargetPlatform(this.value);
 
+  static final Map<String, TargetPlatform> _lookup = {
+    for (final e in TargetPlatform.values) e.value.toLowerCase(): e,
+  };
+
   /// Resolves the enum from a raw string input, case-insensitively.
   /// Throws an [ArgumentError] if the platform is unsupported.
   static TargetPlatform fromString(String val) {
-    return TargetPlatform.values.firstWhere(
-      (e) => e.value.toLowerCase() == val.toLowerCase(),
-      orElse: () => throw ArgumentError('Unsupported platform: $val'),
-    );
+    final match = _lookup[val.toLowerCase()];
+    if (match == null) {
+      throw ArgumentError('Unsupported platform: $val');
+    }
+    return match;
   }
 }

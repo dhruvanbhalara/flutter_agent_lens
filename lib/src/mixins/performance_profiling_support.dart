@@ -451,16 +451,19 @@ base mixin PerformanceProfilingSupport
 
     bool isFrameEvent(String name) {
       final n = name.toLowerCase();
-      return n == 'frame' ||
-          n == 'vsync' ||
-          n.contains('animator') ||
-          n.contains('beginframe') ||
-          n.contains('onanimatorbeginframe') ||
-          n.contains('shell::onanimatorbeginframe') ||
-          n == 'gpurasterizer::draw' ||
-          n == 'rasterizer::dodraw' ||
-          n.contains('pipeline produce') ||
-          n.contains('pipeline consume');
+      return switch (n) {
+        'frame' ||
+        'vsync' ||
+        'gpurasterizer::draw' ||
+        'rasterizer::dodraw' =>
+          true,
+        _ when n.contains('animator') ||
+            n.contains('beginframe') ||
+            n.contains('pipeline produce') ||
+            n.contains('pipeline consume') =>
+          true,
+        _ => false,
+      };
     }
 
     for (final event in events) {

@@ -14,11 +14,12 @@ enum ExceptionPauseMode {
 
   const ExceptionPauseMode(this.value);
 
+  static final Map<String, ExceptionPauseMode> _lookup = {
+    for (final e in ExceptionPauseMode.values) e.value.toLowerCase(): e,
+  };
+
   /// Resolves the enum from a raw string input, case-insensitively, defaulting to [none] if unresolved.
   static ExceptionPauseMode fromString(String modeStr) {
-    return ExceptionPauseMode.values.firstWhere(
-      (e) => e.value.toLowerCase() == modeStr.toLowerCase(),
-      orElse: () => ExceptionPauseMode.none,
-    );
+    return _lookup[modeStr.toLowerCase()] ?? ExceptionPauseMode.none;
   }
 }

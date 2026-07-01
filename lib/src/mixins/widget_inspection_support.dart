@@ -243,16 +243,23 @@ base mixin WidgetInspectionSupport
       }
     });
 
-    stderr.writeln(
-        '[mcp:widget_rebuild_counts] Collecting rebuild events for ${duration}s...');
-    await Future.delayed(Duration(seconds: duration));
-
-    await extSub.cancel();
-    await vmService!.callServiceExtension(
-      'ext.flutter.inspector.trackRebuildDirtyWidgets',
-      isolateId: isolateId,
-      args: {'enabled': 'false'},
-    );
+    try {
+      stderr.writeln(
+          '[mcp:widget_rebuild_counts] Collecting rebuild events for ${duration}s...');
+      await Future.delayed(Duration(seconds: duration));
+    } finally {
+      await extSub.cancel();
+      try {
+        await vmService!.callServiceExtension(
+          'ext.flutter.inspector.trackRebuildDirtyWidgets',
+          isolateId: isolateId,
+          args: {'enabled': 'false'},
+        );
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:widget_rebuild_counts] Error disabling trackRebuildDirtyWidgets: $e');
+      }
+    }
 
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Collected ${rebuildEvents.length} rebuild events');

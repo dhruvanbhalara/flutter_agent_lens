@@ -87,42 +87,41 @@ base mixin BundleAnalysisSupport
       );
     }
 
-    bool isSizeFile(String filePath) {
-      final name = p.basename(filePath).toLowerCase();
-      final containsPattern = name.contains('code-size-details') ||
-          name.contains('code-size-analysis');
-      if (!containsPattern) return false;
+    File? sizeFile;
+    File? fallbackFile;
+    final targetLower = target.toLowerCase();
 
+    bool matchesTarget(String name) {
       if (target == 'apk' || target == 'appbundle') {
         return name.contains('apk') ||
             name.contains('appbundle') ||
             name.contains('android');
       }
-      return name.contains(target.toLowerCase());
+      return name.contains(targetLower);
     }
 
-    File? sizeFile;
-    final fileEntities = buildDir.listSync(recursive: true);
-    for (final entity in fileEntities) {
-      if (entity is File && isSizeFile(entity.path)) {
-        sizeFile = entity;
-        break;
-      }
-    }
-
-    // Fallback: look for any code-size-details.json or code-size-analysis file if target match fails
-    if (sizeFile == null) {
+    try {
+      final fileEntities = buildDir.listSync(recursive: true);
       for (final entity in fileEntities) {
         if (entity is File) {
           final name = p.basename(entity.path).toLowerCase();
-          if (name.contains('code-size-details') ||
-              name.contains('code-size-analysis')) {
-            sizeFile = entity;
-            break;
+          final isCodeSize = name.contains('code-size-details') ||
+              name.contains('code-size-analysis');
+          if (isCodeSize) {
+            fallbackFile ??= entity;
+            if (matchesTarget(name)) {
+              sizeFile = entity;
+              break;
+            }
           }
         }
       }
+    } catch (e) {
+      stderr.writeln('[mcp:bundle_analysis] Error scanning build directory: $e');
     }
+
+    sizeFile ??= fallbackFile;
+
 
     if (sizeFile == null || !sizeFile.existsSync()) {
       return CallToolResult(

@@ -14,11 +14,13 @@ enum NetworkSortBy {
 
   const NetworkSortBy(this.value);
 
+  static final Map<String, NetworkSortBy> _lookup = {
+    for (final e in NetworkSortBy.values) e.value: e,
+  };
+
   /// Resolves the sort enum from a nullable raw string, defaulting to [time].
   static NetworkSortBy fromString(String? val) {
-    return NetworkSortBy.values.firstWhere(
-      (e) => e.value == val,
-      orElse: () => NetworkSortBy.time,
-    );
+    if (val == null) return NetworkSortBy.time;
+    return _lookup[val] ?? NetworkSortBy.time;
   }
 }

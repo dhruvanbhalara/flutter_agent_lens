@@ -308,6 +308,7 @@ base mixin NetworkCaptureSupport
     final durationMs =
         DateTime.now().millisecondsSinceEpoch - start;
     final allRequests = capturedRequests.values.toList();
+    capturedRequests.clear();
 
     if (allRequests.isEmpty) {
       return CallToolResult(

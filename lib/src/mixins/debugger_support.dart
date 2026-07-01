@@ -182,12 +182,20 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
     final uri =
         filePath.startsWith('file:') ? filePath : Uri.file(filePath).toString();
-    final bp = await vmService!.addBreakpointWithScriptUri(
-      isolateId!,
-      uri,
-      line,
-      column: column,
-    );
+    final bp = await () async {
+      try {
+        return await vmService!.addBreakpointWithScriptUri(
+          isolateId!,
+          uri,
+          line,
+          column: column,
+        );
+      } on RPCError catch (e) {
+        throw StateError(
+            'Failed to add breakpoint at $filePath:$line. The line may not contain executable code, '
+            'or the file is not loaded in the running isolate. (Details: ${e.message})');
+      }
+    }();
 
     final bpId = bp.id ?? 'unknown';
     final md = StringBuffer('Breakpoint Installed\n\n')
@@ -215,7 +223,17 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     stderr
         .writeln('[mcp:remove_breakpoint] Removing breakpoint: $breakpointId');
 
-    await vmService!.removeBreakpoint(isolateId!, breakpointId);
+    try {
+      await vmService!.removeBreakpoint(isolateId!, breakpointId);
+    } on RPCError catch (e) {
+      return CallToolResult(
+        content: [
+          TextContent(
+              text: 'Failed to remove breakpoint `$breakpointId`: ${e.message}')
+        ],
+        isError: true,
+      );
+    }
     return CallToolResult(content: [
       TextContent(text: 'Successfully removed breakpoint `$breakpointId`.')
     ]);
