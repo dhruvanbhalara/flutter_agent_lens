@@ -23,7 +23,6 @@ base mixin ConnectionSupport
         RootsTrackingSupport {
   /// Registers all connection-related tools in the MCP server.
   void registerConnectionTools() {
-
     registerTool(
       Tool(
         name: McpTool.connect.name,
@@ -101,56 +100,17 @@ base mixin ConnectionSupport
     final rawUri = switch (req.arguments) {
       {'uri': String uri} => uri,
       {'vmServiceUri': String uri} => uri,
-      _ => throw ArgumentError('Required parameter "uri" or "vmServiceUri" is missing.'),
+      _ => throw ArgumentError(
+          'Required parameter "uri" or "vmServiceUri" is missing.'),
     };
     try {
       stderr.writeln('[mcp:connect] Attempting connection to: $rawUri');
-      workspaceRoot = req.arg<String>('workspace_root');
-
-      if (workspaceRoot == null || workspaceRoot!.isEmpty) {
-        try {
-          final clientRoots = await roots;
-          if (clientRoots.isNotEmpty) {
-            final firstUriStr = clientRoots.first.uri;
-            final firstUri = Uri.parse(firstUriStr);
-            if (firstUri.isScheme('file')) {
-              workspaceRoot = firstUri.toFilePath();
-              stderr.writeln(
-                  '[mcp:connect] Resolved workspace root from client: $workspaceRoot');
-            }
-          }
-        } catch (e) {
-          stderr.writeln('[mcp:connect] Error fetching client roots: $e');
-        }
-      }
-
-      if (workspaceRoot != null) {
-        pathResolver = PathResolver(workspaceRoot!);
-      }
+      await _resolveWorkspaceRoot(req);
 
       String uriToConnect = rawUri;
       if (isDtdUri(rawUri)) {
         try {
-          uriToConnect = await resolveDtdToVmServiceUri(rawUri);
-          stderr.writeln(
-              '[mcp:connect] DTD resolved VM Service URI: $uriToConnect');
-
-          if (this is DtdSupport) {
-            final dtd = this as DtdSupport;
-            try {
-              stderr.writeln(
-                  '[mcp:connect] Initializing DTD client for DTD URI: $rawUri');
-              final parsedDtdUri = Uri.parse(rawUri);
-              await dtd.dtdClient?.close();
-              dtd.dtdClient = await DartToolingDaemon.connect(parsedDtdUri);
-              dtd.dtdUri = rawUri;
-              stderr.writeln(
-                  '[mcp:connect] DTD client initialized successfully.');
-            } catch (dtdErr) {
-              stderr.writeln(
-                  '[mcp:connect] Failed to initialize DTD client: $dtdErr');
-            }
-          }
+          uriToConnect = await _connectAndResolveDtd(rawUri);
         } catch (e) {
           return CallToolResult(
             content: [
@@ -231,7 +191,7 @@ base mixin ConnectionSupport
       }
 
       // Clear existing I/O subscriptions and start buffering streams
-      startLogging();
+      await startLogging();
 
       // Enable HTTP timeline logging automatically
       try {
@@ -244,7 +204,6 @@ base mixin ConnectionSupport
         stderr
             .writeln('[mcp:connect] Error enabling HTTP timeline logging: $e');
       }
-
 
       final selectedIsolateName = vm.isolates
               ?.firstWhere((i) => i.id == isolateId,
@@ -289,6 +248,53 @@ base mixin ConnectionSupport
     }
   }
 
+  Future<void> _resolveWorkspaceRoot(CallToolRequest req) async {
+    workspaceRoot = req.arg<String>('workspace_root');
+
+    if (workspaceRoot == null || workspaceRoot!.isEmpty) {
+      try {
+        final clientRoots = await roots;
+        if (clientRoots.isNotEmpty) {
+          final firstUriStr = clientRoots.first.uri;
+          final firstUri = Uri.parse(firstUriStr);
+          if (firstUri.isScheme('file')) {
+            workspaceRoot = firstUri.toFilePath();
+            stderr.writeln(
+                '[mcp:connect] Resolved workspace root from client: $workspaceRoot');
+          }
+        }
+      } catch (e) {
+        stderr.writeln('[mcp:connect] Error fetching client roots: $e');
+      }
+    }
+
+    if (workspaceRoot != null) {
+      pathResolver = PathResolver(workspaceRoot!);
+    }
+  }
+
+  Future<String> _connectAndResolveDtd(String rawUri) async {
+    final uriToConnect = await resolveDtdToVmServiceUri(rawUri);
+    stderr.writeln('[mcp:connect] DTD resolved VM Service URI: $uriToConnect');
+
+    if (this is DtdSupport) {
+      final dtd = this as DtdSupport;
+      try {
+        stderr.writeln(
+            '[mcp:connect] Initializing DTD client for DTD URI: $rawUri');
+        final parsedDtdUri = Uri.parse(rawUri);
+        await dtd.dtdClient?.close();
+        dtd.dtdClient = await DartToolingDaemon.connect(parsedDtdUri);
+        dtd.dtdUri = rawUri;
+        stderr.writeln('[mcp:connect] DTD client initialized successfully.');
+      } catch (dtdErr) {
+        stderr
+            .writeln('[mcp:connect] Failed to initialize DTD client: $dtdErr');
+      }
+    }
+    return uriToConnect;
+  }
+
   /// Handles the disconnect tool request.
   Future<CallToolResult> _handleDisconnect(CallToolRequest req) async {
     if (vmService == null) {
@@ -296,7 +302,7 @@ base mixin ConnectionSupport
         content: [TextContent(text: 'Not connected to any app.')],
       );
     }
-    cleanupStreams();
+    await cleanupStreams();
 
     try {
       await vmService!.dispose();
@@ -333,8 +339,7 @@ base mixin ConnectionSupport
     final extensionRPCs = isolate.extensionRPCs ?? [];
     final flutterExtensions =
         extensionRPCs.where((e) => e.startsWith('ext.flutter.')).toList();
-    final includeExtensions =
-        req.arg<bool>('includeExtensions') ?? false;
+    final includeExtensions = req.arg<bool>('includeExtensions') ?? false;
 
     final appInfo = {
       'vm': {

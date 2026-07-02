@@ -126,7 +126,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           screenshotType: screenshotType.value,
           deviceId: deviceId,
         );
-        final notice = (screenshotType == ScreenshotType.skia && actualType == 'device')
+        final notice = (screenshotType == ScreenshotType.skia &&
+                actualType == 'device')
             ? '\n(Note: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported)'
             : '';
         return CallToolResult(
@@ -302,7 +303,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       screenshotType: screenshotType.value,
       deviceId: deviceId,
     );
-    final notice = (screenshotType == ScreenshotType.skia && actualType == 'device')
+    final notice = (screenshotType == ScreenshotType.skia &&
+            actualType == 'device')
         ? '\n(Note: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported)'
         : '';
     return CallToolResult(
@@ -317,8 +319,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   String _getFlutterExecutable() {
     final flutterRoot = Platform.environment['FLUTTER_ROOT'];
     if (flutterRoot != null) {
-      return p.join(flutterRoot, 'bin',
-          Platform.isWindows ? 'flutter.bat' : 'flutter');
+      return p.join(
+          flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter');
     }
     return Platform.isWindows ? 'flutter.bat' : 'flutter';
   }
@@ -409,7 +411,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     try {
       final executable = _getFlutterExecutable();
 
-      final result = await Process.run(executable, ['devices', '--machine']).timeout(
+      final result =
+          await Process.run(executable, ['devices', '--machine']).timeout(
         const Duration(seconds: 15),
         onTimeout: () {
           throw TimeoutException(

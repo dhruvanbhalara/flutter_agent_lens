@@ -6,13 +6,13 @@ import '../enums/exception_pause_mode.dart';
 import '../enums/mcp_tool.dart';
 import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
+import '../utils/string_utils.dart';
 
 /// Support mixin providing debugger capabilities including call stack retrieval,
 /// breakpoint management, pause configuration, and expression evaluation.
 base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Registers all debugger-related tools.
   void registerDebuggerTools() {
-
     registerTool(
       Tool(
         name: McpTool.getCallStack.name,
@@ -143,7 +143,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
                   'script': f.location?.script?.uri,
                   'line': f.location?.line,
                   'column': f.location?.column,
-                 })
+                })
             .toList(),
       },
       format: req.arg<String>('format'),
@@ -155,7 +155,8 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       CallToolRequest req) async {
     final modeStr = req.requireArg<String>('mode');
     final mode = ExceptionPauseMode.fromString(modeStr);
-    stderr.writeln('[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
+    stderr.writeln(
+        '[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
 
     try {
       await vmService!
@@ -168,7 +169,8 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       await vmService!.setExceptionPauseMode(isolateId!, mode.value);
     }
     return CallToolResult(content: [
-      TextContent(text: 'Successfully set exception pause mode to: ${mode.value}')
+      TextContent(
+          text: 'Successfully set exception pause mode to: ${mode.value}')
     ]);
   }
 
@@ -261,7 +263,10 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       res = await vmService!.evaluate(isolateId!, libraryId, expression);
     }
 
-    final valStr = res is InstanceRef ? res.valueAsString : res.toString();
+    final rawValStr = res is InstanceRef
+        ? (res.valueAsString ?? res.toString())
+        : res.toString();
+    final valStr = StringUtils.truncate(rawValStr, maxLength: 5000);
     final kindStr = res is InstanceRef ? res.kind : 'Unknown';
     final classStr = res is InstanceRef ? res.classRef?.name : 'Unknown';
     return CallToolResult(

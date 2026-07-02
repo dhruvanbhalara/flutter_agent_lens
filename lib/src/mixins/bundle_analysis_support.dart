@@ -117,11 +117,11 @@ base mixin BundleAnalysisSupport
         }
       }
     } catch (e) {
-      stderr.writeln('[mcp:bundle_analysis] Error scanning build directory: $e');
+      stderr
+          .writeln('[mcp:bundle_analysis] Error scanning build directory: $e');
     }
 
     sizeFile ??= fallbackFile;
-
 
     if (sizeFile == null || !sizeFile.existsSync()) {
       return CallToolResult(
@@ -138,7 +138,17 @@ base mixin BundleAnalysisSupport
 
     stderr.writeln(
         '[mcp:bundle_size] Parsing size analysis file: ${sizeFile.path}');
-    final rawJson = jsonDecode(await sizeFile.readAsString());
+    final dynamic rawJson;
+    try {
+      rawJson = jsonDecode(await sizeFile.readAsString());
+    } catch (e) {
+      return CallToolResult(
+        content: [
+          TextContent(text: 'Failed to parse size analysis JSON file: $e')
+        ],
+        isError: true,
+      );
+    }
     if (rawJson is! Map<String, dynamic>) {
       return CallToolResult(
         content: [
@@ -152,7 +162,8 @@ base mixin BundleAnalysisSupport
 
     final leafComponents = <Map<String, dynamic>>[];
 
-    void visit(Map<String, dynamic> node) {
+    void visit(Map<String, dynamic> node, int depth) {
+      if (depth > 20) return;
       final name = (node['n'] ?? node['name'])?.toString() ?? 'unknown';
       final value = node['value'] ?? node['size'];
 
@@ -160,7 +171,7 @@ base mixin BundleAnalysisSupport
       if (children is List && children.isNotEmpty) {
         for (final child in children) {
           if (child is Map<String, dynamic>) {
-            visit(child);
+            visit(child, depth + 1);
           }
         }
       } else if (value is num) {
@@ -171,7 +182,7 @@ base mixin BundleAnalysisSupport
       }
     }
 
-    visit(rawJson);
+    visit(rawJson, 0);
 
     // Sort by size descending
     leafComponents.sort(

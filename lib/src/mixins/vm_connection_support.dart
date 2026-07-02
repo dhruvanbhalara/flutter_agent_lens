@@ -109,7 +109,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
                 return CallToolResult(
                   content: [
                     TextContent(
-                        text: '${mcpTool.name} execution failed (retry): $retryErr')
+                        text:
+                            '${mcpTool.name} execution failed (retry): $retryErr')
                   ],
                   isError: true,
                 );
@@ -119,7 +120,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
           stderr.writeln('[mcp:${mcpTool.name}] ERROR: $e');
           stderr.writeln('[mcp:${mcpTool.name}] STACKTRACE: $st');
           return CallToolResult(
-            content: [TextContent(text: '${mcpTool.name} execution failed: $e')],
+            content: [
+              TextContent(text: '${mcpTool.name} execution failed: $e')
+            ],
             isError: true,
           );
         }
@@ -127,7 +130,6 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       validateArguments: validateArguments,
     );
   }
-
 
   /// Helper to determine if an error is related to garbage collection or isolate sentinels.
   bool _isCollectedError(Object e) {
@@ -236,7 +238,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     final wsDtd = normalizeToWsUri(dtdUri);
     stderr.writeln(
         '[mcp:connect] Connecting to DTD WebSocket to resolve VM Service: $wsDtd');
-    WebSocket ws;
+    final WebSocket ws;
     try {
       ws = await WebSocket.connect(wsDtd).timeout(const Duration(seconds: 3));
     } catch (e) {
@@ -247,42 +249,37 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     ws.listen((message) {
       try {
         final decoded = jsonDecode(message as String);
-        if (decoded case {
-          'id': 1001,
-          'result': {
-            'vmServices': [
-              {'exposedUri': String vmUri} || {'uri': String vmUri},
-              ...
-            ]
-          }
-        }) {
+        if (decoded
+            case {
+              'id': 1001,
+              'result': {
+                'vmServices': [
+                  {'exposedUri': final String vmUri} ||
+                      {'uri': final String vmUri},
+                  ...
+                ]
+              }
+            }) {
           completer.complete(vmUri);
-          ws.close();
-        } else if (decoded case {
-          'id': 1001,
-          'result': {'vmServices': []}
-        }) {
+          unawaited(ws.close());
+        } else if (decoded case {'id': 1001, 'result': {'vmServices': []}}) {
           completer.completeError(
               StateError('DTD reports no running VM Services connected.'));
           ws.close();
-        } else if (decoded case {
-          'id': 1001,
-          'error': final error
-        }) {
-          completer.completeError(
-              StateError('DTD returned RPC error: $error'));
+        } else if (decoded case {'id': 1001, 'error': final error}) {
+          completer.completeError(StateError('DTD returned RPC error: $error'));
           ws.close();
         } else if (decoded case {'id': 1001}) {
-          completer.completeError(
-              StateError('Invalid response format from DTD.'));
+          completer
+              .completeError(StateError('Invalid response format from DTD.'));
           ws.close();
         }
       } catch (e) {
         if (!completer.isCompleted) completer.completeError(e);
         ws.close();
       }
-    }, onError: (e) {
-      if (!completer.isCompleted) completer.completeError(e as Object);
+    }, onError: (Object e) {
+      if (!completer.isCompleted) completer.completeError(e);
     }, onDone: () {
       if (!completer.isCompleted) {
         completer.completeError(
@@ -294,12 +291,12 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       'jsonrpc': '2.0',
       'id': 1001,
       'method': 'ConnectedApps.getVmServices',
-      'params': {},
+      'params': <String, dynamic>{},
     };
     ws.add(jsonEncode(request));
 
     return completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-      ws.close();
+      unawaited(ws.close());
       throw TimeoutException(
           'Timed out waiting for DTD getVmServices response.');
     });
