@@ -269,9 +269,12 @@ base mixin MemoryDebuggingSupport
     final baselineProfile =
         await vmService!.getAllocationProfile(isolateId!, gc: forceGc);
     final baselineStats = <String, ClassHeapStats>{};
-    for (final member in baselineProfile.members ?? []) {
-      if (member.classRef?.name != null) {
-        baselineStats[member.classRef!.name!] = member;
+    final baselineMembers =
+        (baselineProfile.members ?? const []).cast<ClassHeapStats>();
+    for (final ClassHeapStats member in baselineMembers) {
+      final className = member.classRef?.name;
+      if (className != null && className.isNotEmpty) {
+        baselineStats[className] = member;
       }
     }
 
@@ -287,13 +290,15 @@ base mixin MemoryDebuggingSupport
     }
 
     stderr.writeln('[mcp:diff_heap] Sampling memory for ${duration}s...');
-    await Future.delayed(Duration(seconds: duration));
+    await Future<void>.delayed(Duration(seconds: duration));
 
     final currentProfile =
         await vmService!.getAllocationProfile(isolateId!, gc: false);
     final deltas = <Map<String, dynamic>>[];
+    final currentMembers =
+        (currentProfile.members ?? const []).cast<ClassHeapStats>();
 
-    for (final member in currentProfile.members ?? []) {
+    for (final ClassHeapStats member in currentMembers) {
       final className = member.classRef?.name;
       if (className == null) continue;
 
@@ -391,6 +396,10 @@ base mixin MemoryDebuggingSupport
     final forceGc = req.arg<bool>('forceGC') ?? true;
 
     final snapshot = await _takeSnapshot(name, forceGc);
+    if (memorySnapshots.length >= 10) {
+      final oldestKey = memorySnapshots.keys.first;
+      memorySnapshots.remove(oldestKey);
+    }
     memorySnapshots[name] = snapshot;
 
     final lines = [
@@ -519,8 +528,10 @@ base mixin MemoryDebuggingSupport
     md.writeln();
     md.writeln('VERDICT');
     final verdict = switch (heapDiff) {
-      < -1000000 => 'Memory improved by ${formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}).',
-      > 1000000 => 'Warning: Memory increased by ${formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.',
+      < -1000000 =>
+        'Memory improved by ${formatBytes(heapDiff.abs())} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}).',
+      > 1000000 =>
+        'Warning: Memory increased by ${formatBytes(heapDiff)} (${_pctChange(snap1.heapUsage, snap2.heapUsage)}). Check the classes that grew above.',
       _ => 'No significant change in memory usage between snapshots.',
     };
     md.writeln(verdict);

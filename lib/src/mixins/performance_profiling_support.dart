@@ -96,10 +96,19 @@ base mixin PerformanceProfilingSupport
   }
 
   /// Clears performance profiling state and resets targets.
-  void cleanupPerformanceProfiling() {
+  Future<void> cleanupPerformanceProfiling() async {
     isProfiling = false;
     profilingStartTime = null;
     targetFps = null;
+    final service = vmService;
+    if (service != null) {
+      try {
+        await service.setVMTimelineFlags([]);
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:profiling] Error resetting timeline flags on cleanup: $e');
+      }
+    }
   }
 
   /// Handles the diagnose_jank tool request.
@@ -112,13 +121,17 @@ base mixin PerformanceProfilingSupport
     await vmService!.setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API']);
     await vmService!.clearVMTimeline();
 
-    await Future.delayed(Duration(seconds: duration));
-
-    final timeline = await vmService!.getVMTimeline();
+    Timeline timeline;
     try {
-      await vmService!.setVMTimelineFlags([]);
-    } catch (e) {
-      stderr.writeln('[mcp:diagnose_jank] Error resetting timeline flags: $e');
+      await Future<void>.delayed(Duration(seconds: duration));
+      timeline = await vmService!.getVMTimeline();
+    } finally {
+      try {
+        await vmService!.setVMTimelineFlags([]);
+      } catch (e) {
+        stderr
+            .writeln('[mcp:diagnose_jank] Error resetting timeline flags: $e');
+      }
     }
     final events = timeline.traceEvents ?? [];
     var jankyFrames = 0;
@@ -281,7 +294,7 @@ base mixin PerformanceProfilingSupport
     }
 
     // Wait briefly for the isolate to restart before querying the VM
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future<void>.delayed(const Duration(milliseconds: 800));
 
     // Refresh the isolate ID and cache after the restart
     final vm = await vmService!.getVM();
@@ -307,7 +320,7 @@ base mixin PerformanceProfilingSupport
         '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
 
     await vmService!.clearCpuSamples(isolateId!);
-    await Future.delayed(Duration(seconds: duration));
+    await Future<void>.delayed(Duration(seconds: duration));
 
     final endTime = DateTime.now().microsecondsSinceEpoch;
     final cpuSamples = await vmService!.getCpuSamples(isolateId!, 0, endTime);
@@ -436,10 +449,17 @@ base mixin PerformanceProfilingSupport
         ? DateTime.now().millisecondsSinceEpoch - startTime
         : 0;
 
-    final timeline = await vmService!.getVMTimeline();
+    Timeline timeline;
+    try {
+      timeline = await vmService!.getVMTimeline();
+    } finally {
+      try {
+        await vmService!.setVMTimelineFlags([]);
+      } catch (e) {
+        stderr.writeln('[mcp:profiling] Error resetting timeline flags: $e');
+      }
+    }
     final events = timeline.traceEvents ?? [];
-
-    await vmService!.setVMTimelineFlags([]);
 
     final targetFpsVal = targetFps ?? 60.0;
     final targetFrameTimeMs = 1000.0 / targetFpsVal;
@@ -457,10 +477,11 @@ base mixin PerformanceProfilingSupport
         'gpurasterizer::draw' ||
         'rasterizer::dodraw' =>
           true,
-        _ when n.contains('animator') ||
-            n.contains('beginframe') ||
-            n.contains('pipeline produce') ||
-            n.contains('pipeline consume') =>
+        _
+            when n.contains('animator') ||
+                n.contains('beginframe') ||
+                n.contains('pipeline produce') ||
+                n.contains('pipeline consume') =>
           true,
         _ => false,
       };

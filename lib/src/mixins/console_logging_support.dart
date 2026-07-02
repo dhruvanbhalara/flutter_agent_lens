@@ -47,49 +47,49 @@ base mixin ConsoleLoggingSupport
     );
   }
 
+  static final RegExp _newlineRegExp = RegExp(r'\r?\n');
+
   /// Starts listening to and buffering stdout, stderr, and logging streams.
-  void startLogging() {
-    cleanupLogging();
+  Future<void> startLogging() async {
+    await cleanupLogging();
     logBuffer.clear();
 
-    if (vmService == null) return;
+    final service = vmService;
+    if (service == null) return;
 
-    // Subscribe to stdout and stderr streams using helper
-    () async {
-      try {
-        stdoutSub = await _listenToByteStream(
-            EventStreams.kStdout, '[STDOUT]', vmService!.onStdoutEvent);
-      } catch (e) {
-        stderr.writeln('[mcp:logging] Error starting stdout listener: $e');
-      }
+    try {
+      stdoutSub = await _listenToByteStream(
+          EventStreams.kStdout, '[STDOUT]', service.onStdoutEvent);
+    } catch (e) {
+      stderr.writeln('[mcp:logging] Error starting stdout listener: $e');
+    }
 
-      try {
-        stderrSub = await _listenToByteStream(
-            EventStreams.kStderr, '[STDERR]', vmService!.onStderrEvent);
-      } catch (e) {
-        stderr.writeln('[mcp:logging] Error starting stderr listener: $e');
-      }
+    try {
+      stderrSub = await _listenToByteStream(
+          EventStreams.kStderr, '[STDERR]', service.onStderrEvent);
+    } catch (e) {
+      stderr.writeln('[mcp:logging] Error starting stderr listener: $e');
+    }
 
-      try {
-        await vmService!.streamListen(EventStreams.kLogging);
-        loggingSub = vmService!.onLoggingEvent.listen((Event event) {
-          final logRecord = event.logRecord;
-          if (logRecord != null) {
-            final messageRef = logRecord.message;
-            final value = messageRef?.valueAsString ?? '';
-            final loggerName = logRecord.loggerName?.valueAsString ?? 'log';
-            addToLogBuffer('[$loggerName]', value);
-          }
-        });
-      } catch (e) {
-        stderr.writeln('[mcp:logging] Error subscribing to logging stream: $e');
-      }
-    }();
+    try {
+      await service.streamListen(EventStreams.kLogging);
+      loggingSub = service.onLoggingEvent.listen((Event event) {
+        final logRecord = event.logRecord;
+        if (logRecord != null) {
+          final messageRef = logRecord.message;
+          final value = messageRef?.valueAsString ?? '';
+          final loggerName = logRecord.loggerName?.valueAsString ?? 'log';
+          addToLogBuffer('[$loggerName]', value);
+        }
+      });
+    } catch (e) {
+      stderr.writeln('[mcp:logging] Error subscribing to logging stream: $e');
+    }
   }
 
   /// Formats and adds a new log message to the log buffer, deduplicating identical lines.
   void addToLogBuffer(String prefix, String message) {
-    final lines = message.split(RegExp(r'\r?\n'));
+    final lines = message.split(_newlineRegExp);
     for (final line in lines) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
@@ -113,10 +113,13 @@ base mixin ConsoleLoggingSupport
   }
 
   /// Cancels all active log stream subscriptions and resets state.
-  void cleanupLogging() {
-    stdoutSub?.cancel();
-    stderrSub?.cancel();
-    loggingSub?.cancel();
+  Future<void> cleanupLogging() async {
+    final futures = [
+      if (stdoutSub != null) stdoutSub!.cancel(),
+      if (stderrSub != null) stderrSub!.cancel(),
+      if (loggingSub != null) loggingSub!.cancel(),
+    ];
+    await Future.wait(futures);
     stdoutSub = null;
     stderrSub = null;
     loggingSub = null;

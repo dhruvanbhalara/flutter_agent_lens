@@ -28,7 +28,6 @@ base mixin NetworkCaptureSupport
 
   /// Registers all network capture and diagnostic tools.
   void registerNetworkTools() {
-
     registerTool(
       Tool(
         name: McpTool.getNetworkProfile.name,
@@ -81,10 +80,13 @@ base mixin NetworkCaptureSupport
   }
 
   /// Disposes active stream subscriptions and clears stateful captured requests.
-  void cleanupNetworkCapture() {
-    networkExtensionSub?.cancel();
+  Future<void> cleanupNetworkCapture() async {
+    final futures = [
+      if (networkExtensionSub != null) networkExtensionSub!.cancel(),
+      if (networkLoggingSub != null) networkLoggingSub!.cancel(),
+    ];
+    await Future.wait(futures);
     networkExtensionSub = null;
-    networkLoggingSub?.cancel();
     networkLoggingSub = null;
     isCapturingNetwork = false;
     networkCaptureStartTime = null;
@@ -231,6 +233,10 @@ base mixin NetworkCaptureSupport
       if (kind == 'dart:io.httpClient.request.start') {
         final id = data['id']?.toString() ??
             'req_${DateTime.now().millisecondsSinceEpoch}';
+        if (capturedRequests.length >= 200) {
+          final oldestKey = capturedRequests.keys.first;
+          capturedRequests.remove(oldestKey);
+        }
         capturedRequests[id] = {
           'id': id,
           'method': data['method'] ?? 'GET',
@@ -304,9 +310,9 @@ base mixin NetworkCaptureSupport
       stderr.writeln('[mcp:network] Error disabling HTTP timeline logging: $e');
     }
 
-    final start = networkCaptureStartTime ?? DateTime.now().millisecondsSinceEpoch;
-    final durationMs =
-        DateTime.now().millisecondsSinceEpoch - start;
+    final start =
+        networkCaptureStartTime ?? DateTime.now().millisecondsSinceEpoch;
+    final durationMs = DateTime.now().millisecondsSinceEpoch - start;
     final allRequests = capturedRequests.values.toList();
     capturedRequests.clear();
 
