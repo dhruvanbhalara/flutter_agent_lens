@@ -87,7 +87,8 @@ class FakeVmService extends VmService {
   }
 
   @override
-  Future<Timeline> getVMTimeline({int? timeExtentMicros, int? timeOriginMicros}) async {
+  Future<Timeline> getVMTimeline(
+      {int? timeExtentMicros, int? timeOriginMicros}) async {
     return Timeline(traceEvents: []);
   }
 
@@ -105,8 +106,12 @@ class FakeVmService extends VmService {
       id: 'isolate_1',
       name: 'main',
       libraries: [
-        LibraryRef(id: 'lib_1', name: 'main_lib', uri: 'package:my_app/main.dart'),
-        LibraryRef(id: 'lib_2', name: 'debug_rendering', uri: 'package:flutter/src/rendering/debug.dart'),
+        LibraryRef(
+            id: 'lib_1', name: 'main_lib', uri: 'package:my_app/main.dart'),
+        LibraryRef(
+            id: 'lib_2',
+            name: 'debug_rendering',
+            uri: 'package:flutter/src/rendering/debug.dart'),
       ],
     );
   }
@@ -152,7 +157,8 @@ class FakeVmService extends VmService {
   }
 
   @override
-  Future<Stack> getStack(String isolateId, {String? idZoneId, int? limit}) async {
+  Future<Stack> getStack(String isolateId,
+      {String? idZoneId, int? limit}) async {
     return Stack(
       frames: [
         Frame(
@@ -254,7 +260,8 @@ void main() {
       expect(server.isolateId, equals('isolate_1'));
     });
 
-    test('disconnect tool cleans up active streams and disposes VM Service', () async {
+    test('disconnect tool cleans up active streams and disposes VM Service',
+        () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
@@ -277,7 +284,8 @@ void main() {
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
-      fakeVmService.serviceExtensionResponses['ext.flutter.inspector.debugPaint'] = {
+      fakeVmService
+          .serviceExtensionResponses['ext.flutter.inspector.debugPaint'] = {
         'value': 'true'
       };
 
@@ -384,7 +392,8 @@ void main() {
       expect(text, contains('main.dart:42'));
     });
 
-    test('addBreakpoint and removeBreakpoint manages isolate pause limits', () async {
+    test('addBreakpoint and removeBreakpoint manages isolate pause limits',
+        () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
@@ -430,7 +439,8 @@ void main() {
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
-      fakeVmService.serviceExtensionResponses['ext.flutter.inspector.getRootWidgetSummaryTree'] = {
+      fakeVmService.serviceExtensionResponses[
+          'ext.flutter.inspector.getRootWidgetSummaryTree'] = {
         'result': {
           'description': 'Container',
           'widgetRuntimeType': 'Container',
