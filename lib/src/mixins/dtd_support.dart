@@ -18,8 +18,6 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Registers all DTD-related tools.
   void registerDtdTools() {
-
-
     registerTool(
       Tool(
         name: McpTool.connectDtd.name,
@@ -61,7 +59,10 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       final uri = Uri.parse(uriStr);
       final client = await DartToolingDaemon.connect(uri);
 
-      await dtdClient?.close();
+      try {
+        await dtdClient?.close();
+      } catch (_) {}
+
       dtdClient = client;
       dtdUri = uriStr;
 
@@ -88,6 +89,13 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         content: [TextContent(text: report.toString().trim())],
       );
     } catch (e) {
+      if (dtdClient != null) {
+        try {
+          await dtdClient!.close();
+        } catch (_) {}
+        dtdClient = null;
+        dtdUri = null;
+      }
       return CallToolResult(
         content: [TextContent(text: 'Failed to connect to DTD: $e')],
         isError: true,

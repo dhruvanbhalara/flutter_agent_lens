@@ -6,10 +6,14 @@ import '../enums/mcp_tool.dart';
 import '../enums/target_platform.dart';
 import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
+import '../utils/process_runner.dart';
 
 /// Support mixin providing tools for validating Android App Links and iOS Universal Links.
 base mixin DeeplinkValidationSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// The process runner helper, allowing test mocks.
+  ProcessRunner processRunner = const ProcessRunner();
+
   /// Registers the deep link validation tool.
   void registerDeeplinkTools() {
     registerTool(
@@ -70,7 +74,8 @@ base mixin DeeplinkValidationSupport
     final configuration = req.arg<String>('configuration');
     final target = req.arg<String>('target') ?? 'Runner';
 
-    stderr.writeln('[mcp:deeplinks] Validating deep links, platform=${platform.value}');
+    stderr.writeln(
+        '[mcp:deeplinks] Validating deep links, platform=${platform.value}');
 
     final flutterRoot = Platform.environment['FLUTTER_ROOT'];
     final executable = flutterRoot != null
@@ -79,20 +84,21 @@ base mixin DeeplinkValidationSupport
         : (Platform.isWindows ? 'flutter.bat' : 'flutter');
 
     final List<String> args = switch (platform) {
-      TargetPlatform.android => (buildVariant != null && buildVariant.isNotEmpty)
-          ? [
-              'analyze',
-              '--android',
-              '--output-app-link-settings',
-              '--build-variant=$buildVariant',
-              root,
-            ]
-          : [
-              'analyze',
-              '--android',
-              '--list-build-variants',
-              root,
-            ],
+      TargetPlatform.android =>
+        (buildVariant != null && buildVariant.isNotEmpty)
+            ? [
+                'analyze',
+                '--android',
+                '--output-app-link-settings',
+                '--build-variant=$buildVariant',
+                root,
+              ]
+            : [
+                'analyze',
+                '--android',
+                '--list-build-variants',
+                root,
+              ],
       TargetPlatform.ios => (configuration != null && configuration.isNotEmpty)
           ? [
               'analyze',
@@ -111,7 +117,7 @@ base mixin DeeplinkValidationSupport
     };
 
     stderr.writeln('[mcp:deeplinks] Executing: $executable ${args.join(' ')}');
-    final result = await Process.run(executable, args);
+    final result = await processRunner.run(executable, args);
 
     if (result.exitCode != 0) {
       return CallToolResult(

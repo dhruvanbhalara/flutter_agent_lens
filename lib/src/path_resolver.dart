@@ -3,6 +3,9 @@ import 'package:path/path.dart' as p;
 
 /// Maps VM-reported file URIs (such as `package:foo/main.dart` or `file://`) to local absolute paths.
 final class PathResolver {
+  /// Creates a new [PathResolver] instance centered around the given [workspaceRoot].
+  PathResolver(this.workspaceRoot);
+
   /// The absolute path of the local Flutter workspace root.
   final String workspaceRoot;
 
@@ -11,9 +14,6 @@ final class PathResolver {
 
   /// Cached dictionary of all files in the workspace (for fallback lookups).
   Map<String, String>? _allWorkspaceFiles;
-
-  /// Creates a new [PathResolver] instance centered around the given [workspaceRoot].
-  PathResolver(this.workspaceRoot);
 
   /// Resolves a VM-reported URI to a local absolute path.
   String resolveToAbsolutePath(String vmUri) {
@@ -101,14 +101,16 @@ final class PathResolver {
         }
       }
     } catch (e) {
-      // Swallowed to prevent crashing on unreadable directories/permissions
+      stderr.writeln(
+          '[mcp:path_resolver] Error scanning directory ${dir.path}: $e');
     }
   }
 
   /// Caches a resolved URI path while enforcing a maximum cache size.
   void _cachePath(String key, String value) {
     if (_pathCache.length >= 1000) {
-      _pathCache.clear();
+      final oldestKey = _pathCache.keys.first;
+      _pathCache.remove(oldestKey);
     }
     _pathCache[key] = value;
   }
