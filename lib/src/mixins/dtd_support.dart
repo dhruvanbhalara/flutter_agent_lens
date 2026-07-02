@@ -3,20 +3,24 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:dtd/dtd.dart';
+import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
+/// Support mixin providing tools for connecting to and interacting with the
+/// Dart Tooling Daemon (DTD) to query IDE status and running VM services.
 base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// The active connection to the Dart Tooling Daemon.
   DartToolingDaemon? dtdClient;
+
+  /// The WebSocket URI of the connected Dart Tooling Daemon.
   String? dtdUri;
 
+  /// Registers all DTD-related tools.
   void registerDtdTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
-
     registerTool(
       Tool(
-        name: 'connect_dtd',
+        name: McpTool.connectDtd.name,
         description:
             'Connect to the Dart Tooling Daemon (DTD) to automatically discover running Flutter applications.',
         inputSchema: ObjectSchema(
@@ -29,12 +33,12 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           required: ['uri'],
         ),
       ),
-      wrapToolCall('connect_dtd', _handleConnectDtd, requiresConnection: false),
+      _handleConnectDtd,
     );
 
     registerTool(
       Tool(
-        name: 'get_active_location',
+        name: McpTool.getActiveLocation.name,
         description:
             'Get the active editor file path and cursor position when connected via DTD.',
         inputSchema: ObjectSchema(
@@ -43,19 +47,22 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           },
         ),
       ),
-      wrapToolCall('get_active_location', _handleGetActiveLocation,
-          requiresConnection: false),
+      _handleGetActiveLocation,
     );
   }
 
+  /// Handles the connect_dtd tool request.
   Future<CallToolResult> _handleConnectDtd(CallToolRequest req) async {
-    final uriStr = req.arguments!['uri'] as String;
+    final uriStr = req.requireArg<String>('uri');
     try {
       stderr.writeln('[mcp:dtd] Connecting to DTD at: $uriStr');
       final uri = Uri.parse(uriStr);
       final client = await DartToolingDaemon.connect(uri);
 
-      await dtdClient?.close();
+      try {
+        await dtdClient?.close();
+      } catch (_) {}
+
       dtdClient = client;
       dtdUri = uriStr;
 
@@ -82,6 +89,13 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         content: [TextContent(text: report.toString().trim())],
       );
     } catch (e) {
+      if (dtdClient != null) {
+        try {
+          await dtdClient!.close();
+        } catch (_) {}
+        dtdClient = null;
+        dtdUri = null;
+      }
       return CallToolResult(
         content: [TextContent(text: 'Failed to connect to DTD: $e')],
         isError: true,
@@ -89,6 +103,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     }
   }
 
+  /// Handles the get_active_location tool request.
   Future<CallToolResult> _handleGetActiveLocation(CallToolRequest req) async {
     final client = dtdClient;
     if (client == null) {
@@ -135,7 +150,7 @@ base mixin DtdSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         markdownBody: 'Active editor path and cursor: \n'
             '${const JsonEncoder.withIndent("  ").convert(result)}',
         structuredData: result,
-        format: req.arguments?['format'] as String?,
+        format: req.arg<String>('format'),
       );
     } catch (e) {
       return CallToolResult(
