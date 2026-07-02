@@ -6,10 +6,10 @@ enum ScreenshotAction {
   /// Compare visual screen with baseline screenshot.
   compare('compare');
 
+  const ScreenshotAction(this.value);
+
   /// The raw String identifier of the action.
   final String value;
-
-  const ScreenshotAction(this.value);
 
   static final Map<String, ScreenshotAction> _lookup = {
     for (final e in ScreenshotAction.values) e.value.toLowerCase(): e,
@@ -34,10 +34,10 @@ enum ScreenshotType {
   /// Skia Picture representation via VM service.
   skia('skia');
 
+  const ScreenshotType(this.value);
+
   /// The raw String identifier of the screenshot type.
   final String value;
-
-  const ScreenshotType(this.value);
 
   static final Map<String, ScreenshotType> _lookup = {
     for (final e in ScreenshotType.values) e.value.toLowerCase(): e,

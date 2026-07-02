@@ -6,10 +6,10 @@ enum TargetPlatform {
   /// iOS OS.
   ios('ios');
 
+  const TargetPlatform(this.value);
+
   /// The raw String representation of the platform.
   final String value;
-
-  const TargetPlatform(this.value);
 
   static final Map<String, TargetPlatform> _lookup = {
     for (final e in TargetPlatform.values) e.value.toLowerCase(): e,

@@ -123,13 +123,13 @@ enum McpTool {
   /// Trigger a scroll gesture on the running application.
   triggerScrollGesture('trigger_scroll_gesture');
 
+  const McpTool(this.name, {this.requiresConnection = true});
+
   /// The name of the tool as registered in the MCP server.
   final String name;
 
   /// Whether this tool requires an active application VM connection.
   final bool requiresConnection;
-
-  const McpTool(this.name, {this.requiresConnection = true});
 
   static final Map<String, McpTool> _lookup = {
     for (final tool in McpTool.values) tool.name: tool,

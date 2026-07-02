@@ -9,10 +9,10 @@ enum NetworkSortBy {
   /// Sort requests by response content size.
   size('size');
 
+  const NetworkSortBy(this.value);
+
   /// The raw String identifier of the sort strategy.
   final String value;
-
-  const NetworkSortBy(this.value);
 
   static final Map<String, NetworkSortBy> _lookup = {
     for (final e in NetworkSortBy.values) e.value: e,
