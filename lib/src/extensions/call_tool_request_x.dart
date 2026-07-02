@@ -23,14 +23,14 @@ extension CallToolRequestX on CallToolRequest {
     if (args == null) {
       throw ArgumentError('Missing required arguments map.');
     }
-    final val = args[key];
-    if (val == null) {
+    if (!args.containsKey(key)) {
       throw ArgumentError('Missing required argument: $key');
     }
+    final val = args[key];
     if (val is! T) {
       throw ArgumentError(
           'Argument "$key" is not of type $T (got: ${val.runtimeType})');
     }
-    return val as T;
+    return val;
   }
 }
