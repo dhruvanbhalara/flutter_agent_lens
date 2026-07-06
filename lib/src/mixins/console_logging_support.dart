@@ -34,13 +34,15 @@ base mixin ConsoleLoggingSupport
     registerTool(
       Tool(
         name: McpTool.fetchConsoleLogs.name,
-        description:
-            'Read recent console logs from stdout, stderr, and developer streams.',
+        description: 'Read recent stdout/stderr/developer logs.',
         inputSchema: ObjectSchema(
           properties: {
-            'limit': limitSchema(defaultValue: 50.0),
-            'format': formatSchema,
+            'limit': limitSchema(defaultValue: 50),
           },
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: false,
         ),
       ),
       _handleFetchConsoleLogs,
@@ -189,7 +191,6 @@ base mixin ConsoleLoggingSupport
         'returned_lines': recentLogs.length,
         'logs': recentLogs,
       },
-      format: req.arg<String>('format'),
     );
   }
 }

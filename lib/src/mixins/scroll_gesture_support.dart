@@ -14,7 +14,7 @@ base mixin ScrollGestureSupport
     registerTool(
       Tool(
         name: McpTool.triggerScrollGesture.name,
-        description: 'Simulate user scrolling by animating a ScrollController.',
+        description: 'Simulate scroll gesture.',
         inputSchema: ObjectSchema(
           properties: {
             'scroll_controller_expression': StringSchema(

@@ -3,40 +3,81 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:path/path.dart' as p;
+
 import '../enums/mcp_tool.dart';
+import '../enums/target_platform.dart';
 import '../extensions/call_tool_request_x.dart';
+import '../utils/process_runner.dart';
 import 'vm_connection_support.dart';
 
-/// Support mixin providing tools for analyzing application bundle sizes.
-base mixin BundleAnalysisSupport
+/// Support mixin providing tools for analyzing application bundle sizes and validating deep links.
+base mixin DiagnoseProjectSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
-  /// Registers all application bundle size analysis tools.
-  void registerBundleAnalysisTools() {
+  /// The process runner helper, allowing test mocks.
+  ProcessRunner processRunner = const ProcessRunner();
+
+  /// Registers the consolidated project diagnostics tool.
+  void registerDiagnoseProjectTools() {
     registerTool(
       Tool(
-        name: McpTool.analyzeBundleSize.name,
+        name: McpTool.diagnoseProject.name,
         description:
-            'Analyze build size details from size mapping files in the build/ directory or a specified path.',
+            'Run build analysis or validate deep links (details in docs/user_prompt_guide.md).',
         inputSchema: ObjectSchema(
           properties: {
+            'action': StringSchema(
+              description: 'Operation (bundle_size, deep_links).',
+            ),
             'build_target': StringSchema(
               description:
-                  'Target format to inspect (e.g. apk, appbundle, ios, web; default: apk).',
+                  'Target format (apk, appbundle, ios, web; default: apk).',
             ),
             'target_platform': StringSchema(
               description:
-                  'Specific target platform (e.g. android-arm64, android-arm, android-x64). Only used for Android.',
+                  'Target platform (e.g. android-arm64). Android only.',
             ),
             'analysis_path': StringSchema(
-              description:
-                  'Optional exact path to a code-size-analysis JSON file (e.g. ~/.flutter-devtools/apk-code-size-analysis_04.json). If provided, directly parses this file.',
+              description: 'Optional path to code-size JSON file.',
             ),
-            'format': formatSchema,
+            'platform': StringSchema(
+              description: 'Platform for deep link checks (android, ios).',
+            ),
+            'build_variant': StringSchema(
+              description: 'Android build variant (debug, release).',
+            ),
+            'configuration': StringSchema(
+              description: 'iOS build configuration (Debug, Release).',
+            ),
+            'target': StringSchema(
+              description: 'iOS target name (default: Runner).',
+            ),
+            'limit': limitSchema(defaultValue: 25.0),
           },
+          required: ['action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: true,
         ),
       ),
-      _handleAnalyzeBundleSize,
+      _handleDiagnoseProject,
     );
+  }
+
+  /// Consolidated project diagnostics handler.
+  Future<CallToolResult> _handleDiagnoseProject(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'bundle_size':
+        return _handleAnalyzeBundleSize(req);
+      case 'deep_links':
+        return _handleValidateDeepLinks(req);
+      default:
+        return CallToolResult(
+          content: [TextContent(text: 'Unknown action: $action')],
+          isError: true,
+        );
+    }
   }
 
   /// Handles the analyze_bundle_size tool request.
@@ -239,7 +280,8 @@ base mixin BundleAnalysisSupport
     md.writeln('| Component | Size | Percentage |');
     md.writeln('| :--- | :--- | :--- |');
 
-    for (final item in leafComponents.take(25)) {
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 25;
+    for (final item in leafComponents.take(limit)) {
       final bytes = item['size_bytes'] as int;
       final sizeStr = formatBytes(bytes);
       final pct = totalSizeBytes > 0 ? (bytes / totalSizeBytes) * 100 : 0.0;
@@ -247,8 +289,9 @@ base mixin BundleAnalysisSupport
           '| `${item['name']}` | $sizeStr | ${pct.toStringAsFixed(2)}% |');
     }
 
-    if (leafComponents.length > 25) {
-      md.writeln('\n_...and ${leafComponents.length - 25} more components._');
+    if (leafComponents.length > limit) {
+      md.writeln(
+          '\n_...and ${leafComponents.length - limit} more components._');
     }
 
     return serializeDualFormat(
@@ -257,9 +300,116 @@ base mixin BundleAnalysisSupport
       structuredData: {
         'file_analyzed': sizeFile.path,
         'total_bytes': totalSizeBytes,
-        'components': leafComponents,
+        'components': leafComponents.take(limit).toList(),
       },
-      format: req.arg<String>('format'),
+    );
+  }
+
+  /// Handles the validate_deep_links tool request.
+  Future<CallToolResult> _handleValidateDeepLinks(CallToolRequest req) async {
+    final root = workspaceRoot;
+    if (root == null || root.isEmpty) {
+      return CallToolResult(
+        content: [
+          TextContent(
+              text:
+                  'Workspace root is not configured. Run connect first to set it.')
+        ],
+        isError: true,
+      );
+    }
+
+    final platformStr = req.requireArg<String>('platform');
+    final TargetPlatform platform;
+    try {
+      platform = TargetPlatform.fromString(platformStr);
+    } catch (e) {
+      return CallToolResult(
+        content: [TextContent(text: e.toString())],
+        isError: true,
+      );
+    }
+
+    final buildVariant = req.arg<String>('build_variant');
+    final configuration = req.arg<String>('configuration');
+    final target = req.arg<String>('target') ?? 'Runner';
+
+    stderr.writeln(
+        '[mcp:deeplinks] Validating deep links, platform=${platform.value}');
+
+    final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+    final executable = flutterRoot != null
+        ? p.join(
+            flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter')
+        : (Platform.isWindows ? 'flutter.bat' : 'flutter');
+
+    final List<String> args = switch (platform) {
+      TargetPlatform.android =>
+        (buildVariant != null && buildVariant.isNotEmpty)
+            ? [
+                'analyze',
+                '--android',
+                '--output-app-link-settings',
+                '--build-variant=$buildVariant',
+                root,
+              ]
+            : [
+                'analyze',
+                '--android',
+                '--list-build-variants',
+                root,
+              ],
+      TargetPlatform.ios => (configuration != null && configuration.isNotEmpty)
+          ? [
+              'analyze',
+              '--ios',
+              '--output-universal-link-settings',
+              '--configuration=$configuration',
+              '--target=$target',
+              root,
+            ]
+          : [
+              'analyze',
+              '--ios',
+              '--list-build-options',
+              root,
+            ],
+    };
+
+    stderr.writeln('[mcp:deeplinks] Executing: $executable ${args.join(' ')}');
+    final result = await processRunner.run(executable, args);
+
+    if (result.exitCode != 0) {
+      return CallToolResult(
+        content: [
+          TextContent(
+            text:
+                'Flutter deep link analysis failed (Exit Code ${result.exitCode}):\n'
+                '${result.stderr}\n'
+                'Stdout:\n${result.stdout}',
+          )
+        ],
+        isError: true,
+      );
+    }
+
+    final output = result.stdout.toString();
+    final md = StringBuffer('Deep Link Configuration Analysis\n\n');
+    md.writeln('- Platform: ${platform.value}');
+    md.writeln('- Exit Code: ${result.exitCode}');
+    md.writeln('\nCONSOLE OUTPUT');
+    md.writeln(output);
+
+    return serializeDualFormat(
+      title: 'Deep Link Analysis Report',
+      markdownBody: md.toString(),
+      structuredData: {
+        'platform': platform.value,
+        'arguments': args,
+        'exit_code': result.exitCode,
+        'stdout': output,
+        'stderr': result.stderr.toString(),
+      },
     );
   }
 }

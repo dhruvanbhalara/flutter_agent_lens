@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dart_mcp/server.dart';
 import 'package:stream_channel/stream_channel.dart';
 
+import 'src/enums/mcp_tool.dart';
 import 'src/mixins/vm_connection_support.dart';
 import 'src/mixins/connection_support.dart';
 import 'src/mixins/console_logging_support.dart';
@@ -14,9 +15,7 @@ import 'src/mixins/widget_inspection_support.dart';
 import 'src/mixins/rebuild_tracking_support.dart';
 import 'src/mixins/debug_flag_support.dart';
 import 'src/mixins/scroll_gesture_support.dart';
-import 'src/mixins/bundle_analysis_support.dart';
-import 'src/mixins/deeplink_validation_support.dart';
-import 'src/mixins/dtd_support.dart';
+import 'src/mixins/diagnose_project_support.dart';
 
 /// Flutter Agent Lens MCP Server class.
 ///
@@ -39,9 +38,7 @@ final class FlutterAgentLensServer extends MCPServer
         DebuggerSupport,
         ScreenshotSupport,
         ConnectionSupport,
-        BundleAnalysisSupport,
-        DeeplinkValidationSupport,
-        DtdSupport {
+        DiagnoseProjectSupport {
   /// Creates a new [FlutterAgentLensServer] instance communicating over the given [channel].
   FlutterAgentLensServer({required StreamChannel<String> channel})
       : super.fromStreamChannel(
@@ -80,10 +77,21 @@ final class FlutterAgentLensServer extends MCPServer
     return result;
   }
 
-  /// Registers all connection, inspection, profiling, memory, logging,
-  /// network, debugging, screenshot, bundle analysis, deep link, and DTD tools.
+  /// Track whether connected tools are currently registered.
+  bool _connectedToolsRegistered = false;
+
+  /// Registers all connection and project diagnostics tools at startup.
   void _registerTools() {
     registerConnectionTools();
+    registerDiagnoseProjectTools();
+  }
+
+  /// Registers all tools requiring active VM connection.
+  @override
+  void registerConnectedTools() {
+    if (_connectedToolsRegistered) {
+      unregisterConnectedTools();
+    }
     registerWidgetTools();
     registerRebuildTrackingTools();
     registerDebugFlagTools();
@@ -94,8 +102,20 @@ final class FlutterAgentLensServer extends MCPServer
     registerNetworkTools();
     registerDebuggerTools();
     registerScreenshotTools();
-    registerBundleAnalysisTools();
-    registerDeeplinkTools();
+    registerAppInfoTools();
     registerDtdTools();
+    _connectedToolsRegistered = true;
+  }
+
+  /// Unregisters all tools requiring active VM connection.
+  @override
+  void unregisterConnectedTools() {
+    if (!_connectedToolsRegistered) return;
+    for (final tool in McpTool.values) {
+      if (tool.requiresConnection) {
+        unregisterTool(tool.name);
+      }
+    }
+    _connectedToolsRegistered = false;
   }
 }

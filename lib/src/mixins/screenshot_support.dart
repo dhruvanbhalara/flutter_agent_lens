@@ -16,8 +16,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     registerTool(
       Tool(
         name: McpTool.compareLayoutScreenshots.name,
-        description:
-            'Capture screenshots and perform pixel diff checks to find layout changes or bugs.',
+        description: 'Pixel-diff screenshots for layout regression.',
         inputSchema: ObjectSchema(
           properties: {
             'baseline_name': StringSchema(
@@ -40,9 +39,12 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               description:
                   'Target device ID or name if multiple devices are connected (prefixes allowed).',
             ),
-            'format': formatSchema,
           },
           required: ['baseline_name', 'action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
         ),
       ),
       _handleCompareLayoutScreenshots,
@@ -51,8 +53,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     registerTool(
       Tool(
         name: McpTool.takeScreenshot.name,
-        description:
-            'Capture a standalone screenshot of the running Flutter application.',
+        description: 'Take app screenshot.',
         inputSchema: ObjectSchema(
           properties: {
             'screenshot_type': StringSchema(
@@ -68,6 +69,10 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
                   'Optional destination file path. If not specified, the screenshot will be saved to a default directory.',
             ),
           },
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: false,
         ),
       ),
       _handleTakeScreenshot,
@@ -262,7 +267,6 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           'current_path': currentPath,
           'diff_path': diffPath,
         },
-        format: req.arg<String>('format'),
       );
     }
   }

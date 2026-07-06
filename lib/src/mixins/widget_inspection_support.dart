@@ -11,13 +11,12 @@ import 'vm_connection_support.dart';
 /// Support mixin providing tools for widget inspection, layout diagnostics, and widget tree retrieval.
 base mixin WidgetInspectionSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
-  /// Registers all widget inspection and diagnostic tools.
+  /// Registers layout constraints and widget tree inspection tools.
   void registerWidgetTools() {
     registerTool(
       Tool(
         name: McpTool.inspectWidget.name,
-        description:
-            'Retrieve layout constraints and details of a widget by its ID.',
+        description: 'Inspect widget layout and properties by ID.',
         inputSchema: ObjectSchema(
           properties: {
             'widgetId': StringSchema(
@@ -27,9 +26,12 @@ base mixin WidgetInspectionSupport
               description:
                   'Whether to include the full raw widget node representation in the structured data (default: false).',
             ),
-            'format': formatSchema,
           },
           required: ['widgetId'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: true,
         ),
       ),
       _handleInspectLayoutConstraints,
@@ -47,6 +49,11 @@ base mixin WidgetInspectionSupport
           },
           required: ['enabled'],
         ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+        ),
       ),
       _handleToggleWidgetSelection,
     );
@@ -54,20 +61,22 @@ base mixin WidgetInspectionSupport
     registerTool(
       Tool(
         name: McpTool.getWidgetTree.name,
-        description:
-            'Get the current widget tree of the running Flutter application.',
+        description: 'Get widget tree structure.',
         inputSchema: ObjectSchema(
           properties: {
             'maxDepth': NumberSchema(
               description:
-                  'Maximum depth of the widget tree to return (default: 15).',
+                  'Maximum depth of the widget tree to return (default: 8).',
             ),
             'projectOnly': BooleanSchema(
               description:
-                  'If true, only return widgets created by the local project code.',
+                  'If true, only return widgets created by the local project code (default: true).',
             ),
-            'format': formatSchema,
           },
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: false,
         ),
       ),
       _handleGetWidgetTree,
@@ -165,7 +174,6 @@ base mixin WidgetInspectionSupport
         'all_properties': properties,
         if (includeRawNode) 'raw_node': result,
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -191,8 +199,8 @@ base mixin WidgetInspectionSupport
 
   /// Handles the get_widget_tree tool request.
   Future<CallToolResult> _handleGetWidgetTree(CallToolRequest req) async {
-    final maxDepth = (req.arg<num>('maxDepth'))?.toInt() ?? 15;
-    final projectOnly = req.arg<bool>('projectOnly') ?? false;
+    final maxDepth = (req.arg<num>('maxDepth'))?.toInt() ?? 8;
+    final projectOnly = req.arg<bool>('projectOnly') ?? true;
 
     final objectGroup =
         'mcp_inspector_${DateTime.now().millisecondsSinceEpoch}';
@@ -258,7 +266,6 @@ base mixin WidgetInspectionSupport
         'max_depth_reached': maxDepthReached,
         'widgets': flattened.map((w) => w.toMap()).toList(),
       },
-      format: req.arg<String>('format'),
     );
   }
 

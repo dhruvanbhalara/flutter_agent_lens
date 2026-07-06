@@ -29,49 +29,33 @@ base mixin RebuildTrackingSupport
   /// Subscription to the VM Service's extension event stream for rebuilt widgets.
   StreamSubscription<Event>? rebuildSub;
 
-  /// Registers all rebuild tracking related tools in the MCP server.
+  /// Registers rebuild tracking tools.
   void registerRebuildTrackingTools() {
     registerTool(
       Tool(
-        name: McpTool.getWidgetRebuildCounts.name,
-        description:
-            'Find widgets that rebuild frequently by tracking rebuild counts.',
+        name: McpTool.rebuildTracking.name,
+        description: 'Track widget rebuild frequencies. '
+            'Actions: start (begin tracking), stop (end and get report), '
+            'get_counts (one-shot rebuild count snapshot).',
         inputSchema: ObjectSchema(
           properties: {
+            'action': StringSchema(
+              description: 'Action to perform: start, stop, get_counts.',
+            ),
             'duration_seconds': durationSchema(),
-            'format': formatSchema,
-          },
-        ),
-      ),
-      _handleWidgetRebuildCounts,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.startTrackingRebuilds.name,
-        description:
-            'Start a stateful session to track widget rebuild frequencies.',
-        inputSchema: emptySchema(),
-      ),
-      _handleStartTrackingRebuilds,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.stopTrackingRebuilds.name,
-        description:
-            'Stop the active widget rebuild tracking session and get the report.',
-        inputSchema: ObjectSchema(
-          properties: {
             'topN': NumberSchema(
               description:
                   'Number of top rebuilding widgets to list (default: 30).',
             ),
-            'format': formatSchema,
           },
+          required: ['action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
         ),
       ),
-      _handleStopTrackingRebuilds,
+      _handleRebuildTracking,
     );
   }
 
@@ -196,7 +180,6 @@ base mixin RebuildTrackingSupport
       structuredData: {
         'widgets': widgets,
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -207,7 +190,7 @@ base mixin RebuildTrackingSupport
         content: [
           TextContent(
               text:
-                  'Already tracking rebuilds. Call stop_tracking_rebuilds first.')
+                  'Already tracking rebuilds. Call the `rebuild_tracking` tool with action: `stop` first.')
         ],
         isError: true,
       );
@@ -260,7 +243,7 @@ base mixin RebuildTrackingSupport
       content: [
         TextContent(
           text:
-              'Rebuild tracking started. Interact with the app now, then call `stop_tracking_rebuilds` to see the report.',
+              'Rebuild tracking started. Interact with the app now, then call the `rebuild_tracking` tool with action: `stop` to see the report.',
         )
       ],
     );
@@ -273,7 +256,7 @@ base mixin RebuildTrackingSupport
         content: [
           TextContent(
               text:
-                  'Not tracking rebuilds. Call start_tracking_rebuilds first.')
+                  'Not tracking rebuilds. Call the `rebuild_tracking` tool with action: `start` first.')
         ],
         isError: true,
       );
@@ -401,7 +384,7 @@ base mixin RebuildTrackingSupport
     }
 
     return serializeDualFormat(
-      title: 'Widget Rebuild Analysis',
+      title: 'Widget Rebuild Report',
       markdownBody: output.join('\n'),
       structuredData: {
         'duration_seconds': double.tryParse(durationSec) ?? 0.0,
@@ -409,7 +392,6 @@ base mixin RebuildTrackingSupport
         'total_rebuilds': totalRebuilds,
         'rebuilds': widgets.take(topN).toList(),
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -501,5 +483,25 @@ base mixin RebuildTrackingSupport
         }
       }
     });
+  }
+
+  /// Handles the rebuild_tracking composite tool request.
+  Future<CallToolResult> _handleRebuildTracking(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'start':
+        return _handleStartTrackingRebuilds(req);
+      case 'stop':
+        return _handleStopTrackingRebuilds(req);
+      case 'get_counts':
+        return _handleWidgetRebuildCounts(req);
+      default:
+        return CallToolResult(
+          content: [
+            TextContent(text: 'Unknown rebuild tracking action: $action')
+          ],
+          isError: true,
+        );
+    }
   }
 }

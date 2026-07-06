@@ -223,6 +223,7 @@ void main() {
       capabilities: ClientCapabilities(),
       clientInfo: Implementation(name: 'test_client', version: '1.0'),
     ));
+    server.registerConnectedTools();
   });
 
   group('FlutterAgentLensServer MCP Tool Integration Tests', () {
@@ -231,9 +232,8 @@ void main() {
       expect(toolsResult.tools, isNotEmpty);
 
       final toolNames = toolsResult.tools.map((t) => t.name).toList();
-      expect(toolNames, contains(McpTool.connect.name));
-      expect(toolNames, contains(McpTool.disconnect.name));
-      expect(toolNames, contains(McpTool.getMemorySnapshot.name));
+      expect(toolNames, contains(McpTool.connection.name));
+      expect(toolNames, contains(McpTool.memory.name));
       expect(toolNames, contains(McpTool.toggleDebugFlag.name));
     });
 
@@ -267,8 +267,10 @@ void main() {
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.disconnect.name,
-          arguments: const {},
+          name: McpTool.connection.name,
+          arguments: const {
+            'action': 'disconnect',
+          },
         ),
       );
 
@@ -309,15 +311,16 @@ void main() {
       expect(text, contains('true'));
     });
 
-    test('getMemorySnapshot retrieves structured memory info', () async {
+    test('memory retrieves structured memory info', () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.getMemorySnapshot.name,
+          name: McpTool.memory.name,
           arguments: const {
+            'action': 'get_snapshot',
             'topN': 5,
           },
         ),
@@ -351,15 +354,16 @@ void main() {
       expect(text, contains('+5'));
     });
 
-    test('getcpuProfile scans execution hotspots', () async {
+    test('profiling get_cpu scans execution hotspots', () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.getCpuProfile.name,
+          name: McpTool.profiling.name,
           arguments: const {
+            'action': 'get_cpu',
             'duration_seconds': 0, // Instant
           },
         ),
@@ -391,8 +395,7 @@ void main() {
       expect(text, contains('main.dart:42'));
     });
 
-    test('addBreakpoint and removeBreakpoint manages isolate pause limits',
-        () async {
+    test('breakpoint manages isolate pause limits', () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
@@ -400,8 +403,9 @@ void main() {
       // Add breakpoint
       final addResult = await server.callTool(
         CallToolRequest(
-          name: McpTool.addBreakpoint.name,
+          name: McpTool.breakpoint.name,
           arguments: const {
+            'action': 'add',
             'file_path': 'lib/main.dart',
             'line': 42,
           },
@@ -410,7 +414,7 @@ void main() {
 
       if (addResult.isError == true) {
         final text = (addResult.content.first as TextContent).text;
-        fail('addBreakpoint failed: $text');
+        fail('breakpoint add failed: $text');
       }
 
       expect(addResult.isError, isNot(isTrue));
@@ -421,8 +425,9 @@ void main() {
       // Remove breakpoint
       final removeResult = await server.callTool(
         CallToolRequest(
-          name: McpTool.removeBreakpoint.name,
+          name: McpTool.breakpoint.name,
           arguments: const {
+            'action': 'remove',
             'breakpoint_id': 'bp_1',
           },
         ),

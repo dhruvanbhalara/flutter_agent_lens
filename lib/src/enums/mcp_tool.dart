@@ -1,10 +1,7 @@
 /// Represents all tools registered by the Flutter Agent Lens MCP server.
 enum McpTool {
-  /// Connect to a running Flutter app via its VM Service URI.
-  connect('connect', requiresConnection: false),
-
-  /// Disconnect from the currently connected Flutter app.
-  disconnect('disconnect'),
+  /// Manage connections to VM Service or Dart Tooling Daemon (DTD).
+  connection('connection', requiresConnection: false),
 
   /// Get detailed information about the connected Flutter app.
   getAppInfo('get_app_info'),
@@ -21,35 +18,20 @@ enum McpTool {
   /// Set exception pause mode (None, All, Unhandled).
   setExceptionPauseMode('set_exception_pause_mode'),
 
-  /// Add a breakpoint at a specific line in a source file.
-  addBreakpoint('add_breakpoint'),
-
-  /// Remove a breakpoint by its ID.
-  removeBreakpoint('remove_breakpoint'),
+  /// Manage breakpoints (add, remove).
+  breakpoint('breakpoint'),
 
   /// Evaluate a Dart expression in the context of the running application.
   evaluateExpression('evaluate_expression'),
 
-  /// Validate deep link configurations on Android or iOS.
-  validateDeepLinks('validate_deep_links', requiresConnection: false),
-
-  /// Connect to the Dart Tooling Daemon (DTD).
-  connectDtd('connect_dtd', requiresConnection: false),
+  /// Run local build analysis or validate platform deep links on the project.
+  diagnoseProject('diagnose_project', requiresConnection: false),
 
   /// Get the active editor file path and cursor position when connected via DTD.
-  getActiveLocation('get_active_location', requiresConnection: false),
+  getActiveLocation('get_active_location'),
 
-  /// Get a general snapshot overview of application and framework class allocations.
-  getMemorySnapshot('get_memory_snapshot'),
-
-  /// Save a named memory snapshot for later comparison.
-  saveSnapshot('save_snapshot'),
-
-  /// Compare two saved memory snapshots to find growth or leaks.
-  compareSnapshots('compare_snapshots'),
-
-  /// List all saved memory snapshots.
-  listSnapshots('list_snapshots', requiresConnection: false),
+  /// Manage memory snapshots (get_snapshot, save, compare, list).
+  memory('memory'),
 
   /// Audit class instances to find potential memory leaks.
   auditClassMemoryLeak('audit_class_memory_leak'),
@@ -60,26 +42,11 @@ enum McpTool {
   /// Trace the retaining path keeping an object alive in memory.
   getObjectReferrers('get_object_referrers'),
 
-  /// Read the current HTTP network requests profile history from the VM.
-  getNetworkProfile('get_network_profile'),
+  /// Manage HTTP network capture (start, stop, get_profile).
+  network('network'),
 
-  /// Start capturing HTTP traffic details statefully.
-  startNetworkCapture('start_network_capture'),
-
-  /// Stop capturing HTTP traffic and return the details report.
-  stopNetworkCapture('stop_network_capture'),
-
-  /// Check frame times to find rendering slowdowns (jank).
-  diagnoseJank('diagnose_jank'),
-
-  /// Sample CPU usage and find execution hotspots in Dart functions.
-  getCpuProfile('get_cpu_profile'),
-
-  /// Start a stateful CPU profiling session.
-  startProfiling('start_profiling'),
-
-  /// Stop the stateful CPU profiling session and get the CPU profile.
-  stopProfiling('stop_profiling'),
+  /// Manage CPU & jank profiling sessions (start, stop, get_cpu, diagnose_jank).
+  profiling('profiling'),
 
   /// Trigger a hot reload on the running application.
   hotReload('hot_reload'),
@@ -87,17 +54,11 @@ enum McpTool {
   /// Trigger a hot restart on the running application.
   hotRestart('hot_restart'),
 
-  /// Analyze build size details from size mapping files in the build/ directory.
-  analyzeBundleSize('analyze_bundle_size', requiresConnection: false),
-
   /// Compare two screenshots and check for visual differences.
   compareLayoutScreenshots('compare_layout_screenshots'),
 
   /// Take a screenshot of the running application.
   takeScreenshot('take_screenshot'),
-
-  /// Find widgets that rebuild frequently by tracking rebuild counts.
-  getWidgetRebuildCounts('get_widget_rebuild_counts'),
 
   /// Retrieve layout constraints and details of a widget by its ID.
   inspectWidget('inspect_widget'),
@@ -114,14 +75,14 @@ enum McpTool {
   /// Get the widget tree structure.
   getWidgetTree('get_widget_tree'),
 
-  /// Start tracking widget rebuild counts.
-  startTrackingRebuilds('start_tracking_rebuilds'),
-
-  /// Stop tracking widget rebuild counts.
-  stopTrackingRebuilds('stop_tracking_rebuilds'),
+  /// Track widget rebuild frequencies (start, stop, get_counts).
+  rebuildTracking('rebuild_tracking'),
 
   /// Trigger a scroll gesture on the running application.
-  triggerScrollGesture('trigger_scroll_gesture');
+  triggerScrollGesture('trigger_scroll_gesture'),
+
+  /// Set response format for all tools (markdown or json).
+  setResponseFormat('set_response_format', requiresConnection: false);
 
   const McpTool(this.name, {this.requiresConnection = true});
 

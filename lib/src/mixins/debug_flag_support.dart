@@ -14,8 +14,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     registerTool(
       Tool(
         name: McpTool.togglePackageWidgets.name,
-        description:
-            'Toggle whether package widgets are shown in the widget tree.',
+        description: 'Toggle package widgets visibility.',
         inputSchema: ObjectSchema(
           properties: {
             'enabled': BooleanSchema(
@@ -31,8 +30,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     registerTool(
       Tool(
         name: McpTool.toggleDebugFlag.name,
-        description:
-            'Toggle standard Flutter debug paint/overlay flags (e.g. debugPaintSizeEnabled, debugPaintBaselinesEnabled).',
+        description: 'Toggle a Flutter debug flag.',
         inputSchema: ObjectSchema(
           properties: {
             'flag_name': StringSchema(

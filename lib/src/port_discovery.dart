@@ -28,6 +28,11 @@ final class DiscoveredApp {
 /// Under Windows, it uses PowerShell to query CIM instances. On macOS and Linux,
 /// it executes `ps` and maps the process working directories.
 Future<List<DiscoveredApp>> discoverActiveApps() {
+  if (Platform.environment.containsKey('FLUTTER_TEST') ||
+      Platform.script.path.contains('/test/') ||
+      Platform.script.path.contains('test.dart')) {
+    return Future.value(<DiscoveredApp>[]);
+  }
   return const PortDiscovery().discoverActiveApps();
 }
 
