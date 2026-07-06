@@ -3,20 +3,20 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:path/path.dart' as p;
+import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
+/// Support mixin providing tools for analyzing application bundle sizes.
 base mixin BundleAnalysisSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Registers all application bundle size analysis tools.
   void registerBundleAnalysisTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
-
     registerTool(
       Tool(
-        name: 'analyze_bundle_size',
+        name: McpTool.analyzeBundleSize.name,
         description:
-            'Analyze build size details from size mapping files in the build/ directory.',
+            'Analyze build size details from size mapping files in the build/ directory or a specified path.',
         inputSchema: ObjectSchema(
           properties: {
             'build_target': StringSchema(
@@ -27,15 +27,19 @@ base mixin BundleAnalysisSupport
               description:
                   'Specific target platform (e.g. android-arm64, android-arm, android-x64). Only used for Android.',
             ),
+            'analysis_path': StringSchema(
+              description:
+                  'Optional exact path to a code-size-analysis JSON file (e.g. ~/.flutter-devtools/apk-code-size-analysis_04.json). If provided, directly parses this file.',
+            ),
             'format': formatSchema,
           },
         ),
       ),
-      wrapToolCall('analyze_bundle_size', _handleAnalyzeBundleSize,
-          requiresConnection: false),
+      _handleAnalyzeBundleSize,
     );
   }
 
+  /// Handles the analyze_bundle_size tool request.
   Future<CallToolResult> _handleAnalyzeBundleSize(CallToolRequest req) async {
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
@@ -69,59 +73,88 @@ base mixin BundleAnalysisSupport
       }
     }
 
-    final target = req.arguments?['build_target'] as String? ?? defaultTarget;
-    final targetPlatform = req.arguments?['target_platform'] as String? ??
+    final target = req.arg<String>('build_target') ?? defaultTarget;
+    final targetPlatform = req.arg<String>('target_platform') ??
         ((target == 'apk' || target == 'appbundle') ? 'android-arm64' : '');
 
     stderr.writeln(
         '[mcp:bundle_size] Analyzing bundle size, target=$target, platform=$targetPlatform');
 
-    final buildDir = Directory(p.join(root, 'build'));
-    if (!buildDir.existsSync()) {
-      return CallToolResult(
-        content: [
-          TextContent(
-              text: 'Build directory does not exist at ${buildDir.path}.')
-        ],
-        isError: true,
-      );
-    }
-
-    bool isSizeFile(String filePath) {
-      final name = p.basename(filePath).toLowerCase();
-      final containsPattern = name.contains('code-size-details') ||
-          name.contains('code-size-analysis');
-      if (!containsPattern) return false;
-
-      if (target == 'apk' || target == 'appbundle') {
-        return name.contains('apk') ||
-            name.contains('appbundle') ||
-            name.contains('android');
-      }
-      return name.contains(target.toLowerCase());
-    }
-
     File? sizeFile;
-    final fileEntities = buildDir.listSync(recursive: true);
-    for (final entity in fileEntities) {
-      if (entity is File && isSizeFile(entity.path)) {
-        sizeFile = entity;
-        break;
-      }
-    }
+    final analysisPath = req.arg<String>('analysis_path');
 
-    // Fallback: look for any code-size-details.json or code-size-analysis file if target match fails
-    if (sizeFile == null) {
-      for (final entity in fileEntities) {
-        if (entity is File) {
-          final name = p.basename(entity.path).toLowerCase();
-          if (name.contains('code-size-details') ||
-              name.contains('code-size-analysis')) {
-            sizeFile = entity;
-            break;
-          }
+    if (analysisPath != null && analysisPath.isNotEmpty) {
+      var resolvedPath = analysisPath;
+      if (resolvedPath.startsWith('~/')) {
+        final home =
+            Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+        if (home != null) {
+          resolvedPath = p.join(home, resolvedPath.substring(2));
         }
       }
+      final customFile = File(resolvedPath);
+      if (customFile.existsSync()) {
+        sizeFile = customFile;
+      } else {
+        return CallToolResult(
+          content: [
+            TextContent(
+                text: 'Specified analysis file does not exist: $analysisPath')
+          ],
+          isError: true,
+        );
+      }
+    } else {
+      final buildDir = Directory(p.join(root, 'build'));
+      if (!buildDir.existsSync()) {
+        return CallToolResult(
+          content: [
+            TextContent(
+                text: 'Build directory does not exist at ${buildDir.path}.')
+          ],
+          isError: true,
+        );
+      }
+
+      File? fallbackFile;
+      final targetLower = target.toLowerCase();
+
+      bool matchesTarget(String name) {
+        if (target == 'apk' || target == 'appbundle') {
+          return name.contains('apk') ||
+              name.contains('appbundle') ||
+              name.contains('android');
+        }
+        return name.contains(targetLower);
+      }
+
+      try {
+        final fileEntities = buildDir.listSync(recursive: true);
+        for (final entity in fileEntities) {
+          if (entity is File) {
+            final name = p.basename(entity.path).toLowerCase();
+            final parentDir = p.basename(entity.parent.path).toLowerCase();
+            final isCodeSize = name.contains('code-size-details') ||
+                name.contains('code-size-analysis') ||
+                name.contains('apk-code-size-analysis') ||
+                (parentDir.contains('flutter_size_') &&
+                    name.startsWith('snapshot') &&
+                    name.endsWith('.json'));
+            if (isCodeSize) {
+              fallbackFile ??= entity;
+              if (matchesTarget(name) || matchesTarget(parentDir)) {
+                sizeFile = entity;
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:bundle_analysis] Error scanning build directory: $e');
+      }
+
+      sizeFile ??= fallbackFile;
     }
 
     if (sizeFile == null || !sizeFile.existsSync()) {
@@ -139,7 +172,17 @@ base mixin BundleAnalysisSupport
 
     stderr.writeln(
         '[mcp:bundle_size] Parsing size analysis file: ${sizeFile.path}');
-    final rawJson = jsonDecode(await sizeFile.readAsString());
+    final dynamic rawJson;
+    try {
+      rawJson = jsonDecode(await sizeFile.readAsString());
+    } catch (e) {
+      return CallToolResult(
+        content: [
+          TextContent(text: 'Failed to parse size analysis JSON file: $e')
+        ],
+        isError: true,
+      );
+    }
     if (rawJson is! Map<String, dynamic>) {
       return CallToolResult(
         content: [
@@ -153,7 +196,8 @@ base mixin BundleAnalysisSupport
 
     final leafComponents = <Map<String, dynamic>>[];
 
-    void visit(Map<String, dynamic> node) {
+    void visit(Map<String, dynamic> node, int depth) {
+      if (depth > 20) return;
       final name = (node['n'] ?? node['name'])?.toString() ?? 'unknown';
       final value = node['value'] ?? node['size'];
 
@@ -161,7 +205,7 @@ base mixin BundleAnalysisSupport
       if (children is List && children.isNotEmpty) {
         for (final child in children) {
           if (child is Map<String, dynamic>) {
-            visit(child);
+            visit(child, depth + 1);
           }
         }
       } else if (value is num) {
@@ -172,7 +216,7 @@ base mixin BundleAnalysisSupport
       }
     }
 
-    visit(rawJson);
+    visit(rawJson, 0);
 
     // Sort by size descending
     leafComponents.sort(
@@ -184,16 +228,20 @@ base mixin BundleAnalysisSupport
     final md =
         StringBuffer('Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
     md.writeln(
-        '- Total Calculated Size: ${(totalSizeBytes / 1024 / 1024).toStringAsFixed(2)} MB ($totalSizeBytes Bytes)');
+        'A summary of your APK analysis can be found at: ${sizeFile.path}');
+    md.writeln(
+        'To analyze your app size in Dart DevTools, run the following command:\n'
+        '  dart devtools --appSizeBase=${sizeFile.path}');
+    md.writeln();
+    md.writeln(
+        '- Total Calculated Size: ${formatBytes(totalSizeBytes)} ($totalSizeBytes Bytes)');
     md.writeln();
     md.writeln('| Component | Size | Percentage |');
     md.writeln('| :--- | :--- | :--- |');
 
     for (final item in leafComponents.take(25)) {
       final bytes = item['size_bytes'] as int;
-      final sizeStr = bytes > 1024 * 1024
-          ? '${(bytes / 1024 / 1024).toStringAsFixed(2)} MB'
-          : '${(bytes / 1024).toStringAsFixed(2)} KB';
+      final sizeStr = formatBytes(bytes);
       final pct = totalSizeBytes > 0 ? (bytes / totalSizeBytes) * 100 : 0.0;
       md.writeln(
           '| `${item['name']}` | $sizeStr | ${pct.toStringAsFixed(2)}% |');
@@ -211,7 +259,7 @@ base mixin BundleAnalysisSupport
         'total_bytes': totalSizeBytes,
         'components': leafComponents,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 }

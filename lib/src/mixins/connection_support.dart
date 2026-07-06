@@ -4,12 +4,16 @@ import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 import 'package:dtd/dtd.dart';
+import '../enums/mcp_tool.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 import 'console_logging_support.dart';
 import 'dtd_support.dart';
 import '../port_discovery.dart';
 import '../path_resolver.dart';
 
+/// Support mixin providing tools for connecting, disconnecting, retrieving
+/// app information, and autodiscovering running Flutter/Dart applications.
 base mixin ConnectionSupport
     on
         MCPServer,
@@ -17,14 +21,11 @@ base mixin ConnectionSupport
         VmConnectionSupport,
         ConsoleLoggingSupport,
         RootsTrackingSupport {
+  /// Registers all connection-related tools in the MCP server.
   void registerConnectionTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
-
     registerTool(
       Tool(
-        name: 'connect',
+        name: McpTool.connect.name,
         description: 'Connect to a running Flutter app via its VM Service URI.',
         inputSchema: ObjectSchema(
           properties: {
@@ -42,21 +43,21 @@ base mixin ConnectionSupport
           },
         ),
       ),
-      wrapToolCall('connect', _handleConnect, requiresConnection: false),
+      _handleConnect,
     );
 
     registerTool(
       Tool(
-        name: 'disconnect',
+        name: McpTool.disconnect.name,
         description: 'Disconnect from the currently connected Flutter app.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('disconnect', _handleDisconnect),
+      _handleDisconnect,
     );
 
     registerTool(
       Tool(
-        name: 'get_app_info',
+        name: McpTool.getAppInfo.name,
         description:
             'Get detailed information about the connected Flutter app including VM info, isolates, and available extensions.',
         inputSchema: ObjectSchema(
@@ -69,12 +70,12 @@ base mixin ConnectionSupport
           },
         ),
       ),
-      wrapToolCall('get_app_info', _handleGetAppInfo),
+      _handleGetAppInfo,
     );
 
     registerTool(
       Tool(
-        name: 'discover_apps',
+        name: McpTool.discoverApps.name,
         description:
             'Automatically discover running Flutter apps on this machine.',
         inputSchema: ObjectSchema(
@@ -90,63 +91,26 @@ base mixin ConnectionSupport
           },
         ),
       ),
-      wrapToolCall('discover_apps', _handleAutodiscover,
-          requiresConnection: false),
+      _handleAutodiscover,
     );
   }
 
+  /// Handles the connect tool request.
   Future<CallToolResult> _handleConnect(CallToolRequest req) async {
-    final rawUri =
-        (req.arguments!['uri'] ?? req.arguments!['vmServiceUri']) as String;
+    final rawUri = switch (req.arguments) {
+      {'uri': String uri} => uri,
+      {'vmServiceUri': String uri} => uri,
+      _ => throw ArgumentError(
+          'Required parameter "uri" or "vmServiceUri" is missing.'),
+    };
     try {
       stderr.writeln('[mcp:connect] Attempting connection to: $rawUri');
-      workspaceRoot = req.arguments?['workspace_root'] as String?;
-
-      if (workspaceRoot == null || workspaceRoot!.isEmpty) {
-        try {
-          final clientRoots = await roots;
-          if (clientRoots.isNotEmpty) {
-            final firstUriStr = clientRoots.first.uri;
-            final firstUri = Uri.parse(firstUriStr);
-            if (firstUri.isScheme('file')) {
-              workspaceRoot = firstUri.toFilePath();
-              stderr.writeln(
-                  '[mcp:connect] Resolved workspace root from client: $workspaceRoot');
-            }
-          }
-        } catch (e) {
-          stderr.writeln('[mcp:connect] Error fetching client roots: $e');
-        }
-      }
-
-      if (workspaceRoot != null) {
-        pathResolver = PathResolver(workspaceRoot!);
-      }
+      await _resolveWorkspaceRoot(req);
 
       String uriToConnect = rawUri;
       if (isDtdUri(rawUri)) {
         try {
-          uriToConnect = await resolveDtdToVmServiceUri(rawUri);
-          stderr.writeln(
-              '[mcp:connect] DTD resolved VM Service URI: $uriToConnect');
-
-          final self = this;
-          if (self is DtdSupport) {
-            final dtd = self as DtdSupport;
-            try {
-              stderr.writeln(
-                  '[mcp:connect] Initializing DTD client for DTD URI: $rawUri');
-              final parsedDtdUri = Uri.parse(rawUri);
-              await dtd.dtdClient?.close();
-              dtd.dtdClient = await DartToolingDaemon.connect(parsedDtdUri);
-              dtd.dtdUri = rawUri;
-              stderr.writeln(
-                  '[mcp:connect] DTD client initialized successfully.');
-            } catch (dtdErr) {
-              stderr.writeln(
-                  '[mcp:connect] Failed to initialize DTD client: $dtdErr');
-            }
-          }
+          uriToConnect = await _connectAndResolveDtd(rawUri);
         } catch (e) {
           return CallToolResult(
             content: [
@@ -171,7 +135,13 @@ base mixin ConnectionSupport
       );
 
       final vm = await vmService!.getVM();
-      if (vm.isolates == null || vm.isolates!.isEmpty) {
+      final isolates = vm.isolates;
+      if (isolates == null || isolates.isEmpty) {
+        try {
+          await vmService!.dispose();
+        } catch (_) {}
+        vmService = null;
+        vmServiceUri = null;
         return CallToolResult(
           content: [
             TextContent(
@@ -182,11 +152,19 @@ base mixin ConnectionSupport
         );
       }
       final activeIsolates =
-          vm.isolates!.where((i) => i.isSystemIsolate != true).toList();
+          isolates.where((i) => i.isSystemIsolate != true).toList();
       if (activeIsolates.isNotEmpty) {
-        isolateId = activeIsolates.first.id!;
+        final id = activeIsolates.first.id;
+        if (id == null) {
+          throw StateError('Isolate has no ID');
+        }
+        isolateId = id;
       } else {
-        isolateId = vm.isolates!.first.id!;
+        final id = isolates.first.id;
+        if (id == null) {
+          throw StateError('Isolate has no ID');
+        }
+        isolateId = id;
       }
       final ver = await vmService!.getVersion();
 
@@ -213,7 +191,7 @@ base mixin ConnectionSupport
       }
 
       // Clear existing I/O subscriptions and start buffering streams
-      startLogging();
+      await startLogging();
 
       // Enable HTTP timeline logging automatically
       try {
@@ -227,10 +205,11 @@ base mixin ConnectionSupport
             .writeln('[mcp:connect] Error enabling HTTP timeline logging: $e');
       }
 
-      final selectedIsolateName = vm.isolates!
-          .firstWhere((i) => i.id == isolateId,
-              orElse: () => vm.isolates!.first)
-          .name;
+      final selectedIsolateName = vm.isolates
+              ?.firstWhere((i) => i.id == isolateId,
+                  orElse: () => vm.isolates!.first)
+              .name ??
+          'unknown';
 
       return CallToolResult(
         content: [
@@ -242,6 +221,13 @@ base mixin ConnectionSupport
         ],
       );
     } catch (e) {
+      try {
+        await vmService?.dispose();
+      } catch (_) {}
+      vmService = null;
+      vmServiceUri = null;
+      isolateId = null;
+
       if (e is RPCError && e.code == -32601) {
         return CallToolResult(
           content: [
@@ -262,13 +248,64 @@ base mixin ConnectionSupport
     }
   }
 
+  Future<void> _resolveWorkspaceRoot(CallToolRequest req) async {
+    workspaceRoot = req.arg<String>('workspace_root');
+
+    if (workspaceRoot == null || workspaceRoot!.isEmpty) {
+      try {
+        final clientRoots = await roots;
+        if (clientRoots.isNotEmpty) {
+          final firstUriStr = clientRoots.first.uri;
+          final firstUri = Uri.parse(firstUriStr);
+          if (firstUri.isScheme('file')) {
+            workspaceRoot = firstUri.toFilePath();
+            stderr.writeln(
+                '[mcp:connect] Resolved workspace root from client: $workspaceRoot');
+          }
+        }
+      } catch (e) {
+        stderr.writeln('[mcp:connect] Error fetching client roots: $e');
+      }
+    }
+
+    if (workspaceRoot != null) {
+      pathResolver = PathResolver(workspaceRoot!);
+    }
+  }
+
+  Future<String> _connectAndResolveDtd(String rawUri) async {
+    final uriToConnect = await resolveDtdToVmServiceUri(rawUri);
+    stderr.writeln('[mcp:connect] DTD resolved VM Service URI: $uriToConnect');
+
+    if (this is DtdSupport) {
+      final dtd = this as DtdSupport;
+      try {
+        stderr.writeln(
+            '[mcp:connect] Initializing DTD client for DTD URI: $rawUri');
+        final parsedDtdUri = Uri.parse(rawUri);
+        await dtd.dtdClient?.close();
+        dtd.dtdClient = await DartToolingDaemon.connect(parsedDtdUri);
+        dtd.dtdUri = rawUri;
+        stderr.writeln('[mcp:connect] DTD client initialized successfully.');
+      } catch (dtdErr) {
+        stderr
+            .writeln('[mcp:connect] Failed to initialize DTD client: $dtdErr');
+      }
+    }
+    return uriToConnect;
+  }
+
+  /// Handles the disconnect tool request.
   Future<CallToolResult> _handleDisconnect(CallToolRequest req) async {
     if (vmService == null) {
       return CallToolResult(
         content: [TextContent(text: 'Not connected to any app.')],
       );
     }
-    cleanupStreams();
+    final dynamic cleanup = (cleanupStreams as dynamic)();
+    if (cleanup is Future) {
+      await cleanup;
+    }
 
     try {
       await vmService!.dispose();
@@ -283,6 +320,7 @@ base mixin ConnectionSupport
     );
   }
 
+  /// Handles the get_app_info tool request.
   Future<CallToolResult> _handleGetAppInfo(CallToolRequest req) async {
     if (vmService == null || isolateId == null) {
       return notConnected();
@@ -304,8 +342,7 @@ base mixin ConnectionSupport
     final extensionRPCs = isolate.extensionRPCs ?? [];
     final flutterExtensions =
         extensionRPCs.where((e) => e.startsWith('ext.flutter.')).toList();
-    final includeExtensions =
-        req.arguments?['includeExtensions'] as bool? ?? false;
+    final includeExtensions = req.arg<bool>('includeExtensions') ?? false;
 
     final appInfo = {
       'vm': {
@@ -368,13 +405,14 @@ base mixin ConnectionSupport
       title: 'App Information Details',
       markdownBody: md.toString(),
       structuredData: appInfo,
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
+  /// Handles the discover_apps tool request.
   Future<CallToolResult> _handleAutodiscover(CallToolRequest req) async {
-    final workspace = req.arguments?['workspace_root'] as String?;
-    final autoConnect = req.arguments?['autoConnect'] as bool? ?? true;
+    final workspace = req.arg<String>('workspace_root');
+    final autoConnect = req.arg<bool>('autoConnect') ?? true;
     stderr.writeln(
         '[mcp:autodiscover] Starting auto-discovery, workspace=$workspace, autoConnect=$autoConnect');
     final runningApps = await discoverActiveApps();

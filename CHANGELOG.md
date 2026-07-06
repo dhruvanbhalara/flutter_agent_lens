@@ -1,3 +1,10 @@
+## 1.5.4
+
+- Resolved memory leaks and background process accumulation when disconnecting from debug sessions.
+- Lowered memory consumption during long debugging sessions by adding caps to path-resolution caches.
+- Standardized tool arguments and connection schemas for more reliable tool actions (like screenshots, breakpoints, and widget trees).
+- Improved port and process scanning reliability on Windows, Mac, and Linux environments.
+
 ## 1.5.3
 
 - Filtered out system isolates when connecting to the VM service to avoid selecting non-user code.

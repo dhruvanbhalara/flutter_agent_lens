@@ -3,24 +3,34 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
+import '../enums/mcp_tool.dart';
+import '../enums/network_sort_by.dart';
+import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 
+/// Support mixin providing tools for capturing and analyzing HTTP traffic details.
 base mixin NetworkCaptureSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Whether the network capture session is statefully active.
   bool isCapturingNetwork = false;
+
+  /// Timestamp in milliseconds when the network capture session was started.
   int? networkCaptureStartTime;
+
+  /// Cache of statefully captured requests, indexed by request ID.
   final Map<String, Map<String, dynamic>> capturedRequests = {};
-  StreamSubscription? networkExtensionSub;
-  StreamSubscription? networkLoggingSub;
 
+  /// Subscription to the VM Service's extension event stream.
+  StreamSubscription<Event>? networkExtensionSub;
+
+  /// Subscription to the VM Service's log event stream.
+  StreamSubscription<Event>? networkLoggingSub;
+
+  /// Registers all network capture and diagnostic tools.
   void registerNetworkTools() {
-    final formatSchema = StringSchema(
-      description: 'Response format: markdown or json (default: markdown).',
-    );
-
     registerTool(
       Tool(
-        name: 'get_network_profile',
+        name: McpTool.getNetworkProfile.name,
         description:
             'Read the current HTTP network requests profile history from the VM.',
         inputSchema: ObjectSchema(
@@ -33,22 +43,22 @@ base mixin NetworkCaptureSupport
           },
         ),
       ),
-      wrapToolCall('get_network_profile', _handleGetNetworkProfile),
+      _handleGetNetworkProfile,
     );
 
     registerTool(
       Tool(
-        name: 'start_network_capture',
+        name: McpTool.startNetworkCapture.name,
         description:
             'Start a stateful session to capture HTTP network traffic.',
         inputSchema: emptySchema(),
       ),
-      wrapToolCall('start_network_capture', _handleStartNetworkCapture),
+      _handleStartNetworkCapture,
     );
 
     registerTool(
       Tool(
-        name: 'stop_network_capture',
+        name: McpTool.stopNetworkCapture.name,
         description:
             'Stop the active network capture session and get the traffic report.',
         inputSchema: ObjectSchema(
@@ -65,23 +75,30 @@ base mixin NetworkCaptureSupport
           },
         ),
       ),
-      wrapToolCall('stop_network_capture', _handleStopNetworkCapture),
+      _handleStopNetworkCapture,
     );
   }
 
-  void cleanupNetworkCapture() {
-    networkExtensionSub?.cancel();
+  /// Disposes active stream subscriptions and clears stateful captured requests.
+  Future<void> cleanupNetworkCapture() async {
+    final futures = [
+      if (networkExtensionSub != null) networkExtensionSub!.cancel(),
+      if (networkLoggingSub != null) networkLoggingSub!.cancel(),
+    ];
+    await Future.wait(futures);
     networkExtensionSub = null;
-    networkLoggingSub?.cancel();
     networkLoggingSub = null;
     isCapturingNetwork = false;
     networkCaptureStartTime = null;
     capturedRequests.clear();
   }
 
+  /// Handles the get_network_profile tool request.
   Future<CallToolResult> _handleGetNetworkProfile(CallToolRequest req) async {
     stderr.writeln('[mcp:network_profile] Fetching HTTP profile...');
-    final response = await vmService!.callServiceExtension(
+    final vm = vmService;
+    if (vm == null) return notConnected();
+    final response = await vm.callServiceExtension(
       'ext.dart.io.getHttpProfile',
       isolateId: isolateId,
     );
@@ -161,8 +178,7 @@ base mixin NetworkCaptureSupport
       }
     }
 
-    final includeRawResponse =
-        req.arguments?['includeRawResponse'] as bool? ?? false;
+    final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     return serializeDualFormat(
       title: 'Network Diagnostics Report',
       markdownBody: md.toString(),
@@ -171,10 +187,11 @@ base mixin NetworkCaptureSupport
         'requests': formattedRequests,
         if (includeRawResponse) 'raw_response': result,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 
+  /// Handles the start_network_capture tool request.
   Future<CallToolResult> _handleStartNetworkCapture(CallToolRequest req) async {
     if (isCapturingNetwork) {
       return CallToolResult(
@@ -194,6 +211,11 @@ base mixin NetworkCaptureSupport
 
     try {
       await vmService!.streamListen(EventStreams.kExtension);
+    } on RPCError catch (e) {
+      if (e.code != 103) {
+        stderr
+            .writeln('[mcp:network] Error subscribing to extension stream: $e');
+      }
     } catch (e) {
       stderr.writeln('[mcp:network] Error subscribing to extension stream: $e');
     }
@@ -216,6 +238,10 @@ base mixin NetworkCaptureSupport
       if (kind == 'dart:io.httpClient.request.start') {
         final id = data['id']?.toString() ??
             'req_${DateTime.now().millisecondsSinceEpoch}';
+        if (capturedRequests.length >= 200) {
+          final oldestKey = capturedRequests.keys.first;
+          capturedRequests.remove(oldestKey);
+        }
         capturedRequests[id] = {
           'id': id,
           'method': data['method'] ?? 'GET',
@@ -256,6 +282,7 @@ base mixin NetworkCaptureSupport
     );
   }
 
+  /// Handles the stop_network_capture tool request.
   Future<CallToolResult> _handleStopNetworkCapture(CallToolRequest req) async {
     if (!isCapturingNetwork) {
       return CallToolResult(
@@ -268,7 +295,8 @@ base mixin NetworkCaptureSupport
       );
     }
 
-    final sortBy = req.arguments?['sortBy'] as String? ?? 'time';
+    final sortByStr = req.arg<String>('sortBy') ?? 'time';
+    final sortBy = NetworkSortBy.fromString(sortByStr);
 
     stderr.writeln('[mcp:network_capture] Stopping network capture...');
     isCapturingNetwork = false;
@@ -287,9 +315,11 @@ base mixin NetworkCaptureSupport
       stderr.writeln('[mcp:network] Error disabling HTTP timeline logging: $e');
     }
 
-    final durationMs =
-        DateTime.now().millisecondsSinceEpoch - networkCaptureStartTime!;
+    final start =
+        networkCaptureStartTime ?? DateTime.now().millisecondsSinceEpoch;
+    final durationMs = DateTime.now().millisecondsSinceEpoch - start;
     final allRequests = capturedRequests.values.toList();
+    capturedRequests.clear();
 
     if (allRequests.isEmpty) {
       return CallToolResult(
@@ -306,7 +336,7 @@ base mixin NetworkCaptureSupport
       );
     }
 
-    if (sortBy == 'duration') {
+    if (sortBy == NetworkSortBy.duration) {
       allRequests.sort((a, b) {
         final durA = a['endTime'] != null
             ? (a['endTime'] as int) - (a['startTime'] as int)
@@ -316,7 +346,7 @@ base mixin NetworkCaptureSupport
             : 0;
         return durB.compareTo(durA);
       });
-    } else if (sortBy == 'size') {
+    } else if (sortBy == NetworkSortBy.size) {
       allRequests.sort((a, b) => ((b['responseSize'] as int?) ?? 0)
           .compareTo((a['responseSize'] as int?) ?? 0));
     } else {
@@ -372,19 +402,15 @@ base mixin NetworkCaptureSupport
       final durationStr =
           durationVal != null ? formatDuration(durationVal) : 'pending...';
 
-      String statusSymbol;
-      if (reqMap['error'] != null) {
-        statusSymbol = '[ERROR] ${reqMap['error']}';
-      } else if (reqMap['statusCode'] != null) {
-        final code = reqMap['statusCode'] as int;
-        statusSymbol = code >= 400
-            ? '[ERROR] $code'
-            : code >= 300
-                ? '[WARN]  $code'
-                : '[OK]    $code';
-      } else {
-        statusSymbol = '[PENDING]';
-      }
+      final statusSymbol = switch (reqMap) {
+        {'error': final err} when err != null => '[ERROR] $err',
+        {'statusCode': int code} => switch (code) {
+            >= 400 => '[ERROR] $code',
+            >= 300 => '[WARN]  $code',
+            _ => '[OK]    $code',
+          },
+        _ => '[PENDING]',
+      };
 
       final sizeStr = reqMap['responseSize'] != null
           ? formatBytes(reqMap['responseSize'] as int)
@@ -430,7 +456,7 @@ base mixin NetworkCaptureSupport
         'total_requests': allRequests.length,
         'requests': allRequests,
       },
-      format: req.arguments?['format'] as String?,
+      format: req.arg<String>('format'),
     );
   }
 }
