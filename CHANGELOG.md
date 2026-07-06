@@ -1,3 +1,8 @@
+## 1.5.5
+
+- Replaced flaky HTTP capture stream listeners with VM Service snapshot diffing, resolving silent failures and returning 0 requests on Android/AOT runtimes.
+- Added platform compatibility safety checks and fallback parsing logic for differing VM Service versions.
+
 ## 1.5.4
 
 - Resolved memory leaks and background process accumulation when disconnecting from debug sessions.
