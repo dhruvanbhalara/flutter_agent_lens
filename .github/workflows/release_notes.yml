@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   release:
+    name: Generate GitHub Release Notes
     runs-on: ubuntu-latest
     timeout-minutes: 5
 

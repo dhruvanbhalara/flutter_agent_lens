@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    name: Build and Verify Code Quality
     runs-on: ubuntu-latest
 
     steps:
