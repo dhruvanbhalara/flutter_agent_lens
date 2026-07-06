@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   publish:
+    name: Publish Package to pub.dev
     permissions:
       contents: read
       id-token: write # Required for OIDC authentication

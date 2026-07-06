@@ -208,7 +208,8 @@ base mixin MemoryDebuggingSupport
             await vmService!.getRetainingPath(isolateId!, instanceId, 15);
         final pathElements = <String>[];
 
-        for (final RetainingObject element in (retainingPath.elements ?? []).cast<RetainingObject>()) {
+        for (final RetainingObject element
+            in (retainingPath.elements ?? []).cast<RetainingObject>()) {
           final val = element.value;
           if (val is InstanceRef) {
             pathElements.add('${val.classRef?.name} (${val.id})');
@@ -355,7 +356,8 @@ base mixin MemoryDebuggingSupport
         await vmService!.getRetainingPath(isolateId!, objectId, limit);
     final pathElements = <String>[];
 
-    for (final RetainingObject element in (retainingPath.elements ?? []).cast<RetainingObject>()) {
+    for (final RetainingObject element
+        in (retainingPath.elements ?? []).cast<RetainingObject>()) {
       final val = element.value;
       if (val is InstanceRef) {
         pathElements.add('${val.classRef?.name} (${val.id})');

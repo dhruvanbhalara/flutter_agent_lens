@@ -1,0 +1,13 @@
+#!/bin/sh
+# Pre-push hook: run tests
+
+echo "Running pre-push checks..."
+
+echo "Running dart test..."
+if ! dart test; then
+  echo "Error: Tests failed."
+  exit 1
+fi
+
+echo "Pre-push checks passed!"
+exit 0
