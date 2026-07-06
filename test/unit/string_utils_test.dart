@@ -61,7 +61,7 @@ void main() {
     });
 
     test('arg returns null on absent key or missing arguments map', () {
-      final req1 = CallToolRequest(name: 'test_tool', arguments: null);
+      final req1 = CallToolRequest(name: 'test_tool');
       expect(req1.arg<String>('someKey'), isNull);
 
       final req2 =
@@ -79,7 +79,7 @@ void main() {
     });
 
     test('requireArg throws on missing arguments map or key', () {
-      final req1 = CallToolRequest(name: 'test_tool', arguments: null);
+      final req1 = CallToolRequest(name: 'test_tool');
       expect(() => req1.requireArg<String>('key'), throwsArgumentError);
 
       final req2 =

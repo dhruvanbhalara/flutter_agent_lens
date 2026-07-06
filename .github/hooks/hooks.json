@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "postToolUse": [
+      {
+        "bash": "\"/Users/dhruvanbhalara/.local/bin/lean-ctx\" hook observe",
+        "powershell": "& \"/Users/dhruvanbhalara/.local/bin/lean-ctx\" hook observe",
+        "timeoutSec": 5,
+        "type": "command"
+      }
+    ],
+    "preToolUse": [
+      {
+        "bash": "\"/Users/dhruvanbhalara/.local/bin/lean-ctx\" hook rewrite",
+        "powershell": "& \"/Users/dhruvanbhalara/.local/bin/lean-ctx\" hook rewrite",
+        "timeoutSec": 15,
+        "type": "command"
+      },
+      {
+        "bash": "\"/Users/dhruvanbhalara/.local/bin/lean-ctx\" hook redirect",
+        "powershell": "& \"/Users/dhruvanbhalara/.local/bin/lean-ctx\" hook redirect",
+        "timeoutSec": 5,
+        "type": "command"
+      }
+    ]
+  },
+  "version": 1
+}

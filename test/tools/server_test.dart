@@ -8,7 +8,6 @@ import 'package:dart_mcp/server.dart';
 
 class FakeVmService extends VmService {
   final Map<String, Map<String, dynamic>> serviceExtensionResponses = {};
-  final List<ClassHeapStats> mockHeapStats = [];
   bool disposeCalled = false;
   int allocationProfileCalls = 0;
 

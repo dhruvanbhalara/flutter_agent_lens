@@ -411,8 +411,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'ext.flutter.screenshot',
             isolateId: isolateId,
           );
+          final result = response.json?['result'] as Map<String, dynamic>?;
           final base64Data = response.json?['screenshot'] as String? ??
-              response.json?['result']?['screenshot'] as String?;
+              result?['screenshot'] as String?;
           if (base64Data != null) {
             final bytes = base64Decode(base64Data);
             await File(targetPath).writeAsBytes(bytes);

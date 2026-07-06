@@ -559,7 +559,7 @@ base mixin PerformanceProfilingSupport
         final name = event.json?['name'] as String?;
         if (ph == 'X' && dur != null && name != null) {
           final lower = name.toLowerCase();
-          if (patterns.any((p) => lower.contains(p))) {
+          if (patterns.any(lower.contains)) {
             phaseDurations.add(dur / 1000.0);
           }
         }
