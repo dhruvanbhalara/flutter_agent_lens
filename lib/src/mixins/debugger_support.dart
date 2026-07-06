@@ -20,7 +20,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'Fetch the active call stack frames for the running application (when paused).',
         inputSchema: ObjectSchema(
           properties: {
-            'limit': limitSchema(defaultValue: 20.0),
+            'limit': limitSchema(),
             'format': formatSchema,
           },
         ),

@@ -110,7 +110,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
     final libId = widgetInspectorLib.id!;
     final pathsLiteral = packagePaths
-        .map((p) => "'${p.replaceAll("'", "\\'")}'")
+        .map((p) => "'${p.replaceAll("'", r"\'")}'")
         .toList()
         .toString();
 
@@ -171,7 +171,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       return directories;
     }
 
-    final json = jsonDecode(file.readAsStringSync());
+    final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
     final packages = json['packages'] as List<dynamic>?;
     if (packages == null) return directories;
 
@@ -182,7 +182,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       final rootUriStr = package['rootUri'] as String?;
       if (rootUriStr == null) continue;
 
-      var uri = Uri.parse(rootUriStr);
+      final uri = Uri.parse(rootUriStr);
       if (!uri.isAbsolute) {
         final absolutePath =
             p.canonicalize(p.join(configDir.path, uri.toFilePath()));

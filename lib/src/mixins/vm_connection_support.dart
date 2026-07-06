@@ -31,6 +31,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   final Map<String, String> registeredMethodsForService = {};
 
   /// Subscription to the VM Service's stream of service registration events.
+  // The subscription is managed at the class level and cancelled in cleanupStreams.
+  // ignore: cancel_subscriptions
   StreamSubscription<Event>? serviceStreamSub;
 
   /// Performs cleanup operations on active streams and daemon clients.
@@ -275,18 +277,18 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
         } else if (decoded case {'id': 1001, 'result': {'vmServices': []}}) {
           completer.completeError(
               StateError('DTD reports no running VM Services connected.'));
-          ws.close();
+          unawaited(ws.close());
         } else if (decoded case {'id': 1001, 'error': final error}) {
           completer.completeError(StateError('DTD returned RPC error: $error'));
-          ws.close();
+          unawaited(ws.close());
         } else if (decoded case {'id': 1001}) {
           completer
               .completeError(StateError('Invalid response format from DTD.'));
-          ws.close();
+          unawaited(ws.close());
         }
       } catch (e) {
         if (!completer.isCompleted) completer.completeError(e);
-        ws.close();
+        unawaited(ws.close());
       }
     }, onError: (Object e) {
       if (!completer.isCompleted) completer.completeError(e);

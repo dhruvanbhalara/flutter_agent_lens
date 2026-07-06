@@ -178,9 +178,7 @@ base mixin ConsoleLoggingSupport
     if (recentLogs.isEmpty) {
       mdBuffer.writeln('No console logs buffered yet.');
     } else {
-      for (final log in recentLogs) {
-        mdBuffer.writeln(log);
-      }
+      recentLogs.forEach(mdBuffer.writeln);
     }
 
     return serializeDualFormat(

@@ -443,7 +443,7 @@ base mixin WidgetInspectionSupport
           sourceFile = p.basename(cleanFile);
         }
       } catch (_) {
-        final cleanFile = fileUri.replaceFirst(RegExp(r'^file://'), '');
+        final cleanFile = fileUri.replaceFirst(RegExp('^file://'), '');
         final parts = cleanFile.split('/lib/');
         if (parts.length > 1) {
           sourceFile = parts.last;
@@ -463,9 +463,9 @@ final class _FlatWidget {
   const _FlatWidget({
     required this.type,
     required this.depth,
-    this.id,
     required this.isProjectWidget,
     required this.childCount,
+    this.id,
     this.sourceFile,
     this.sourceLine,
     this.properties,

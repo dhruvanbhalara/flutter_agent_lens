@@ -208,7 +208,7 @@ base mixin MemoryDebuggingSupport
             await vmService!.getRetainingPath(isolateId!, instanceId, 15);
         final pathElements = <String>[];
 
-        for (final element in retainingPath.elements ?? []) {
+        for (final RetainingObject element in (retainingPath.elements ?? []).cast<RetainingObject>()) {
           final val = element.value;
           if (val is InstanceRef) {
             pathElements.add('${val.classRef?.name} (${val.id})');
@@ -328,7 +328,7 @@ base mixin MemoryDebuggingSupport
     _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
     final md = StringBuffer('Memory Allocations Delta\n\n')
-      ..write(_formatAllocationDiffTable(deltas, limit: 20));
+      ..write(_formatAllocationDiffTable(deltas));
 
     return serializeDualFormat(
       title: 'Allocation Snapshot Difference',
@@ -355,7 +355,7 @@ base mixin MemoryDebuggingSupport
         await vmService!.getRetainingPath(isolateId!, objectId, limit);
     final pathElements = <String>[];
 
-    for (final element in retainingPath.elements ?? []) {
+    for (final RetainingObject element in (retainingPath.elements ?? []).cast<RetainingObject>()) {
       final val = element.value;
       if (val is InstanceRef) {
         pathElements.add('${val.classRef?.name} (${val.id})');

@@ -48,7 +48,7 @@ class PortDiscovery {
       if (Platform.isWindows) {
         final result = await processRunner.run('powershell', [
           '-Command',
-          'Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like "*development-service*" } | Select-Object CommandLine, ProcessId, WorkingDirectory | ConvertTo-Json'
+          r'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*development-service*" } | Select-Object CommandLine, ProcessId, WorkingDirectory | ConvertTo-Json'
         ]).timeout(const Duration(seconds: 5));
 
         if (result.exitCode != 0) {

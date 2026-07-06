@@ -40,9 +40,9 @@ base mixin ScrollGestureSupport
         '[mcp:scroll_gesture] Controller: $controller, offset: $offset');
 
     final script = '$controller.animateTo('
-        '$offset,'
-        'duration: const Duration(milliseconds: 300),'
-        'curve: Curves.easeInOut,'
+        '$offset, '
+        'duration: const Duration(milliseconds: 300), '
+        'curve: Curves.easeInOut, '
         ')';
 
     final libraryId = await getEvaluationLibraryId();

@@ -328,7 +328,7 @@ base mixin NetworkCaptureSupport
             text:
                 'Captured for ${(durationMs / 1000.0).toStringAsFixed(1)}s - no HTTP requests detected.\n\n'
                 'This can happen if:\n'
-                '- The app didn\'t make any network calls during capture\n'
+                "- The app didn't make any network calls during capture\n"
                 '- HTTP timeline logging is not supported in this Flutter version\n\n'
                 'Try making the app load data (e.g. pull to refresh, navigate to a new screen).',
           ),
@@ -404,7 +404,7 @@ base mixin NetworkCaptureSupport
 
       final statusSymbol = switch (reqMap) {
         {'error': final err} when err != null => '[ERROR] $err',
-        {'statusCode': int code} => switch (code) {
+        {'statusCode': final int code} => switch (code) {
             >= 400 => '[ERROR] $code',
             >= 300 => '[WARN]  $code',
             _ => '[OK]    $code',

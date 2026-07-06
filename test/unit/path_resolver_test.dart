@@ -18,7 +18,7 @@ void main() {
 
   group('PathResolver Tests', () {
     test('resolve standard package URIs to workspace lib paths', () async {
-      final packageUri = 'package:my_app/src/home.dart';
+      const packageUri = 'package:my_app/src/home.dart';
       final file = File(p.join(tempDir.path, 'lib', 'src', 'home.dart'));
       await file.create(recursive: true);
       final expectedPath = p.canonicalize(file.path);

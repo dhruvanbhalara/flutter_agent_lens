@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "lean-ctx": {
+      "args": [],
+      "command": "/Users/dhruvanbhalara/.local/bin/lean-ctx",
+      "env": {}
+    }
+  }
+}

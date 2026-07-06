@@ -98,8 +98,8 @@ base mixin ConnectionSupport
   /// Handles the connect tool request.
   Future<CallToolResult> _handleConnect(CallToolRequest req) async {
     final rawUri = switch (req.arguments) {
-      {'uri': String uri} => uri,
-      {'vmServiceUri': String uri} => uri,
+      {'uri': final String uri} => uri,
+      {'vmServiceUri': final String uri} => uri,
       _ => throw ArgumentError(
           'Required parameter "uri" or "vmServiceUri" is missing.'),
     };
