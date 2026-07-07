@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
-import 'package:vm_service/vm_service.dart';
 import '../enums/mcp_tool.dart';
 import '../enums/network_sort_by.dart';
 import '../extensions/call_tool_request_x.dart';
@@ -17,14 +16,8 @@ base mixin NetworkCaptureSupport
   /// Timestamp in milliseconds when the network capture session was started.
   int? networkCaptureStartTime;
 
-  /// Cache of statefully captured requests, indexed by request ID.
-  final Map<String, Map<String, dynamic>> capturedRequests = {};
-
-  /// Subscription to the VM Service's extension event stream.
-  StreamSubscription<Event>? networkExtensionSub;
-
-  /// Subscription to the VM Service's log event stream.
-  StreamSubscription<Event>? networkLoggingSub;
+  /// Set of request IDs that were already present when network capture started.
+  final Set<String> _initialRequestIds = {};
 
   /// Registers all network capture and diagnostic tools.
   void registerNetworkTools() {
@@ -39,6 +32,7 @@ base mixin NetworkCaptureSupport
               description:
                   'Whether to include the raw JSON-RPC response in structured data (default: false).',
             ),
+            'limit': limitSchema(defaultValue: 30.0),
             'format': formatSchema,
           },
         ),
@@ -79,102 +73,167 @@ base mixin NetworkCaptureSupport
     );
   }
 
+  Map<String, dynamic> _sanitizeRequest(Map<dynamic, dynamic> r) {
+    final sanitized = Map<String, dynamic>.from(r);
+    if (sanitized['request'] is Map) {
+      sanitized['request'] =
+          Map<String, dynamic>.from(sanitized['request'] as Map);
+    }
+    if (sanitized['response'] is Map) {
+      sanitized['response'] =
+          Map<String, dynamic>.from(sanitized['response'] as Map);
+    }
+    return sanitized;
+  }
+
+  Future<List<Map<String, dynamic>>> _getHttpRequests() async {
+    final vm = vmService;
+    if (vm == null || isolateId == null) return const [];
+    try {
+      final response = await vm.callServiceExtension(
+        'ext.dart.io.getHttpProfile',
+        isolateId: isolateId,
+      );
+      final jsonMap = response.json ?? {};
+      final rawResult = jsonMap['result'];
+      Map<String, dynamic> result;
+      if (rawResult is String) {
+        result = jsonDecode(rawResult) as Map<String, dynamic>;
+      } else if (rawResult is Map) {
+        result = Map<String, dynamic>.from(rawResult);
+      } else if (jsonMap.containsKey('requests')) {
+        result = jsonMap;
+      } else {
+        result = {};
+      }
+      final rawRequests = result['requests'] as List<dynamic>? ?? [];
+      final allRequests = <Map<String, dynamic>>[];
+      for (final r in rawRequests) {
+        if (r is Map) {
+          allRequests.add(_sanitizeRequest(r));
+        }
+      }
+      return allRequests;
+    } catch (e) {
+      stderr.writeln('[mcp:network] Error fetching HTTP requests: $e');
+      return const [];
+    }
+  }
+
   /// Disposes active stream subscriptions and clears stateful captured requests.
   Future<void> cleanupNetworkCapture() async {
-    final futures = [
-      if (networkExtensionSub != null) networkExtensionSub!.cancel(),
-      if (networkLoggingSub != null) networkLoggingSub!.cancel(),
-    ];
-    await Future.wait(futures);
-    networkExtensionSub = null;
-    networkLoggingSub = null;
     isCapturingNetwork = false;
     networkCaptureStartTime = null;
-    capturedRequests.clear();
+    _initialRequestIds.clear();
+    if (vmService != null && isolateId != null) {
+      try {
+        await vmService!.callServiceExtension(
+          'ext.dart.io.httpEnableTimelineLogging',
+          isolateId: isolateId!,
+          args: {'enabled': 'false'},
+        );
+      } catch (_) {}
+    }
+  }
+
+  /// Helper to check if http profiling is supported.
+  Future<bool> _checkHttpProfileSupport() async {
+    final vm = vmService;
+    if (vm == null || isolateId == null) return false;
+    try {
+      final isolate = await vm.getIsolate(isolateId!);
+      final rpcs = isolate.extensionRPCs ?? [];
+      return rpcs.contains('ext.dart.io.getHttpProfile');
+    } catch (e) {
+      stderr.writeln('[mcp:network] Warning checking HTTP profile support: $e');
+      return true; // Fallback to true, let the actual call fail if unsupported
+    }
+  }
+
+  CallToolResult _getUnsupportedError() {
+    return CallToolResult(
+      content: [
+        TextContent(
+          text:
+              'Network profiling via the Dart VM Service is not supported on this platform/runtime (e.g., Flutter Web/Wasm).\n\n'
+              "Web/Wasm applications execute network calls using the browser's native APIs (fetch/XHR). "
+              "Please use your browser's Developer Tools (F12 -> Network tab) to inspect API calls.",
+        )
+      ],
+      isError: true,
+    );
   }
 
   /// Handles the get_network_profile tool request.
   Future<CallToolResult> _handleGetNetworkProfile(CallToolRequest req) async {
     stderr.writeln('[mcp:network_profile] Fetching HTTP profile...');
-    final vm = vmService;
-    if (vm == null) return notConnected();
-    final response = await vm.callServiceExtension(
-      'ext.dart.io.getHttpProfile',
-      isolateId: isolateId,
-    );
+    if (vmService == null) return notConnected();
 
-    final rawResult = response.json?['result'];
-    Map<String, dynamic> result;
-    if (rawResult is String) {
-      result = jsonDecode(rawResult) as Map<String, dynamic>;
-    } else if (rawResult is Map) {
-      result = Map<String, dynamic>.from(rawResult);
-    } else {
-      result = {};
+    if (!await _checkHttpProfileSupport()) {
+      return _getUnsupportedError();
     }
 
-    final requestsList = result['requests'] as List<dynamic>? ?? [];
-    stderr
-        .writeln('[mcp:network_profile] Found ${requestsList.length} requests');
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 30;
+    var allFetched = await _getHttpRequests();
+    // Return only the most recent `limit` requests
+    if (allFetched.length > limit) {
+      allFetched = allFetched.sublist(allFetched.length - limit);
+    }
+    stderr.writeln('[mcp:network_profile] Found ${allFetched.length} requests');
+
     final formattedRequests = <Map<String, dynamic>>[];
     final md = StringBuffer('Network HTTP Profile History\n\n');
 
-    if (requestsList.isEmpty) {
+    if (allFetched.isEmpty) {
       md.writeln('No network requests recorded.');
     } else {
       md.writeln(
           '| ID | Method | URI | Status | Duration | Req Size | Res Size | Start Time |');
       md.writeln('| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |');
 
-      for (final reqObj in requestsList) {
-        if (reqObj is Map<String, dynamic>) {
-          final id = reqObj['id']?.toString() ?? 'N/A';
-          final method = reqObj['method']?.toString() ?? 'N/A';
-          final uri = reqObj['uri']?.toString() ?? 'N/A';
+      for (final reqMap in allFetched) {
+        final id = reqMap['id']?.toString() ?? 'N/A';
+        final method = reqMap['method']?.toString() ?? 'N/A';
+        final uri = reqMap['uri']?.toString() ?? 'N/A';
 
-          final requestData = reqObj['request'] as Map<String, dynamic>?;
-          final responseData = reqObj['response'] as Map<String, dynamic>?;
+        final requestData = reqMap['request'] as Map<String, dynamic>?;
+        final responseData = reqMap['response'] as Map<String, dynamic>?;
 
-          final statusCode =
-              responseData?['statusCode']?.toString() ?? 'Pending';
+        final statusCode = responseData?['statusCode']?.toString() ?? 'Pending';
 
-          final startTimeUs = reqObj['startTime'] as int?;
-          final endTimeUs = reqObj['endTime'] as int?;
-          String durationStr = 'Pending';
-          if (startTimeUs != null && endTimeUs != null) {
-            final durationMs = (endTimeUs - startTimeUs) / 1000.0;
-            durationStr = '${durationMs.toStringAsFixed(1)} ms';
-          }
-
-          String startTimeStr = 'Unknown';
-          if (startTimeUs != null) {
-            final dt = DateTime.fromMicrosecondsSinceEpoch(startTimeUs);
-            startTimeStr =
-                dt.toIso8601String().split('T').last.substring(0, 12);
-          }
-
-          final reqSize = requestData?['contentLength'] ?? 0;
-          final resSize = responseData?['contentLength'] ?? 0;
-
-          final displayUri =
-              uri.length > 50 ? '${uri.substring(0, 47)}...' : uri;
-
-          md.writeln(
-              '| `$id` | $method | `$displayUri` | `$statusCode` | $durationStr | $reqSize B | $resSize B | $startTimeStr |');
-
-          formattedRequests.add({
-            'id': id,
-            'method': method,
-            'uri': uri,
-            'statusCode': statusCode,
-            'duration_ms': startTimeUs != null && endTimeUs != null
-                ? (endTimeUs - startTimeUs) / 1000.0
-                : null,
-            'request_size_bytes': reqSize,
-            'response_size_bytes': resSize,
-            'start_time': startTimeStr,
-          });
+        final startTimeUs = reqMap['startTime'] as int?;
+        final endTimeUs = reqMap['endTime'] as int?;
+        String durationStr = 'Pending';
+        if (startTimeUs != null && endTimeUs != null) {
+          final durationMs = (endTimeUs - startTimeUs) / 1000.0;
+          durationStr = '${durationMs.toStringAsFixed(1)} ms';
         }
+
+        String startTimeStr = 'Unknown';
+        if (startTimeUs != null) {
+          final dt = DateTime.fromMicrosecondsSinceEpoch(startTimeUs);
+          startTimeStr = dt.toIso8601String().split('T').last.substring(0, 12);
+        }
+
+        final reqSize = requestData?['contentLength'] ?? 0;
+        final resSize = responseData?['contentLength'] ?? 0;
+        final displayUri = uri.length > 50 ? '${uri.substring(0, 47)}...' : uri;
+
+        md.writeln(
+            '| `$id` | $method | `$displayUri` | `$statusCode` | $durationStr | $reqSize B | $resSize B | $startTimeStr |');
+
+        formattedRequests.add({
+          'id': id,
+          'method': method,
+          'uri': uri,
+          'statusCode': statusCode,
+          'duration_ms': startTimeUs != null && endTimeUs != null
+              ? (endTimeUs - startTimeUs) / 1000.0
+              : null,
+          'request_size_bytes': reqSize,
+          'response_size_bytes': resSize,
+          'start_time': startTimeStr,
+        });
       }
     }
 
@@ -183,9 +242,9 @@ base mixin NetworkCaptureSupport
       title: 'Network Diagnostics Report',
       markdownBody: md.toString(),
       structuredData: {
-        'total_requests': requestsList.length,
+        'total_requests': allFetched.length,
         'requests': formattedRequests,
-        if (includeRawResponse) 'raw_response': result,
+        if (includeRawResponse) 'raw_response': allFetched,
       },
       format: req.arg<String>('format'),
     );
@@ -204,21 +263,14 @@ base mixin NetworkCaptureSupport
       );
     }
 
+    if (!await _checkHttpProfileSupport()) {
+      return _getUnsupportedError();
+    }
+
     stderr.writeln('[mcp:network_capture] Starting network capture...');
     isCapturingNetwork = true;
     networkCaptureStartTime = DateTime.now().millisecondsSinceEpoch;
-    capturedRequests.clear();
-
-    try {
-      await vmService!.streamListen(EventStreams.kExtension);
-    } on RPCError catch (e) {
-      if (e.code != 103) {
-        stderr
-            .writeln('[mcp:network] Error subscribing to extension stream: $e');
-      }
-    } catch (e) {
-      stderr.writeln('[mcp:network] Error subscribing to extension stream: $e');
-    }
+    _initialRequestIds.clear();
 
     try {
       await vmService!.callServiceExtension(
@@ -230,53 +282,20 @@ base mixin NetworkCaptureSupport
       stderr.writeln('[mcp:network] Error enabling HTTP timeline logging: $e');
     }
 
-    networkExtensionSub = vmService!.onExtensionEvent.listen((Event event) {
-      final kind = event.extensionKind;
-      final data = event.extensionData?.data;
-      if (data == null) return;
-
-      if (kind == 'dart:io.httpClient.request.start') {
-        final id = data['id']?.toString() ??
-            'req_${DateTime.now().millisecondsSinceEpoch}';
-        if (capturedRequests.length >= 200) {
-          final oldestKey = capturedRequests.keys.first;
-          capturedRequests.remove(oldestKey);
-        }
-        capturedRequests[id] = {
-          'id': id,
-          'method': data['method'] ?? 'GET',
-          'uri': data['uri'] ?? 'unknown',
-          'startTime': DateTime.now().millisecondsSinceEpoch,
-          'requestSize': data['contentLength'] ?? 0,
-        };
-      } else if (kind == 'dart:io.httpClient.request.finish') {
-        final id = data['id']?.toString();
-        if (id != null && capturedRequests.containsKey(id)) {
-          final reqMap = capturedRequests[id]!;
-          reqMap['endTime'] = DateTime.now().millisecondsSinceEpoch;
-          reqMap['statusCode'] = data['statusCode'];
-          reqMap['responseSize'] = data['contentLength'] ?? 0;
-          final responseMap = data['response'] as Map?;
-          if (responseMap != null) {
-            final headers = responseMap['headers'] as Map?;
-            reqMap['contentType'] = headers?['content-type'];
-          }
-        }
-      } else if (kind == 'dart:io.httpClient.request.error') {
-        final id = data['id']?.toString();
-        if (id != null && capturedRequests.containsKey(id)) {
-          final reqMap = capturedRequests[id]!;
-          reqMap['endTime'] = DateTime.now().millisecondsSinceEpoch;
-          reqMap['error'] = data['error']?.toString() ?? 'Unknown error';
-        }
+    // Capture the snapshot of request IDs present at start
+    final currentRequests = await _getHttpRequests();
+    for (final r in currentRequests) {
+      final id = r['id']?.toString();
+      if (id != null) {
+        _initialRequestIds.add(id);
       }
-    });
+    }
 
     return CallToolResult(
       content: [
         TextContent(
           text:
-              'Network capture started. Use the app to trigger API calls, then call `stop_network_capture` to see the results.',
+              'Network capture started. Use the app to trigger API calls, then call stop_network_capture to see the results.',
         )
       ],
     );
@@ -295,31 +314,30 @@ base mixin NetworkCaptureSupport
       );
     }
 
+    if (!await _checkHttpProfileSupport()) {
+      return _getUnsupportedError();
+    }
+
     final sortByStr = req.arg<String>('sortBy') ?? 'time';
     final sortBy = NetworkSortBy.fromString(sortByStr);
 
     stderr.writeln('[mcp:network_capture] Stopping network capture...');
     isCapturingNetwork = false;
-    await networkExtensionSub?.cancel();
-    networkExtensionSub = null;
-    await networkLoggingSub?.cancel();
-    networkLoggingSub = null;
-
-    try {
-      await vmService!.callServiceExtension(
-        'ext.dart.io.httpEnableTimelineLogging',
-        isolateId: isolateId!,
-        args: {'enabled': 'false'},
-      );
-    } catch (e) {
-      stderr.writeln('[mcp:network] Error disabling HTTP timeline logging: $e');
-    }
 
     final start =
         networkCaptureStartTime ?? DateTime.now().millisecondsSinceEpoch;
     final durationMs = DateTime.now().millisecondsSinceEpoch - start;
-    final allRequests = capturedRequests.values.toList();
-    capturedRequests.clear();
+
+    // Fetch the new profile and filter out requests present at start
+    final currentRequests = await _getHttpRequests();
+    final allRequests = <Map<String, dynamic>>[];
+    for (final r in currentRequests) {
+      final id = r['id']?.toString();
+      if (id != null && !_initialRequestIds.contains(id)) {
+        allRequests.add(r);
+      }
+    }
+    _initialRequestIds.clear();
 
     if (allRequests.isEmpty) {
       return CallToolResult(
@@ -336,43 +354,68 @@ base mixin NetworkCaptureSupport
       );
     }
 
+    // Sort requests
     if (sortBy == NetworkSortBy.duration) {
       allRequests.sort((a, b) {
-        final durA = a['endTime'] != null
-            ? (a['endTime'] as int) - (a['startTime'] as int)
-            : 0;
-        final durB = b['endTime'] != null
-            ? (b['endTime'] as int) - (b['startTime'] as int)
-            : 0;
+        final startA = a['startTime'] as int?;
+        final endA = a['endTime'] as int?;
+        final startB = b['startTime'] as int?;
+        final endB = b['endTime'] as int?;
+        final durA = (startA != null && endA != null) ? (endA - startA) : 0;
+        final durB = (startB != null && endB != null) ? (endB - startB) : 0;
         return durB.compareTo(durA);
       });
     } else if (sortBy == NetworkSortBy.size) {
-      allRequests.sort((a, b) => ((b['responseSize'] as int?) ?? 0)
-          .compareTo((a['responseSize'] as int?) ?? 0));
+      allRequests.sort((a, b) {
+        final resSizeA = (a['response']
+                as Map<String, dynamic>?)?['contentLength'] as int? ??
+            0;
+        final resSizeB = (b['response']
+                as Map<String, dynamic>?)?['contentLength'] as int? ??
+            0;
+        return resSizeB.compareTo(resSizeA);
+      });
     } else {
-      allRequests.sort(
-          (a, b) => (a['startTime'] as int).compareTo(b['startTime'] as int));
+      allRequests.sort((a, b) {
+        final startA = a['startTime'] as int? ?? 0;
+        final startB = b['startTime'] as int? ?? 0;
+        return startA.compareTo(startB);
+      });
     }
 
-    final completedRequests = allRequests
-        .where((r) => r['endTime'] != null && r['error'] == null)
-        .toList();
-    final failedRequests =
-        allRequests.where((r) => r['error'] != null).toList();
-    final pendingRequests = allRequests
-        .where((r) => r['endTime'] == null && r['error'] == null)
-        .toList();
+    final completedRequests = allRequests.where((r) {
+      final responseData = r['response'] as Map<String, dynamic>?;
+      return responseData != null && r['endTime'] != null;
+    }).toList();
 
-    final totalSize = allRequests.fold<int>(
-        0, (sum, r) => sum + ((r['responseSize'] as int?) ?? 0));
-    final durations = completedRequests
-        .map((r) => (r['endTime'] as int) - (r['startTime'] as int))
-        .toList();
+    final failedRequests = allRequests.where((r) {
+      final error = r['error']?.toString();
+      final responseData = r['response'] as Map<String, dynamic>?;
+      final statusCode = responseData?['statusCode'] as int?;
+      return error != null || (statusCode != null && statusCode >= 400);
+    }).toList();
+
+    final pendingRequests = allRequests.where((r) {
+      final responseData = r['response'] as Map<String, dynamic>?;
+      return r['endTime'] == null && r['error'] == null && responseData == null;
+    }).toList();
+
+    final totalSize = allRequests.fold<int>(0, (sum, r) {
+      final responseData = r['response'] as Map<String, dynamic>?;
+      return sum + ((responseData?['contentLength'] as int?) ?? 0);
+    });
+
+    final durations = completedRequests.map((r) {
+      final startUs = r['startTime'] as int? ?? 0;
+      final endUs = r['endTime'] as int? ?? 0;
+      return (endUs - startUs) / 1000.0;
+    }).toList();
+
     final avgDuration = durations.isNotEmpty
         ? durations.reduce((a, b) => a + b) / durations.length
         : 0.0;
     final maxDuration =
-        durations.isNotEmpty ? durations.reduce((a, b) => a > b ? a : b) : 0;
+        durations.isNotEmpty ? durations.reduce((a, b) => a > b ? a : b) : 0.0;
 
     String formatDuration(double ms) {
       if (ms < 1.0) return '<1ms';
@@ -389,15 +432,24 @@ base mixin NetworkCaptureSupport
       'Completed: ${completedRequests.length} | Failed: ${failedRequests.length} | Pending: ${pendingRequests.length}',
       'Total response size: ${formatBytes(totalSize)}',
       'Average response time: ${formatDuration(avgDuration)}',
-      'Slowest request: ${formatDuration(maxDuration.toDouble())}',
+      'Slowest request: ${formatDuration(maxDuration)}',
       '',
       'REQUESTS',
     ];
 
+    final formattedRequests = <Map<String, dynamic>>[];
+
     for (final reqMap in allRequests) {
-      final durationVal = reqMap['endTime'] != null
-          ? ((reqMap['endTime'] as int) - (reqMap['startTime'] as int))
-              .toDouble()
+      final id = reqMap['id']?.toString() ?? 'N/A';
+      final method = reqMap['method']?.toString() ?? 'GET';
+      final uri = reqMap['uri']?.toString() ?? 'unknown';
+      final requestData = reqMap['request'] as Map<String, dynamic>?;
+      final responseData = reqMap['response'] as Map<String, dynamic>?;
+
+      final startUs = reqMap['startTime'] as int?;
+      final endUs = reqMap['endTime'] as int?;
+      final durationVal = (startUs != null && endUs != null)
+          ? (endUs - startUs) / 1000.0
           : null;
       final durationStr =
           durationVal != null ? formatDuration(durationVal) : 'pending...';
@@ -412,21 +464,35 @@ base mixin NetworkCaptureSupport
         _ => '[PENDING]',
       };
 
-      final sizeStr = reqMap['responseSize'] != null
-          ? formatBytes(reqMap['responseSize'] as int)
-          : '-';
-      final method = reqMap['method'] as String? ?? 'GET';
-      final uri = reqMap['uri'] as String? ?? 'unknown';
+      final reqSize = (requestData?['contentLength'] as int?) ?? 0;
+      final resSize = (responseData?['contentLength'] as int?) ?? 0;
+      final displayUri = uri.length > 50 ? '${uri.substring(0, 47)}...' : uri;
 
-      output.add('$statusSymbol $method $durationStr | $sizeStr | $uri');
+      output.add(
+          '$statusSymbol $method $durationStr | ${formatBytes(resSize)} | $displayUri');
+
+      formattedRequests.add({
+        'id': id,
+        'method': method,
+        'uri': uri,
+        'statusCode': responseData?['statusCode'] ?? 'Pending',
+        'duration_ms': durationVal,
+        'request_size_bytes': reqSize,
+        'response_size_bytes': resSize,
+      });
     }
 
-    final slowRequests = completedRequests
-        .where((r) => ((r['endTime'] as int) - (r['startTime'] as int)) > 2000)
-        .toList();
-    final largeResponses = completedRequests
-        .where((r) => ((r['responseSize'] as int?) ?? 0) > 500000)
-        .toList();
+    final slowRequests = completedRequests.where((r) {
+      final startUs = r['startTime'] as int? ?? 0;
+      final endUs = r['endTime'] as int? ?? 0;
+      return (endUs - startUs) > 2000000;
+    }).toList();
+
+    final largeResponses = completedRequests.where((r) {
+      final responseData = r['response'] as Map<String, dynamic>?;
+      final len = responseData?['contentLength'] as int? ?? 0;
+      return len > 500000;
+    }).toList();
 
     if (slowRequests.isNotEmpty ||
         largeResponses.isNotEmpty ||
@@ -434,27 +500,36 @@ base mixin NetworkCaptureSupport
       output.add('');
       output.add('CONCERNS');
       for (final r in slowRequests.take(3)) {
-        final dur =
-            ((r['endTime'] as int) - (r['startTime'] as int)).toDouble();
+        final startUs = r['startTime'] as int? ?? 0;
+        final endUs = r['endTime'] as int? ?? 0;
+        final dur = (endUs - startUs) / 1000.0;
         output.add(
             '- SLOW: ${r['method']} ${r['uri']} took ${formatDuration(dur)}');
       }
       for (final r in largeResponses.take(3)) {
+        final responseData = r['response'] as Map<String, dynamic>?;
+        final len = responseData?['contentLength'] as int? ?? 0;
         output.add(
-            '- LARGE: ${r['method']} ${r['uri']} returned ${formatBytes(r['responseSize'] as int)}');
+            '- LARGE: ${r['method']} ${r['uri']} returned ${formatBytes(len)}');
       }
       for (final r in failedRequests.take(3)) {
-        output.add('- ERROR: ${r['method']} ${r['uri']} - ${r['error']}');
+        final error = r['error']?.toString();
+        final responseData = r['response'] as Map<String, dynamic>?;
+        final statusCode = responseData?['statusCode']?.toString();
+        output.add(
+            '- ERROR: ${r['method']} ${r['uri']} - ${error ?? "Status Code $statusCode"}');
       }
     }
 
+    final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     return serializeDualFormat(
       title: 'Network Traffic Report',
       markdownBody: output.join('\n'),
       structuredData: {
         'duration_ms': durationMs,
         'total_requests': allRequests.length,
-        'requests': allRequests,
+        'requests': formattedRequests,
+        if (includeRawResponse) 'raw_response': allRequests,
       },
       format: req.arg<String>('format'),
     );
