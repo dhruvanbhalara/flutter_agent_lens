@@ -35,7 +35,7 @@ base mixin PerformanceProfilingSupport
               description: 'Action: start, stop, get_cpu, diagnose_jank.',
             ),
             'duration_seconds': durationSchema(),
-            'limit': limitSchema(defaultValue: 15.0),
+            'limit': limitSchema(defaultValue: 15),
           },
           required: ['action'],
         ),
@@ -145,7 +145,7 @@ base mixin PerformanceProfilingSupport
           '- Janky Frame Events (> 16.6ms): $jankyFrames ($jankPercentage%)')
       ..writeln();
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 10;
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
     if (jankyFrames > 0) {
       mdBuffer.writeln('| Event | Duration (ms) | Severity |');
       mdBuffer.writeln('| :--- | :--- | :--- |');
@@ -326,7 +326,7 @@ base mixin PerformanceProfilingSupport
 
           final url = f.resolvedUrl ?? '';
           final resolvedPath = pathResolver != null
-              ? pathResolver!.resolveToAbsolutePath(url)
+              ? await pathResolver!.resolveToAbsolutePath(url)
               : url;
 
           hotspots.add({

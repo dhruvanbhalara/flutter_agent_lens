@@ -294,14 +294,7 @@ base mixin MemoryDebuggingSupport
   };
 
   bool _isVmInternal(String name) {
-    if (_vmInternalClasses.contains(name)) return true;
-    if (name.startsWith('_') &&
-        name.length < 20 &&
-        !name.contains('State') &&
-        !name.contains('Controller')) {
-      return true;
-    }
-    return false;
+    return _vmInternalClasses.contains(name);
   }
 
   /// Handles the diff_heap_allocations tool request.

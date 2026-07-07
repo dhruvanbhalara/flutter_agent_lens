@@ -65,10 +65,10 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               description:
                   'The absolute path or file URI of the target source file (for add).',
             ),
-            'line': NumberSchema(
+            'line': IntegerSchema(
               description: 'The 1-based line number (for add).',
             ),
-            'column': NumberSchema(
+            'column': IntegerSchema(
               description: 'The optional 1-based column number (for add).',
             ),
             'breakpoint_id': StringSchema(
@@ -97,7 +97,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'expression': StringSchema(
               description: 'The Dart expression to evaluate.',
             ),
-            'frame_index': NumberSchema(
+            'frame_index': IntegerSchema(
               description:
                   'Optional frame index to evaluate the expression in (if the app is paused at a breakpoint).',
             ),
@@ -132,7 +132,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         final scriptUri = f.location?.script?.uri ?? 'Unknown';
         final line = f.location?.line?.toString() ?? '?';
         final resolvedPath = pathResolver != null
-            ? pathResolver!.resolveToAbsolutePath(scriptUri)
+            ? await pathResolver!.resolveToAbsolutePath(scriptUri)
             : scriptUri;
         md.writeln('| $i | `$funcName` | `$resolvedPath:$line` |');
       }

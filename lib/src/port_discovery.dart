@@ -44,6 +44,15 @@ class PortDiscovery {
   /// Creates a new [PortDiscovery] instance.
   const PortDiscovery({this.processRunner = const ProcessRunner()});
 
+  static final RegExp _vmUriPattern = RegExp(r'--vm-service-uri=(http://\S+)');
+  static final RegExp _pidPattern = RegExp(r'^\S+\s+(\d+)');
+
+  String _sanitizeUri(String rawUri) {
+    final parsed = Uri.tryParse(rawUri);
+    if (parsed == null) return '<malformed URI>';
+    return '${parsed.scheme}://${parsed.host}:${parsed.port}/<redacted>';
+  }
+
   /// Finds running Flutter/Dart applications by scanning OS processes.
   Future<List<DiscoveredApp>> discoverActiveApps() async {
     final apps = <DiscoveredApp>[];
@@ -74,7 +83,6 @@ class PortDiscovery {
         }
 
         final List<dynamic> processes = decoded is List ? decoded : [decoded];
-        final vmUriPattern = RegExp(r'--vm-service-uri=(http://\S+)');
 
         for (final proc in processes) {
           if (proc is! Map) continue;
@@ -82,7 +90,7 @@ class PortDiscovery {
           final pid = (proc['ProcessId'] ?? proc['Processid'] ?? '').toString();
           final workingDir = proc['WorkingDirectory'] as String? ?? '';
 
-          final uriMatch = vmUriPattern.firstMatch(cmdLine);
+          final uriMatch = _vmUriPattern.firstMatch(cmdLine);
           if (uriMatch == null) continue;
 
           final rawVmUri = uriMatch.group(1)!;
@@ -102,26 +110,27 @@ class PortDiscovery {
         }
 
         final lines = (psResult.stdout as String).split('\n');
-        final vmUriPattern = RegExp(r'--vm-service-uri=(http://\S+)');
-        final pidPattern = RegExp(r'^\S+\s+(\d+)');
         var ddsCount = 0;
 
         for (final line in lines) {
           if (!line.contains('development-service')) continue;
           ddsCount++;
 
-          final uriMatch = vmUriPattern.firstMatch(line);
-          final pidMatch = pidPattern.firstMatch(line);
+          final uriMatch = _vmUriPattern.firstMatch(line);
+          final pidMatch = _pidPattern.firstMatch(line);
           if (uriMatch == null || pidMatch == null) {
+            final sanitizedLine =
+                line.replaceAll(_vmUriPattern, '--vm-service-uri=<redacted>');
             stderr.writeln(
-                '[discovery] DDS process found but could not parse: $line');
+                '[discovery] DDS process found but could not parse: $sanitizedLine');
             continue;
           }
 
           final rawVmUri = uriMatch.group(1)!;
           final pid = pidMatch.group(1)!;
+          final sanitizedVmUri = _sanitizeUri(rawVmUri);
           stderr.writeln(
-              '[discovery] Found DDS process pid=$pid, rawVmUri=$rawVmUri');
+              '[discovery] Found DDS process pid=$pid, rawVmUri=$sanitizedVmUri');
 
           // Get project name from the process's working directory.
           String projectName = 'Flutter App (pid $pid)';
@@ -221,8 +230,9 @@ class PortDiscovery {
         await response.drain<void>();
       } catch (_) {}
     } catch (e) {
+      final sanitizedVmUri = _sanitizeUri(rawVmUri);
       stderr.writeln(
-          '[discovery] Failed to probe raw VM service at $rawVmUri: $e');
+          '[discovery] Failed to probe raw VM service at $sanitizedVmUri: $e');
     } finally {
       client.close(force: true);
     }

@@ -44,7 +44,13 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   set responseFormat(String value) => _responseFormat = value;
 
   /// Performs cleanup operations on active streams and daemon clients.
-  void cleanupStreams() {}
+  FutureOr<void> cleanupStreams() {}
+
+  /// Registers all tools requiring active VM connection.
+  void registerConnectedTools();
+
+  /// Unregisters all tools requiring active VM connection.
+  void unregisterConnectedTools();
 
   /// Returns a schema for a duration parameter.
   NumberSchema durationSchema({double defaultValue = 3.0}) {
@@ -55,8 +61,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   }
 
   /// Returns a schema definition for tools requiring a limit parameter.
-  NumberSchema limitSchema({double defaultValue = 20.0, double max = 200.0}) {
-    return NumberSchema(
+  IntegerSchema limitSchema({int defaultValue = 20, int max = 200}) {
+    return IntegerSchema(
       description:
           'Maximum elements to return (default: $defaultValue, max: $max).',
     );
@@ -240,7 +246,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
           .replaceFirst('https://', 'wss://');
     }
     if (!isDtdUri(uri) && !ws.endsWith('/ws')) {
-      ws = ws.replaceAll(RegExp(r'/?$'), '/ws');
+      ws = ws.replaceFirst(RegExp(r'/?$'), '/ws');
     }
     return ws;
   }

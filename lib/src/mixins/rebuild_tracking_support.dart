@@ -43,7 +43,7 @@ base mixin RebuildTrackingSupport
               description: 'Action to perform: start, stop, get_counts.',
             ),
             'duration_seconds': durationSchema(),
-            'topN': NumberSchema(
+            'topN': IntegerSchema(
               description:
                   'Number of top rebuilding widgets to list (default: 30).',
             ),
@@ -71,6 +71,7 @@ base mixin RebuildTrackingSupport
 
   Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
     final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final topN = (req.arg<num>('topN'))?.toInt() ?? 30;
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Starting rebuild tracking, duration=${duration}s');
 
@@ -145,11 +146,13 @@ base mixin RebuildTrackingSupport
         '[mcp:widget_rebuild_counts] Location map: ${idToName.length} named, ${idToFile.length} with files');
 
     final widgets = <Map<String, dynamic>>[];
-    widgetCounts.forEach((locId, count) {
+    for (final entry in widgetCounts.entries) {
+      final locId = entry.key;
+      final count = entry.value;
       final name = idToName[locId] ?? 'Widget#$locId';
       final rawFile = idToFile[locId] ?? 'unknown';
       final resolvedPath = pathResolver != null
-          ? pathResolver!.resolveToAbsolutePath(rawFile)
+          ? await pathResolver!.resolveToAbsolutePath(rawFile)
           : rawFile;
       widgets.add({
         'widget': name,
@@ -157,7 +160,7 @@ base mixin RebuildTrackingSupport
         'location': resolvedPath,
         'id': locId,
       });
-    });
+    }
 
     widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
@@ -168,7 +171,7 @@ base mixin RebuildTrackingSupport
     } else {
       mdBuffer.writeln('| Widget | Count | Location |');
       mdBuffer.writeln('| :--- | :--- | :--- |');
-      for (final w in widgets) {
+      for (final w in widgets.take(topN)) {
         mdBuffer.writeln(
             '| `${w['widget']}` | `${w['count']}x` | `${w['location']}` |');
       }
@@ -178,7 +181,7 @@ base mixin RebuildTrackingSupport
       title: 'Widget Rebuilt Counts Analysis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'widgets': widgets,
+        'widgets': widgets.take(topN).toList(),
       },
     );
   }
@@ -305,12 +308,14 @@ base mixin RebuildTrackingSupport
     final widgets = <Map<String, dynamic>>[];
     var totalRebuilds = 0;
 
-    rebuildCounts.forEach((locId, count) {
+    for (final entry in rebuildCounts.entries) {
+      final locId = entry.key;
+      final count = entry.value;
       totalRebuilds += count;
       final name = rebuildIdToName[locId] ?? 'Widget#$locId';
       final rawFile = rebuildIdToFile[locId] ?? 'unknown';
       final resolvedPath = pathResolver != null
-          ? pathResolver!.resolveToAbsolutePath(rawFile)
+          ? await pathResolver!.resolveToAbsolutePath(rawFile)
           : rawFile;
       widgets.add({
         'widget': name,
@@ -318,7 +323,7 @@ base mixin RebuildTrackingSupport
         'location': resolvedPath,
         'id': locId,
       });
-    });
+    }
 
     widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 

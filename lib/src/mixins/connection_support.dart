@@ -187,6 +187,19 @@ base mixin ConnectionSupport
       _ => throw ArgumentError(
           'Required parameter "uri" or "vmServiceUri" is missing.'),
     };
+    final parsed = Uri.tryParse(rawUri);
+    if (parsed == null ||
+        !{'ws', 'wss', 'http', 'https'}.contains(parsed.scheme)) {
+      return CallToolResult(
+        content: [
+          TextContent(
+            text:
+                'Invalid URI scheme. Connection URI must use ws, wss, http, or https.',
+          )
+        ],
+        isError: true,
+      );
+    }
     try {
       stderr.writeln('[mcp:connect] Attempting connection to: $rawUri');
       await _resolveWorkspaceRoot(req);
@@ -218,15 +231,15 @@ base mixin ConnectionSupport
             'Timed out connecting to VM Service at $wsUri'),
       );
 
-      vmService!.onDone.then((_) {
+      unawaited(vmService!.onDone.then((_) {
         stderr.writeln('[mcp] VM Service connection lost.');
         try {
-          (this as dynamic).unregisterConnectedTools();
+          unregisterConnectedTools();
         } catch (_) {}
         vmService = null;
         isolateId = null;
         vmServiceUri = null;
-      });
+      }));
 
       final vm = await vmService!.getVM();
       final isolates = vm.isolates;
@@ -307,7 +320,7 @@ base mixin ConnectionSupport
 
       // Register connected tools
       try {
-        (this as dynamic).registerConnectedTools();
+        registerConnectedTools();
       } catch (e) {
         stderr.writeln('[mcp:connect] Error registering connected tools: $e');
       }
@@ -535,13 +548,10 @@ base mixin ConnectionSupport
       );
     }
     try {
-      (this as dynamic).unregisterConnectedTools();
+      unregisterConnectedTools();
     } catch (_) {}
 
-    final dynamic cleanup = (cleanupStreams as dynamic)();
-    if (cleanup is Future) {
-      await cleanup;
-    }
+    await cleanupStreams();
 
     try {
       await vmService!.dispose();

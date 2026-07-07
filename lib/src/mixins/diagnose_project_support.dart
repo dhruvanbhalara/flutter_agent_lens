@@ -14,7 +14,7 @@ import 'vm_connection_support.dart';
 base mixin DiagnoseProjectSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   /// The process runner helper, allowing test mocks.
-  ProcessRunner processRunner = const ProcessRunner();
+  final ProcessRunner processRunner = const ProcessRunner();
 
   /// Registers the consolidated project diagnostics tool.
   void registerDiagnoseProjectTools() {
@@ -40,7 +40,8 @@ base mixin DiagnoseProjectSupport
               description: 'Optional path to code-size JSON file.',
             ),
             'platform': StringSchema(
-              description: 'Platform for deep link checks (android, ios).',
+              description:
+                  'Platform for deep link checks (android, ios; required for action: deep_links).',
             ),
             'build_variant': StringSchema(
               description: 'Android build variant (debug, release).',
@@ -51,7 +52,7 @@ base mixin DiagnoseProjectSupport
             'target': StringSchema(
               description: 'iOS target name (default: Runner).',
             ),
-            'limit': limitSchema(defaultValue: 25.0),
+            'limit': limitSchema(defaultValue: 25),
           },
           required: ['action'],
         ),
@@ -125,6 +126,16 @@ base mixin DiagnoseProjectSupport
     final analysisPath = req.arg<String>('analysis_path');
 
     if (analysisPath != null && analysisPath.isNotEmpty) {
+      if (analysisPath.contains('..') || analysisPath.contains('\x00')) {
+        return CallToolResult(
+          content: [
+            TextContent(
+                text:
+                    'Invalid analysis path: Path traversal or null byte detected.')
+          ],
+          isError: true,
+        );
+      }
       var resolvedPath = analysisPath;
       if (resolvedPath.startsWith('~/')) {
         final home =
