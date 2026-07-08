@@ -19,20 +19,43 @@ base mixin MemoryDebuggingSupport
     registerTool(
       Tool(
         name: McpTool.memory.name,
-        description: 'Manage memory snapshots. '
-            'Actions: get_snapshot (heap overview), save (named snapshot), '
-            'compare (diff two snapshots), list (show saved).',
+        description:
+            'Manage memory snapshots, heap diffs, class memory audits, and retaining path traces. '
+            'Actions: get_snapshot (heap overview), save (named snapshot), compare (diff two snapshots), '
+            'list (show saved), audit_leak (inspect class instances), diff_allocations (delta heap over time), '
+            'get_referrers (trace object retaining path).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
-              description: 'Action: get_snapshot, save, compare, list.',
+              description:
+                  'The memory action: get_snapshot, save, compare, list, audit_leak, diff_allocations, get_referrers.',
             ),
             'name': StringSchema(description: 'Snapshot name (for save).'),
             'before':
                 StringSchema(description: 'Before snapshot (for compare).'),
             'after': StringSchema(description: 'After snapshot (for compare).'),
-            'forceGC': BooleanSchema(description: 'Force GC before snapshot.'),
-            'topN': NumberSchema(description: 'Top N classes (default: 20).'),
+            'forceGC': BooleanSchema(
+                description:
+                    'Force GC before action (default: false for get_snapshot, true for diff_allocations).'),
+            'topN': IntegerSchema(description: 'Top N classes (default: 20).'),
+            'class_name': StringSchema(
+              description:
+                  'Name of the class to inspect (required for audit_leak, e.g. _MyHomePageState).',
+            ),
+            'limit': limitSchema(defaultValue: 100),
+            'duration_seconds': durationSchema(),
+            'expression': StringSchema(
+              description:
+                  'Optional expression to execute during diff_allocations.',
+            ),
+            'object_id': StringSchema(
+              description:
+                  'The VM ID of the object to trace (required for get_referrers).',
+            ),
+            'includeRawResponse': BooleanSchema(
+              description:
+                  'Whether to include the raw response in structured data (for get_referrers).',
+            ),
           },
           required: ['action'],
         ),
@@ -42,77 +65,6 @@ base mixin MemoryDebuggingSupport
         ),
       ),
       _handleMemory,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.auditClassMemoryLeak.name,
-        description: 'Audit class instances for memory leaks.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'class_name': StringSchema(
-              description:
-                  'Name of the class to inspect (e.g. _MyHomePageState).',
-            ),
-            'limit': limitSchema(defaultValue: 100.0),
-          },
-          required: ['class_name'],
-        ),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: true,
-        ),
-      ),
-      _handleAuditClassMemoryLeak,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.diffHeapAllocations.name,
-        description: 'Diff heap allocations over a time window.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'duration_seconds': durationSchema(),
-            'expression': StringSchema(
-              description: 'Optional expression to run during the window.',
-            ),
-            'force_gc': BooleanSchema(
-              description: 'Force GC before snapshot (default: true).',
-            ),
-            'limit': limitSchema(),
-          },
-        ),
-        annotations: ToolAnnotations(
-          readOnlyHint: false,
-          destructiveHint: false,
-        ),
-      ),
-      _handleDiffHeapAllocations,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.getObjectReferrers.name,
-        description: 'Trace object retaining path.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'object_id': StringSchema(
-              description: 'The VM ID of the object to inspect.',
-            ),
-            'limit': limitSchema(defaultValue: 15.0),
-            'includeRawResponse': BooleanSchema(
-              description:
-                  'Whether to include the raw JSON-RPC response in structured data.',
-            ),
-          },
-          required: ['object_id'],
-        ),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: true,
-        ),
-      ),
-      _handleGetObjectReferrers,
     );
   }
 
@@ -301,7 +253,8 @@ base mixin MemoryDebuggingSupport
   Future<CallToolResult> _handleDiffHeapAllocations(CallToolRequest req) async {
     final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
     final expression = req.arg<String>('expression');
-    final forceGc = req.arg<bool>('force_gc') ?? true;
+    final forceGc =
+        req.arg<bool>('force_gc') ?? req.arg<bool>('forceGC') ?? true;
 
     stderr.writeln(
         '[mcp:diff_heap] Starting heap profiling (duration=${duration}s, forceGc=$forceGc)');
@@ -871,6 +824,12 @@ base mixin MemoryDebuggingSupport
         return _handleCompareSnapshots(req);
       case 'list':
         return _handleListSnapshots(req);
+      case 'audit_leak':
+        return _handleAuditClassMemoryLeak(req);
+      case 'diff_allocations':
+        return _handleDiffHeapAllocations(req);
+      case 'get_referrers':
+        return _handleGetObjectReferrers(req);
       default:
         return CallToolResult(
           content: [TextContent(text: 'Unknown memory action: $action')],

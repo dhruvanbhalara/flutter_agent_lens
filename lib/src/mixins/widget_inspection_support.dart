@@ -15,72 +15,65 @@ base mixin WidgetInspectionSupport
   void registerWidgetTools() {
     registerTool(
       Tool(
-        name: McpTool.inspectWidget.name,
-        description: 'Inspect widget layout and properties by ID.',
+        name: McpTool.widget.name,
+        description:
+            'Manage widget tree, inspect layout details, and toggle selection overlay. '
+            'Actions: inspect (widget properties), toggle_selection (on-device tap-to-select overlay), '
+            'get_tree (retrieve widget tree summary).',
         inputSchema: ObjectSchema(
           properties: {
+            'action': StringSchema(
+              description:
+                  'The widget action: inspect, toggle_selection, get_tree.',
+            ),
             'widgetId': StringSchema(
-              description: 'The unique widget details ID.',
+              description:
+                  'The unique widget details ID (required for action: inspect).',
             ),
             'includeRawNode': BooleanSchema(
               description:
-                  'Whether to include the full raw widget node representation in the structured data (default: false).',
+                  'Whether to include the full raw widget node representation in structured data (default: false, for action: inspect).',
             ),
-          },
-          required: ['widgetId'],
-        ),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: true,
-        ),
-      ),
-      _handleInspectLayoutConstraints,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.toggleWidgetSelection.name,
-        description: 'Toggle the tap-to-select widget inspection overlay.',
-        inputSchema: ObjectSchema(
-          properties: {
             'enabled': BooleanSchema(
-              description: 'Whether to enable the widget selection overlay.',
-            ),
-          },
-          required: ['enabled'],
-        ),
-        annotations: ToolAnnotations(
-          readOnlyHint: false,
-          destructiveHint: false,
-          idempotentHint: true,
-        ),
-      ),
-      _handleToggleWidgetSelection,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.getWidgetTree.name,
-        description: 'Get widget tree structure.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'maxDepth': NumberSchema(
               description:
-                  'Maximum depth of the widget tree to return (default: 8).',
+                  'Whether to enable the widget selection overlay (required for action: toggle_selection).',
+            ),
+            'maxDepth': IntegerSchema(
+              description:
+                  'Maximum depth of the widget tree to return (default: 8, for action: get_tree).',
             ),
             'projectOnly': BooleanSchema(
               description:
-                  'If true, only return widgets created by the local project code (default: true).',
+                  'If true, only return widgets created by the local project code (default: true, for action: get_tree).',
             ),
           },
+          required: ['action'],
         ),
         annotations: ToolAnnotations(
           readOnlyHint: true,
           idempotentHint: false,
         ),
       ),
-      _handleGetWidgetTree,
+      _handleWidget,
     );
+  }
+
+  /// Delegates widget actions to respective handlers.
+  Future<CallToolResult> _handleWidget(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'inspect':
+        return _handleInspectLayoutConstraints(req);
+      case 'toggle_selection':
+        return _handleToggleWidgetSelection(req);
+      case 'get_tree':
+        return _handleGetWidgetTree(req);
+      default:
+        return CallToolResult(
+          content: [TextContent(text: 'Unknown widget action: $action')],
+          isError: true,
+        );
+    }
   }
 
   /// Clears active inspection cache.

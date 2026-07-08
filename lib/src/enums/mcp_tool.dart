@@ -30,17 +30,8 @@ enum McpTool {
   /// Get the active editor file path and cursor position when connected via DTD.
   getActiveLocation('get_active_location'),
 
-  /// Manage memory snapshots (get_snapshot, save, compare, list).
+  /// Manage memory snapshots (get_snapshot, save, compare, list, audit_leak, diff_allocations, get_referrers).
   memory('memory'),
-
-  /// Audit class instances to find potential memory leaks.
-  auditClassMemoryLeak('audit_class_memory_leak'),
-
-  /// Track delta of heap allocations over a period of time.
-  diffHeapAllocations('diff_heap_allocations'),
-
-  /// Trace the retaining path keeping an object alive in memory.
-  getObjectReferrers('get_object_referrers'),
 
   /// Manage HTTP network capture (start, stop, get_profile).
   network('network'),
@@ -54,26 +45,14 @@ enum McpTool {
   /// Trigger a hot restart on the running application.
   hotRestart('hot_restart'),
 
-  /// Compare two screenshots and check for visual differences.
-  compareLayoutScreenshots('compare_layout_screenshots'),
+  /// Manage screenshots (take, compare).
+  screenshot('screenshot'),
 
-  /// Take a screenshot of the running application.
-  takeScreenshot('take_screenshot'),
+  /// Manage widget inspection (inspect, toggle_selection, get_tree).
+  widget('widget'),
 
-  /// Retrieve layout constraints and details of a widget by its ID.
-  inspectWidget('inspect_widget'),
-
-  /// Toggle widget selection mode to select widgets by tapping on the screen.
-  toggleWidgetSelection('toggle_widget_selection'),
-
-  /// Toggle showing package widgets in the widget tree.
-  togglePackageWidgets('toggle_package_widgets'),
-
-  /// Toggle a Flutter debug flag (e.g. debugPaint, repaintRainbow).
-  toggleDebugFlag('toggle_debug_flag'),
-
-  /// Get the widget tree structure.
-  getWidgetTree('get_widget_tree'),
+  /// Manage debug flags and settings (toggle, toggle_package_widgets).
+  debugFlag('debug_flag'),
 
   /// Track widget rebuild frequencies (start, stop, get_counts).
   rebuildTracking('rebuild_tracking'),
