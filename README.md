@@ -52,20 +52,67 @@ Add this to your configuration file (macOS: `~/Library/Application Support/Claud
 
 ## Tool Catalog
 
-All tools require an active connection to a running application, unless stated otherwise. MCP clients discover tool schemas and parameters automatically from the server.
+This server groups functions into action-based tools to keep the schema footprint small.
 
-| Category | Tool | Description |
+### Connection & Setup (Pre-connection / Startup)
+
+| Tool | Action Option | Description |
 | :--- | :--- | :--- |
-| **App Connection** | `connect`<br>`disconnect`<br>`discover_apps`<br>`get_app_info` | Establish connection, discover running apps, and query VM metadata. |
-| **DTD Integration** | `connect_dtd`<br>`get_active_location` | Interoperate with Dart Tooling Daemon (DTD) for active file path queries. |
-| **Diagnostics** | `diagnose_jank`<br>`get_cpu_profile`<br>`get_widget_rebuild_counts`<br>`start_profiling` / `stop_profiling`<br>`start_tracking_rebuilds` / `stop_tracking_rebuilds` | Track render times, CPU execution hotspots, and widget rebuild cycles. |
-| **Widget Inspector** | `get_widget_tree`<br>`inspect_widget`<br>`toggle_widget_selection`<br>`toggle_package_widgets`<br>`toggle_debug_flag` | Traverse widget trees and inspect constraints or toggle debug overlays. |
-| **Memory Analysis** | `get_memory_snapshot`<br>`save_snapshot`<br>`list_snapshots`<br>`compare_snapshots`<br>`diff_heap_allocations`<br>`audit_class_memory_leak`<br>`get_object_referrers` | Monitor class allocations, diff snapshots, and inspect leak retaining paths. |
-| **Logs & Network** | `fetch_console_logs`<br>`get_network_profile`<br>`start_network_capture` / `stop_network_capture`<br>`trigger_scroll_gesture` | Stream logs, capture HTTP network payloads, and simulate device scrolls. |
-| **Screenshots** | `take_screenshot`<br>`compare_layout_screenshots` | Capture app screens and perform visual pixel-diff regression tests. |
-| **Platform / Code** | `analyze_bundle_size`<br>`validate_deep_links` | Run local bundle size checks and check deep-link configurations. |
-| **Hot Reload** | `hot_reload`<br>`hot_restart` | Refresh code changes and reset app state (routes via DTD if active). |
-| **Debugger** | `get_call_stack`<br>`set_exception_pause_mode`<br>`add_breakpoint`<br>`remove_breakpoint`<br>`evaluate_expression` | Control breakpoints, fetch stack frames, and evaluate Dart expressions. |
+| `connection` | `connect`<br>`connect_dtd`<br>`disconnect` | Connect to the VM Service, Dart Tooling Daemon (DTD), or disconnect. |
+| `discover_apps` | *N/A* | Find running Flutter apps on this machine. |
+| `diagnose_project` | `bundle_size`<br>`deep_links` | Run local build size analysis or check platform deep links. |
+| `set_response_format`| *N/A* | Choose output format (`markdown` or `json`). |
+
+### Connected Tools (Requires Active Connection)
+
+| Category | Tool | Actions / Subcommands | Description |
+| :--- | :--- | :--- | :--- |
+| **App Info** | `get_app_info` | *N/A* | Get VM version details, isolates, and service extensions. |
+| **DTD Integration**| `get_active_location`| *N/A* | Find active editor path and cursor line (requires DTD). |
+| **Memory** | `memory` | `get_snapshot`, `save`, `compare`, `list`, `audit_leak`, `diff_allocations`, `get_referrers` | Monitor heap, save snapshots, diff allocations, find memory leaks, and trace object references. |
+| **Diagnostics** | `profiling` | `start`, `stop`, `get_cpu`, `diagnose_jank` | Track render times, find CPU hotspots, and diagnose UI lag. |
+| | `rebuild_tracking` | `start`, `stop`, `get_counts` | Track widget rebuild cycles and counts. |
+| **Logs & Network** | `network` | `start`, `stop`, `get_profile` | Capture HTTP network calls, start or stop network logging. |
+| | `fetch_console_logs` | *N/A* | Read stdout, stderr, and developer logs. |
+| | `trigger_scroll_gesture` | *N/A* | Scroll the application viewport. |
+| **Widget Inspector** | `widget` | `inspect`, `toggle_selection`, `get_tree` | Find widget tree structure, get layout details, and toggle device inspector. |
+| | `debug_flag` | `toggle`, `toggle_package_widgets` | Change debug settings (e.g. paint size) or toggle package widget visibility. |
+| **Screenshots** | `screenshot` | `take`, `capture_baseline`, `compare` | Take screen capture or run visual regression comparisons. |
+| **Hot Reload** | `hot_reload` / `hot_restart`| *N/A* | Trigger hot reload or hot restart. |
+| **Debugger** | `breakpoint` | `add`, `remove` | Add or remove code breakpoints. |
+| | `get_call_stack` | *N/A* | Get active stack frames when application is paused. |
+| | `set_exception_pause_mode`| *N/A* | Choose when to pause on exceptions. |
+| | `evaluate_expression`| *N/A* | Run a Dart expression inside an isolate. |
+
+### Configurable Parameters & Options
+
+To keep payloads light, these settings are supported:
+
+- **Limits (`limit` / `topN`)**:
+  - `limit` in `diagnose_project` (action: `deep_links`): Sets max deep links checked.
+  - `limit` in `network` (action: `get_profile`): Sets the max HTTP requests returned (default: `30`).
+  - `limit` in `profiling` (action: `diagnose_jank`): Sets max frames returned (default: `15`).
+  - `limit` in `profiling` (action: `get_cpu`): Sets max CPU hotspots returned (default: `15`).
+  - `limit` in `diagnose_project` (action: `bundle_size`): Sets max components shown (default: `25`).
+  - `limit` in `memory` (action: `audit_leak` or `get_referrers`): Sets max instances/references to return.
+  - `topN` in `memory` (action: `compare`): Sets max class differences returned (default: `10`).
+  - `topN` in `memory` (action: `get_snapshot`): Sets max classes by size (default: `20`).
+  - `topN` in `rebuild_tracking` (action: `stop` / `get_counts`): Sets max rebuild entries shown (default: `30`).
+
+- **Layout Controls**:
+  - `maxDepth` in `widget` (action: `get_tree`): Sets widget tree depth (default: `8`).
+  - `projectOnly` in `widget` (action: `get_tree`): Filters out non-user-project widgets (default: `true`).
+
+- **Platform Settings**:
+  - `platform` in `diagnose_project` (action: `deep_links`): Platform target (e.g. `android` or `ios`, required).
+
+- **Payload Settings**:
+  - `includeRawResponse` in `memory` and `network`: Hides raw JSON payloads when false (default: `false`).
+  - `includeExtensions` in `get_app_info`: Hides the full service extensions list when false (default: `false`).
+  - `includeRawNode` in `widget` (action: `inspect`): Hides raw JSON layout nodes when false (default: `false`).
+
+- **State Options**:
+  - `forceGC` in `memory` (action: `get_snapshot` / `save` / `diff_allocations`): Runs garbage collection before inspection (default: `true`/`false`).
 
 ---
 
