@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:test/test.dart';
@@ -24,7 +25,82 @@ class MockProcessRunner extends ProcessRunner {
   }
 }
 
+class FakeHttpClient implements HttpClient {
+  @override
+  Duration? connectionTimeout;
+
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) async {
+    return FakeHttpClientRequest();
+  }
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class FakeHttpClientRequest implements HttpClientRequest {
+  @override
+  bool followRedirects = true;
+
+  @override
+  Future<HttpClientResponse> close() async {
+    return FakeHttpClientResponse();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class FakeHttpClientResponse implements HttpClientResponse {
+  @override
+  int get statusCode => 302;
+
+  @override
+  HttpHeaders get headers => FakeHttpHeaders();
+
+  @override
+  StreamSubscription<List<int>> listen(void Function(List<int> event)? onData,
+      {Function? onError, void Function()? onDone, bool? cancelOnError}) {
+    return const Stream<List<int>>.empty().listen(onData,
+        onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class FakeHttpHeaders implements HttpHeaders {
+  @override
+  String? value(String name) {
+    if (name == 'location') {
+      return 'http://127.0.0.1:8181/auth_token/ws?uri=ws://127.0.0.1:8181/auth_token/ws';
+    }
+    return null;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class TestHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return FakeHttpClient();
+  }
+}
+
 void main() {
+  setUpAll(() {
+    HttpOverrides.global = TestHttpOverrides();
+  });
+
+  tearDownAll(() {
+    HttpOverrides.global = null;
+  });
+
   group('PortDiscovery Process Scanning Tests', () {
     test('PowerShell scan on Windows successfully parses running DDS processes',
         () async {
@@ -51,7 +127,10 @@ void main() {
 
       if (Platform.isWindows) {
         final apps = await discovery.discoverActiveApps();
-        expect(apps, isEmpty);
+        expect(apps, isNotEmpty);
+        expect(apps.first.projectName, equals('my_flutter_app'));
+        expect(
+            apps.first.serviceUri, equals('ws://127.0.0.1:8181/auth_token/ws'));
       }
     });
 
@@ -81,7 +160,10 @@ void main() {
 
       if (!Platform.isWindows) {
         final apps = await discovery.discoverActiveApps();
-        expect(apps, isEmpty);
+        expect(apps, isNotEmpty);
+        expect(apps.first.projectName, equals('my_flutter_app'));
+        expect(
+            apps.first.serviceUri, equals('ws://127.0.0.1:8181/auth_token/ws'));
       }
     });
   });
