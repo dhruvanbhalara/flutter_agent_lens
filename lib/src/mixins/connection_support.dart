@@ -1,14 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
-import 'package:vm_service/vm_service.dart';
+import 'package:vm_service/vm_service.dart' hide Event;
 import 'package:vm_service/vm_service_io.dart';
 import 'package:dtd/dtd.dart';
 import '../enums/mcp_tool.dart';
 import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
 import 'console_logging_support.dart';
-import 'dtd_support.dart';
 import '../port_discovery.dart';
 import '../path_resolver.dart';
 
@@ -21,88 +21,185 @@ base mixin ConnectionSupport
         VmConnectionSupport,
         ConsoleLoggingSupport,
         RootsTrackingSupport {
-  /// Registers all connection-related tools in the MCP server.
+  /// The active connection to the Dart Tooling Daemon.
+  DartToolingDaemon? dtdClient;
+
+  /// The WebSocket URI of the connected Dart Tooling Daemon.
+  String? dtdUri;
+
+  /// Registers connection and configuration tools.
   void registerConnectionTools() {
     registerTool(
       Tool(
-        name: McpTool.connect.name,
-        description: 'Connect to a running Flutter app via its VM Service URI.',
+        name: McpTool.connection.name,
+        description:
+            'Manage VM Service or DTD connections (details in docs/user_prompt_guide.md).',
         inputSchema: ObjectSchema(
           properties: {
+            'action': StringSchema(
+              description: 'Operation (connect, connect_dtd, disconnect).',
+            ),
             'uri': StringSchema(
-              description:
-                  'The VM Service HTTP or WS URI (e.g. http://127.0.0.1:8181/auth_token=/).',
+              description: 'WebSocket or HTTP URI.',
             ),
             'vmServiceUri': StringSchema(
-              description: 'Alias for the uri parameter.',
+              description: 'Alias for uri.',
             ),
             'workspace_root': StringSchema(
-              description:
-                  'Absolute path to the local Flutter project root directory.',
+              description: 'Flutter project root path.',
             ),
           },
+          required: ['action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
         ),
       ),
-      _handleConnect,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.disconnect.name,
-        description: 'Disconnect from the currently connected Flutter app.',
-        inputSchema: emptySchema(),
-      ),
-      _handleDisconnect,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.getAppInfo.name,
-        description:
-            'Get detailed information about the connected Flutter app including VM info, isolates, and available extensions.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'includeExtensions': BooleanSchema(
-              description:
-                  'Whether to include the full list of registered Flutter service extensions (default: false).',
-            ),
-            'format': formatSchema,
-          },
-        ),
-      ),
-      _handleGetAppInfo,
+      _handleConnection,
     );
 
     registerTool(
       Tool(
         name: McpTool.discoverApps.name,
         description:
-            'Automatically discover running Flutter apps on this machine.',
+            'Discover running Flutter apps (details in docs/user_prompt_guide.md).',
         inputSchema: ObjectSchema(
           properties: {
             'autoConnect': BooleanSchema(
               description:
-                  'Automatically connect to the first discovered app (default: true).',
+                  'Auto-connect to first discovered app (default: true).',
             ),
             'workspace_root': StringSchema(
-              description:
-                  'Absolute path to the local Flutter project root directory.',
+              description: 'Flutter project root path.',
             ),
           },
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: true,
         ),
       ),
       _handleAutodiscover,
     );
+
+    registerTool(
+      Tool(
+        name: McpTool.setResponseFormat.name,
+        description:
+            'Set response format (details in docs/user_prompt_guide.md).',
+        inputSchema: ObjectSchema(
+          properties: {
+            'format': StringSchema(
+              description: 'Format (markdown or json).',
+            ),
+          },
+          required: ['format'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+        ),
+      ),
+      _handleSetResponseFormat,
+    );
+  }
+
+  /// Registers all connection-dependent DTD tools.
+  void registerDtdTools() {
+    unregisterTool(McpTool.getActiveLocation.name);
+    registerTool(
+      Tool(
+        name: McpTool.getActiveLocation.name,
+        description:
+            'Get active editor file path and cursor position when connected via DTD.',
+        inputSchema: emptySchema(),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: false,
+        ),
+      ),
+      _handleGetActiveLocation,
+    );
+  }
+
+  /// Registers post-connection app information tools.
+  void registerAppInfoTools() {
+    registerTool(
+      Tool(
+        name: McpTool.getAppInfo.name,
+        description:
+            'Get VM info, isolates, and extensions for the connected app.',
+        inputSchema: ObjectSchema(
+          properties: {
+            'includeExtensions': BooleanSchema(
+              description:
+                  'Include the full list of Flutter service extensions (default: false).',
+            ),
+          },
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: true,
+        ),
+      ),
+      _handleGetAppInfo,
+    );
+  }
+
+  /// Consolidated connection handler.
+  Future<CallToolResult> _handleConnection(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'connect':
+        return _handleConnect(req);
+      case 'connect_dtd':
+        return _handleConnectDtd(req);
+      case 'disconnect':
+        return _handleDisconnect(req);
+      default:
+        return CallToolResult(
+          content: [TextContent(text: 'Unknown action: $action')],
+          isError: true,
+        );
+    }
   }
 
   /// Handles the connect tool request.
   Future<CallToolResult> _handleConnect(CallToolRequest req) async {
+    if (vmService != null) {
+      try {
+        unregisterConnectedTools();
+      } catch (_) {}
+      try {
+        await vmService!.dispose();
+      } catch (_) {}
+      vmService = null;
+      vmServiceUri = null;
+      isolateId = null;
+    }
+
     final rawUri = switch (req.arguments) {
       {'uri': final String uri} => uri,
       {'vmServiceUri': final String uri} => uri,
       _ => throw ArgumentError(
           'Required parameter "uri" or "vmServiceUri" is missing.'),
     };
+    final parsed = Uri.tryParse(rawUri);
+    if (parsed == null ||
+        !{'ws', 'wss', 'http', 'https'}.contains(parsed.scheme)) {
+      return CallToolResult(
+        content: [
+          TextContent(
+            text:
+                'Invalid URI scheme. Connection URI must use ws, wss, http, or https.',
+          )
+        ],
+        isError: true,
+      );
+    }
     try {
       stderr.writeln('[mcp:connect] Attempting connection to: $rawUri');
       await _resolveWorkspaceRoot(req);
@@ -133,6 +230,16 @@ base mixin ConnectionSupport
         onTimeout: () => throw TimeoutException(
             'Timed out connecting to VM Service at $wsUri'),
       );
+
+      unawaited(vmService!.onDone.then((_) {
+        stderr.writeln('[mcp] VM Service connection lost.');
+        try {
+          unregisterConnectedTools();
+        } catch (_) {}
+        vmService = null;
+        isolateId = null;
+        vmServiceUri = null;
+      }));
 
       final vm = await vmService!.getVM();
       final isolates = vm.isolates;
@@ -169,7 +276,7 @@ base mixin ConnectionSupport
       final ver = await vmService!.getVersion();
 
       try {
-        serviceStreamSub = vmService!.onServiceEvent.listen((Event event) {
+        serviceStreamSub = vmService!.onServiceEvent.listen((event) {
           final service = event.service;
           final method = event.method;
           if (service == null || method == null) return;
@@ -210,6 +317,13 @@ base mixin ConnectionSupport
                   orElse: () => vm.isolates!.first)
               .name ??
           'unknown';
+
+      // Register connected tools
+      try {
+        registerConnectedTools();
+      } catch (e) {
+        stderr.writeln('[mcp:connect] Error registering connected tools: $e');
+      }
 
       return CallToolResult(
         content: [
@@ -277,35 +391,167 @@ base mixin ConnectionSupport
     final uriToConnect = await resolveDtdToVmServiceUri(rawUri);
     stderr.writeln('[mcp:connect] DTD resolved VM Service URI: $uriToConnect');
 
-    if (this is DtdSupport) {
-      final dtd = this as DtdSupport;
-      try {
-        stderr.writeln(
-            '[mcp:connect] Initializing DTD client for DTD URI: $rawUri');
-        final parsedDtdUri = Uri.parse(rawUri);
-        await dtd.dtdClient?.close();
-        dtd.dtdClient = await DartToolingDaemon.connect(parsedDtdUri);
-        dtd.dtdUri = rawUri;
-        stderr.writeln('[mcp:connect] DTD client initialized successfully.');
-      } catch (dtdErr) {
-        stderr
-            .writeln('[mcp:connect] Failed to initialize DTD client: $dtdErr');
-      }
+    try {
+      stderr.writeln(
+          '[mcp:connect] Initializing DTD client for DTD URI: $rawUri');
+      final parsedDtdUri = Uri.parse(rawUri);
+      await dtdClient?.close();
+      dtdClient = await DartToolingDaemon.connect(parsedDtdUri);
+      dtdUri = rawUri;
+      registerDtdTools();
+      stderr.writeln('[mcp:connect] DTD client initialized successfully.');
+    } catch (dtdErr) {
+      stderr.writeln('[mcp:connect] Failed to initialize DTD client: $dtdErr');
     }
     return uriToConnect;
   }
 
-  /// Handles the disconnect tool request.
-  Future<CallToolResult> _handleDisconnect(CallToolRequest req) async {
-    if (vmService == null) {
+  /// Handles the DTD connection request.
+  Future<CallToolResult> _handleConnectDtd(CallToolRequest req) async {
+    final uriStr = switch (req.arguments) {
+      {'uri': final String uri} => uri,
+      {'vmServiceUri': final String uri} => uri,
+      _ => null,
+    };
+    if (uriStr == null) {
       return CallToolResult(
-        content: [TextContent(text: 'Not connected to any app.')],
+        content: [
+          TextContent(text: 'Missing required argument "uri" or "vmServiceUri"')
+        ],
+        isError: true,
       );
     }
-    final dynamic cleanup = (cleanupStreams as dynamic)();
-    if (cleanup is Future) {
-      await cleanup;
+    try {
+      stderr.writeln('[mcp:dtd] Connecting to DTD at: $uriStr');
+      final uri = Uri.parse(uriStr);
+      final client = await DartToolingDaemon.connect(uri);
+
+      try {
+        await dtdClient?.close();
+      } catch (_) {}
+
+      dtdClient = client;
+      dtdUri = uriStr;
+
+      registerDtdTools();
+
+      final services = await client.getRegisteredServices();
+      final apps = await client.getVmServices();
+
+      final report =
+          StringBuffer('Successfully connected to Dart Tooling Daemon.\n\n');
+      report.writeln('Registered Services:');
+      for (final service in services.dtdServices) {
+        report.writeln('- $service');
+      }
+      for (final service in services.clientServices) {
+        report.writeln('- ${service.name}');
+      }
+      report.writeln('\nRunning VM Services:');
+      for (final app in apps.vmServicesInfos) {
+        report
+          ..write('- ${app.exposedUri ?? app.uri}')
+          ..writeln(app.name != null ? ' (${app.name})' : '');
+      }
+
+      return CallToolResult(
+        content: [TextContent(text: report.toString().trim())],
+      );
+    } catch (e) {
+      if (dtdClient != null) {
+        try {
+          await dtdClient!.close();
+        } catch (_) {}
+        dtdClient = null;
+        dtdUri = null;
+      }
+      return CallToolResult(
+        content: [TextContent(text: 'Failed to connect to DTD: $e')],
+        isError: true,
+      );
     }
+  }
+
+  /// Handles the get_active_location tool request.
+  Future<CallToolResult> _handleGetActiveLocation(CallToolRequest req) async {
+    final client = dtdClient;
+    if (client == null) {
+      return CallToolResult(
+        content: [
+          TextContent(
+              text:
+                  'Not connected to DTD. Run the `connection` tool with action: `connect_dtd` first.')
+        ],
+        isError: true,
+      );
+    }
+
+    try {
+      final registered = await client.getRegisteredServices();
+      String? editorService;
+      for (final service in registered.clientServices) {
+        final name = service.name.toLowerCase();
+        if (name.contains('editor') ||
+            name.contains('vscode') ||
+            name.contains('intellij') ||
+            name.contains('lsp')) {
+          editorService = service.name;
+          break;
+        }
+      }
+
+      if (editorService == null) {
+        return CallToolResult(
+          content: [
+            TextContent(
+              text: 'No active editor/IDE service is registered in DTD. '
+                  'Ensure your IDE is running and connected to DTD.\n'
+                  'Registered services: ${registered.clientServices.map((s) => s.name).join(", ")}',
+            )
+          ],
+          isError: true,
+        );
+      }
+
+      final response = await client.call(editorService, 'getActiveLocation');
+      final result = response.result;
+
+      return serializeDualFormat(
+        title: 'Active Editor Location Report',
+        markdownBody: 'Active editor path and cursor: \n'
+            '${const JsonEncoder.withIndent("  ").convert(result)}',
+        structuredData: result,
+      );
+    } catch (e) {
+      return CallToolResult(
+        content: [TextContent(text: 'Failed to get active location: $e')],
+        isError: true,
+      );
+    }
+  }
+
+  /// Handles the disconnect tool request.
+  Future<CallToolResult> _handleDisconnect(CallToolRequest req) async {
+    try {
+      await dtdClient?.close();
+    } catch (_) {}
+    dtdClient = null;
+    dtdUri = null;
+
+    if (vmService == null) {
+      return CallToolResult(
+        content: [
+          TextContent(
+              text:
+                  'Disconnected from DTD. Not connected to any VM Service app.')
+        ],
+      );
+    }
+    try {
+      unregisterConnectedTools();
+    } catch (_) {}
+
+    await cleanupStreams();
 
     try {
       await vmService!.dispose();
@@ -405,7 +651,6 @@ base mixin ConnectionSupport
       title: 'App Information Details',
       markdownBody: md.toString(),
       structuredData: appInfo,
-      format: req.arg<String>('format'),
     );
   }
 
@@ -487,6 +732,23 @@ base mixin ConnectionSupport
 
     return CallToolResult(
       content: [TextContent(text: report.toString())],
+    );
+  }
+
+  /// Handles the set_response_format tool request.
+  Future<CallToolResult> _handleSetResponseFormat(CallToolRequest req) async {
+    final fmt = req.requireArg<String>('format');
+    if (fmt != 'markdown' && fmt != 'json') {
+      return CallToolResult(
+        content: [
+          TextContent(text: 'Invalid format. Use "markdown" or "json".'),
+        ],
+        isError: true,
+      );
+    }
+    responseFormat = fmt;
+    return CallToolResult(
+      content: [TextContent(text: 'Response format set to $fmt.')],
     );
   }
 }

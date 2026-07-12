@@ -1,3 +1,14 @@
+## 1.6.0
+
+### Changed
+- Grouped 41 granular tools into 21 action-based composite tools to reduce context token usage.
+- Enabled dynamic tool registration, showing debugging tools only after establishing a connection.
+- Replaced individual format parameters with a server-wide response format configuration.
+
+### Added
+- Added response limit and list size configurations (`limit` and `topN`) for memory, profiling, and network logs.
+- Added tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`) to tool schemas.
+
 ## 1.5.5
 
 - Replaced flaky HTTP capture stream listeners with VM Service snapshot diffing, resolving silent failures and returning 0 requests on Android/AOT runtimes.

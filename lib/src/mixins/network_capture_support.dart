@@ -19,57 +19,36 @@ base mixin NetworkCaptureSupport
   /// Set of request IDs that were already present when network capture started.
   final Set<String> _initialRequestIds = {};
 
-  /// Registers all network capture and diagnostic tools.
+  /// Registers network capture tools.
   void registerNetworkTools() {
     registerTool(
       Tool(
-        name: McpTool.getNetworkProfile.name,
-        description:
-            'Read the current HTTP network requests profile history from the VM.',
+        name: McpTool.network.name,
+        description: 'Manage HTTP network capture. '
+            'Actions: start (begin capture), stop (end and get report), '
+            'get_profile (read HTTP request history).',
         inputSchema: ObjectSchema(
           properties: {
-            'includeRawResponse': BooleanSchema(
-              description:
-                  'Whether to include the raw JSON-RPC response in structured data (default: false).',
+            'action': StringSchema(
+              description: 'Action to perform: start, stop, get_profile.',
             ),
-            'limit': limitSchema(defaultValue: 30.0),
-            'format': formatSchema,
-          },
-        ),
-      ),
-      _handleGetNetworkProfile,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.startNetworkCapture.name,
-        description:
-            'Start a stateful session to capture HTTP network traffic.',
-        inputSchema: emptySchema(),
-      ),
-      _handleStartNetworkCapture,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.stopNetworkCapture.name,
-        description:
-            'Stop the active network capture session and get the traffic report.',
-        inputSchema: ObjectSchema(
-          properties: {
             'sortBy': StringSchema(
-              description:
-                  'Sort requests by (time, duration, size; default: time).',
+              description: 'Sort by: time, duration, size (for stop action).',
             ),
             'includeRawResponse': BooleanSchema(
               description:
-                  'Whether to include the full raw network requests response in the structured data (default: false).',
+                  'Whether to include the raw JSON-RPC response in structured data.',
             ),
-            'format': formatSchema,
+            'limit': limitSchema(defaultValue: 30),
           },
+          required: ['action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
         ),
       ),
-      _handleStopNetworkCapture,
+      _handleNetwork,
     );
   }
 
@@ -180,7 +159,6 @@ base mixin NetworkCaptureSupport
       allFetched = allFetched.sublist(allFetched.length - limit);
     }
     stderr.writeln('[mcp:network_profile] Found ${allFetched.length} requests');
-
     final formattedRequests = <Map<String, dynamic>>[];
     final md = StringBuffer('Network HTTP Profile History\n\n');
 
@@ -246,7 +224,6 @@ base mixin NetworkCaptureSupport
         'requests': formattedRequests,
         if (includeRawResponse) 'raw_response': allFetched,
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -257,7 +234,7 @@ base mixin NetworkCaptureSupport
         content: [
           TextContent(
               text:
-                  'Already capturing network traffic. Call stop_network_capture first.')
+                  'Already capturing network traffic. Call the `network` tool with action: `stop` first.')
         ],
         isError: true,
       );
@@ -295,7 +272,7 @@ base mixin NetworkCaptureSupport
       content: [
         TextContent(
           text:
-              'Network capture started. Use the app to trigger API calls, then call stop_network_capture to see the results.',
+              'Network capture started. Use the app to trigger API calls, then call the `network` tool with action: `stop` to see the results.',
         )
       ],
     );
@@ -308,7 +285,7 @@ base mixin NetworkCaptureSupport
         content: [
           TextContent(
               text:
-                  'Not capturing network traffic. Call start_network_capture first.')
+                  'Not capturing network traffic. Call the `network` tool with action: `start` first.')
         ],
         isError: true,
       );
@@ -531,7 +508,24 @@ base mixin NetworkCaptureSupport
         'requests': formattedRequests,
         if (includeRawResponse) 'raw_response': allRequests,
       },
-      format: req.arg<String>('format'),
     );
+  }
+
+  /// Handles the network composite tool request.
+  Future<CallToolResult> _handleNetwork(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'start':
+        return _handleStartNetworkCapture(req);
+      case 'stop':
+        return _handleStopNetworkCapture(req);
+      case 'get_profile':
+        return _handleGetNetworkProfile(req);
+      default:
+        return CallToolResult(
+          content: [TextContent(text: 'Unknown network action: $action')],
+          isError: true,
+        );
+    }
   }
 }

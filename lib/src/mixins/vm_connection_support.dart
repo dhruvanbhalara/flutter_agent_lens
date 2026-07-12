@@ -35,10 +35,24 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   // ignore: cancel_subscriptions
   StreamSubscription<Event>? serviceStreamSub;
 
-  /// Performs cleanup operations on active streams and daemon clients.
-  void cleanupStreams() {}
+  /// Server-wide response format preference (markdown or json).
+  String _responseFormat =
+      Platform.environment['MCP_RESPONSE_FORMAT'] ?? 'markdown';
 
-  /// Returns a schema definition for tools requiring a duration parameter.
+  /// Current response format.
+  String get responseFormat => _responseFormat;
+  set responseFormat(String value) => _responseFormat = value;
+
+  /// Performs cleanup operations on active streams and daemon clients.
+  FutureOr<void> cleanupStreams() {}
+
+  /// Registers all tools requiring active VM connection.
+  void registerConnectedTools();
+
+  /// Unregisters all tools requiring active VM connection.
+  void unregisterConnectedTools();
+
+  /// Returns a schema for a duration parameter.
   NumberSchema durationSchema({double defaultValue = 3.0}) {
     return NumberSchema(
       description:
@@ -46,14 +60,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     );
   }
 
-  /// Returns a schema definition for tools requiring a format parameter.
-  StringSchema get formatSchema => StringSchema(
-        description: 'Response format: markdown or json (default: markdown).',
-      );
-
   /// Returns a schema definition for tools requiring a limit parameter.
-  NumberSchema limitSchema({double defaultValue = 20.0, double max = 200.0}) {
-    return NumberSchema(
+  IntegerSchema limitSchema({int defaultValue = 20, int max = 200}) {
+    return IntegerSchema(
       description:
           'Maximum elements to return (default: $defaultValue, max: $max).',
     );
@@ -176,16 +185,13 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     return false;
   }
 
-  /// Serializes response data into either a Markdown table/text layout
-  /// or a raw JSON code block, based on request format or environment variables.
+  /// Serializes response data as Markdown or JSON based on [responseFormat].
   CallToolResult serializeDualFormat({
     required String title,
     required String markdownBody,
     required Map<String, dynamic> structuredData,
-    String? format,
   }) {
-    final fmt =
-        format ?? Platform.environment['MCP_RESPONSE_FORMAT'] ?? 'markdown';
+    final fmt = responseFormat;
     final contentBuffer = StringBuffer();
 
     if (fmt == 'json') {
@@ -240,7 +246,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
           .replaceFirst('https://', 'wss://');
     }
     if (!isDtdUri(uri) && !ws.endsWith('/ws')) {
-      ws = ws.replaceAll(RegExp(r'/?$'), '/ws');
+      ws = ws.replaceFirst(RegExp(r'/?$'), '/ws');
     }
     return ws;
   }

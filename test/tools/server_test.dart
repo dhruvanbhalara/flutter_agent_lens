@@ -10,6 +10,8 @@ class FakeVmService extends VmService {
   final Map<String, Map<String, dynamic>> serviceExtensionResponses = {};
   bool disposeCalled = false;
   int allocationProfileCalls = 0;
+  RPCError? Function(String method)? customServiceExtensionError;
+  Object? Function(String expression)? customEvaluateError;
 
   FakeVmService()
       : super(
@@ -26,6 +28,10 @@ class FakeVmService extends VmService {
     String? isolateId,
     Map<String, dynamic>? args,
   }) async {
+    if (customServiceExtensionError != null) {
+      final err = customServiceExtensionError!(method);
+      if (err != null) throw err;
+    }
     final responseMap = serviceExtensionResponses[method];
     if (responseMap != null) {
       return Response.parse(responseMap)!;
@@ -124,6 +130,10 @@ class FakeVmService extends VmService {
     bool? disableBreakpoints,
     String? idZoneId,
   }) async {
+    if (customEvaluateError != null) {
+      final err = customEvaluateError!(expression);
+      if (err != null) throw err as Exception;
+    }
     return InstanceRef(
       id: 'ref_1',
       kind: InstanceKind.kBool,
@@ -158,6 +168,9 @@ class FakeVmService extends VmService {
   @override
   Future<Stack> getStack(String isolateId,
       {String? idZoneId, int? limit}) async {
+    if (isolateId != 'isolate_1') {
+      throw RPCError('getStack', -32000, 'Isolate not found');
+    }
     return Stack(
       frames: [
         Frame(
@@ -223,6 +236,7 @@ void main() {
       capabilities: ClientCapabilities(),
       clientInfo: Implementation(name: 'test_client', version: '1.0'),
     ));
+    server.registerConnectedTools();
   });
 
   group('FlutterAgentLensServer MCP Tool Integration Tests', () {
@@ -231,10 +245,9 @@ void main() {
       expect(toolsResult.tools, isNotEmpty);
 
       final toolNames = toolsResult.tools.map((t) => t.name).toList();
-      expect(toolNames, contains(McpTool.connect.name));
-      expect(toolNames, contains(McpTool.disconnect.name));
-      expect(toolNames, contains(McpTool.getMemorySnapshot.name));
-      expect(toolNames, contains(McpTool.toggleDebugFlag.name));
+      expect(toolNames, contains(McpTool.connection.name));
+      expect(toolNames, contains(McpTool.memory.name));
+      expect(toolNames, contains(McpTool.debugFlag.name));
     });
 
     test('connect tool updates vmServiceUri and isolateId', () async {
@@ -267,8 +280,10 @@ void main() {
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.disconnect.name,
-          arguments: const {},
+          name: McpTool.connection.name,
+          arguments: const {
+            'action': 'disconnect',
+          },
         ),
       );
 
@@ -290,8 +305,9 @@ void main() {
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.toggleDebugFlag.name,
+          name: McpTool.debugFlag.name,
           arguments: const {
+            'action': 'toggle',
             'flag_name': 'debugPaintSizeEnabled',
             'value': 'true',
           },
@@ -309,15 +325,16 @@ void main() {
       expect(text, contains('true'));
     });
 
-    test('getMemorySnapshot retrieves structured memory info', () async {
+    test('memory retrieves structured memory info', () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.getMemorySnapshot.name,
+          name: McpTool.memory.name,
           arguments: const {
+            'action': 'get_snapshot',
             'topN': 5,
           },
         ),
@@ -337,8 +354,9 @@ void main() {
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.diffHeapAllocations.name,
+          name: McpTool.memory.name,
           arguments: const {
+            'action': 'diff_allocations',
             'duration_seconds': 0, // 0 for instantaneous test
             'expression': '1 + 1',
           },
@@ -351,15 +369,16 @@ void main() {
       expect(text, contains('+5'));
     });
 
-    test('getcpuProfile scans execution hotspots', () async {
+    test('profiling get_cpu scans execution hotspots', () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.getCpuProfile.name,
+          name: McpTool.profiling.name,
           arguments: const {
+            'action': 'get_cpu',
             'duration_seconds': 0, // Instant
           },
         ),
@@ -391,8 +410,7 @@ void main() {
       expect(text, contains('main.dart:42'));
     });
 
-    test('addBreakpoint and removeBreakpoint manages isolate pause limits',
-        () async {
+    test('breakpoint manages isolate pause limits', () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
@@ -400,8 +418,9 @@ void main() {
       // Add breakpoint
       final addResult = await server.callTool(
         CallToolRequest(
-          name: McpTool.addBreakpoint.name,
+          name: McpTool.breakpoint.name,
           arguments: const {
+            'action': 'add',
             'file_path': 'lib/main.dart',
             'line': 42,
           },
@@ -410,7 +429,7 @@ void main() {
 
       if (addResult.isError == true) {
         final text = (addResult.content.first as TextContent).text;
-        fail('addBreakpoint failed: $text');
+        fail('breakpoint add failed: $text');
       }
 
       expect(addResult.isError, isNot(isTrue));
@@ -421,8 +440,9 @@ void main() {
       // Remove breakpoint
       final removeResult = await server.callTool(
         CallToolRequest(
-          name: McpTool.removeBreakpoint.name,
+          name: McpTool.breakpoint.name,
           arguments: const {
+            'action': 'remove',
             'breakpoint_id': 'bp_1',
           },
         ),
@@ -456,8 +476,9 @@ void main() {
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.getWidgetTree.name,
+          name: McpTool.widget.name,
           arguments: const {
+            'action': 'get_tree',
             'maxDepth': 2,
           },
         ),
@@ -496,6 +517,295 @@ void main() {
         ),
       );
       expect(restartResult.isError, isNot(isTrue));
+    });
+
+    test('set_response_format switches formatting format for widget get_tree',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      fakeVmService.serviceExtensionResponses[
+          'ext.flutter.inspector.getRootWidgetSummaryTree'] = {
+        'result': {
+          'description': 'Container',
+          'widgetRuntimeType': 'Container',
+          'createdByLocalProject': true,
+          'creationLocation': {
+            'file': 'file:///Users/User/projects/my_app/lib/main.dart',
+            'line': 50,
+            'column': 12
+          },
+          'hasChildren': false,
+          'children': <dynamic>[]
+        }
+      };
+
+      // 1. Set format to json
+      final setJsonResult = await server.callTool(
+        CallToolRequest(
+          name: McpTool.setResponseFormat.name,
+          arguments: const {'format': 'json'},
+        ),
+      );
+      expect(setJsonResult.isError, isNot(isTrue));
+
+      final jsonTreeResult = await server.callTool(
+        CallToolRequest(
+          name: McpTool.widget.name,
+          arguments: const {
+            'action': 'get_tree',
+            'maxDepth': 2,
+          },
+        ),
+      );
+      expect(jsonTreeResult.isError, isNot(isTrue));
+      final jsonText = (jsonTreeResult.content.first as TextContent).text;
+      expect(jsonText.trim(), startsWith('```json'));
+
+      // 2. Set format to markdown
+      final setMdResult = await server.callTool(
+        CallToolRequest(
+          name: McpTool.setResponseFormat.name,
+          arguments: const {'format': 'markdown'},
+        ),
+      );
+      expect(setMdResult.isError, isNot(isTrue));
+
+      final mdTreeResult = await server.callTool(
+        CallToolRequest(
+          name: McpTool.widget.name,
+          arguments: const {
+            'action': 'get_tree',
+            'maxDepth': 2,
+          },
+        ),
+      );
+      expect(mdTreeResult.isError, isNot(isTrue));
+      final mdText = (mdTreeResult.content.first as TextContent).text;
+      expect(mdText.trim(), isNot(startsWith('```json')));
+      expect(mdText, contains('Widget Tree'));
+    });
+
+    test('widget get_tree when VM Service is not connected returns error',
+        () async {
+      server.vmService = null;
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.widget.name,
+          arguments: const {
+            'action': 'get_tree',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Not connected to a running application'));
+    });
+
+    test(
+        'widget get_tree when inspector extension is not registered returns error',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      fakeVmService.customServiceExtensionError = (method) {
+        if (method.startsWith('ext.flutter.inspector')) {
+          return RPCError('callServiceExtension', -32601, 'Method not found');
+        }
+        return null;
+      };
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.widget.name,
+          arguments: const {
+            'action': 'get_tree',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('(-32601) Method not found'));
+    });
+
+    test(
+        'widget get_tree when inspector extension throws internal RPC error returns error',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      fakeVmService.customServiceExtensionError = (method) {
+        if (method.startsWith('ext.flutter.inspector')) {
+          return RPCError(
+              'callServiceExtension', -32000, 'Internal inspector error');
+        }
+        return null;
+      };
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.widget.name,
+          arguments: const {
+            'action': 'get_tree',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('(-32000) Internal inspector error'));
+    });
+
+    test('widget with unknown action returns error', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      fakeVmService.customServiceExtensionError = null;
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.widget.name,
+          arguments: const {
+            'action': 'invalid_widget_action',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Unknown widget action'));
+    });
+
+    test('screenshot with invalid action returns error', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.screenshot.name,
+          arguments: const {
+            'action': 'invalid_screenshot_action',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Unknown screenshot action'));
+    });
+
+    test('memory get_snapshot when not connected returns error result',
+        () async {
+      server.vmService = null;
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'get_snapshot',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Not connected to a running application'));
+    });
+
+    test('discover_apps returns empty list when no running apps found',
+        () async {
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.discoverApps.name,
+          arguments: const {},
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('No active Flutter applications were discovered'));
+    });
+
+    test('set_response_format with invalid format returns error', () async {
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.setResponseFormat.name,
+          arguments: const {
+            'format': 'xml',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Invalid format'));
+    });
+
+    test('fetch_console_logs with negative limit clamps limit and succeeds',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.fetchConsoleLogs.name,
+          arguments: const {
+            'limit': -5,
+          },
+        ),
+      );
+      expect(result.isError, isNot(isTrue));
+      expect((result.content.first as TextContent).text,
+          contains('Console Log Cache'));
+    });
+
+    test('getCallStack with invalid isolate returns error', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'invalid_isolate_xyz';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.getCallStack.name,
+          arguments: const {
+            'limit': 5,
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Isolate not found'));
+    });
+
+    test('evaluate_expression when not connected returns error', () async {
+      server.vmService = null;
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.evaluateExpression.name,
+          arguments: const {
+            'expression': '1 + 1',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Not connected to a running application'));
+    });
+
+    test('hotReload and hotRestart when not connected return error', () async {
+      server.vmService = null;
+
+      final reloadRes = await server.callTool(
+        CallToolRequest(
+          name: McpTool.hotReload.name,
+          arguments: const {},
+        ),
+      );
+      expect(reloadRes.isError, isTrue);
+      expect((reloadRes.content.first as TextContent).text,
+          contains('Not connected to a running application'));
+
+      final restartRes = await server.callTool(
+        CallToolRequest(
+          name: McpTool.hotRestart.name,
+          arguments: const {},
+        ),
+      );
+      expect(restartRes.isError, isTrue);
+      expect((restartRes.content.first as TextContent).text,
+          contains('Not connected to a running application'));
     });
   });
 }

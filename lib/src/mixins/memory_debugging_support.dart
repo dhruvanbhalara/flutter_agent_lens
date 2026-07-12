@@ -18,137 +18,53 @@ base mixin MemoryDebuggingSupport
   void registerMemoryTools() {
     registerTool(
       Tool(
-        name: McpTool.getMemorySnapshot.name,
+        name: McpTool.memory.name,
         description:
-            'Get a general snapshot overview of application and framework class allocations.',
+            'Manage memory snapshots, heap diffs, class memory audits, and retaining path traces. '
+            'Actions: get_snapshot (heap overview), save (named snapshot), compare (diff two snapshots), '
+            'list (show saved), audit_leak (inspect class instances), diff_allocations (delta heap over time), '
+            'get_referrers (trace object retaining path).',
         inputSchema: ObjectSchema(
           properties: {
+            'action': StringSchema(
+              description:
+                  'The memory action: get_snapshot, save, compare, list, audit_leak, diff_allocations, get_referrers.',
+            ),
+            'name': StringSchema(description: 'Snapshot name (for save).'),
+            'before':
+                StringSchema(description: 'Before snapshot (for compare).'),
+            'after': StringSchema(description: 'After snapshot (for compare).'),
             'forceGC': BooleanSchema(
-              description:
-                  'Force garbage collection before snapshot (default: false).',
-            ),
-            'topN': NumberSchema(
-              description:
-                  'Number of top allocation classes to show (default: 20).',
-            ),
-            'format': formatSchema,
-          },
-        ),
-      ),
-      _handleGetMemorySnapshot,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.saveSnapshot.name,
-        description: 'Save a named memory snapshot for later comparison.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'name': StringSchema(
-              description:
-                  'A name for this snapshot (e.g., "before-fix", "after-optimization").',
-            ),
-            'forceGC': BooleanSchema(
-              description:
-                  'Force garbage collection before snapshot (default: true).',
-            ),
-          },
-          required: ['name'],
-        ),
-      ),
-      _handleSaveSnapshot,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.compareSnapshots.name,
-        description:
-            'Compare two previously saved memory snapshots to see deltas.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'before': StringSchema(
-              description: 'Name of the before snapshot.',
-            ),
-            'after': StringSchema(
-              description: 'Name of the after snapshot.',
-            ),
-          },
-          required: ['before', 'after'],
-        ),
-      ),
-      _handleCompareSnapshots,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.listSnapshots.name,
-        description:
-            'List all saved memory snapshots available for comparison.',
-        inputSchema: emptySchema(),
-      ),
-      _handleListSnapshots,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.auditClassMemoryLeak.name,
-        description: 'Check if class instances are leaking in memory.',
-        inputSchema: ObjectSchema(
-          properties: {
+                description:
+                    'Force GC before action (default: false for get_snapshot, true for diff_allocations).'),
+            'topN': IntegerSchema(description: 'Top N classes (default: 20).'),
             'class_name': StringSchema(
               description:
-                  'Name of the class to inspect (e.g. _MyHomePageState).',
+                  'Name of the class to inspect (required for audit_leak, e.g. _MyHomePageState).',
             ),
-            'format': formatSchema,
-          },
-          required: ['class_name'],
-        ),
-      ),
-      _handleAuditClassMemoryLeak,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.diffHeapAllocations.name,
-        description:
-            'Check delta allocations before and after an N-second window.',
-        inputSchema: ObjectSchema(
-          properties: {
+            'limit': limitSchema(defaultValue: 100),
             'duration_seconds': durationSchema(),
             'expression': StringSchema(
-              description: 'Optional expression to run during the window.',
+              description:
+                  'Optional expression to execute during diff_allocations.',
             ),
-            'force_gc': BooleanSchema(
-              description: 'Force GC before snapshot (default: true).',
-            ),
-            'format': formatSchema,
-          },
-        ),
-      ),
-      _handleDiffHeapAllocations,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.getObjectReferrers.name,
-        description:
-            'Trace the retaining path keeping an object alive in memory.',
-        inputSchema: ObjectSchema(
-          properties: {
             'object_id': StringSchema(
-              description: 'The VM ID of the object to inspect.',
+              description:
+                  'The VM ID of the object to trace (required for get_referrers).',
             ),
-            'limit': limitSchema(defaultValue: 15.0),
             'includeRawResponse': BooleanSchema(
               description:
-                  'Whether to include the raw JSON-RPC response in structured data.',
+                  'Whether to include the raw response in structured data (for get_referrers).',
             ),
-            'format': formatSchema,
           },
-          required: ['object_id'],
+          required: ['action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
         ),
       ),
-      _handleGetObjectReferrers,
+      _handleMemory,
     );
   }
 
@@ -161,7 +77,9 @@ base mixin MemoryDebuggingSupport
   Future<CallToolResult> _handleAuditClassMemoryLeak(
       CallToolRequest req) async {
     final className = req.requireArg<String>('class_name');
-    stderr.writeln('[mcp:audit_memory] Auditing class: $className');
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 100;
+    stderr.writeln(
+        '[mcp:audit_memory] Auditing class: $className (limit=$limit)');
 
     final classList = await vmService!.getClassList(isolateId!);
     final classes = classList.classes ?? [];
@@ -185,7 +103,7 @@ base mixin MemoryDebuggingSupport
     }
 
     final instancesResponse =
-        await vmService!.getInstances(isolateId!, classRef.id!, 100);
+        await vmService!.getInstances(isolateId!, classRef.id!, limit);
     final instances = instancesResponse.instances ?? [];
 
     final reports = <Map<String, dynamic>>[];
@@ -254,15 +172,89 @@ base mixin MemoryDebuggingSupport
         'leaked_count': reports.length,
         'leaks': reports,
       },
-      format: req.arg<String>('format'),
     );
+  }
+
+  static const Set<String> _vmInternalClasses = {
+    '_OneByteString',
+    '_TwoByteString',
+    'String',
+    '_List',
+    '_GrowableList',
+    '_ImmutableList',
+    '_Mint',
+    '_Double',
+    'bool',
+    'Null',
+    'int',
+    'double',
+    'Class',
+    'ForwardingCorpse',
+    'FreeListElement',
+    'TypeParameter',
+    'UnlinkedCall',
+    'ICData',
+    'Field',
+    'Function',
+    'Code',
+    'Instructions',
+    'ObjectPool',
+    'PcDescriptors',
+    'CodeSourceMap',
+    'CompressedStackMaps',
+    'Type',
+    '_Type',
+    'LibraryPrefix',
+    '_FunctionType',
+    'Namespace',
+    'Library',
+    'TypeArguments',
+    'ClosureData',
+    'SubtypeTestCache',
+    'SingleTargetCache',
+    'MegamorphicCache',
+    'WeakProperty',
+    'WeakReference',
+    'FinalizerEntry',
+    '_WeakProperty',
+    '_WeakReference',
+    'KernelProgramInfo',
+    'Script',
+    'Bytecode',
+    '_Int8List',
+    '_Uint8List',
+    '_Uint16List',
+    '_Uint32List',
+    '_Int32List',
+    '_Float32List',
+    '_Float64List',
+    '_ExternalOneByteString',
+    'Array',
+    'GrowableObjectArray',
+    'Context',
+    'ContextScope',
+    'RegExp',
+    '_RegExp',
+    'LocalVarDescriptors',
+    'ExceptionHandlers',
+    'ParameterTypeCheck',
+    'ApiErrorClass',
+    'LanguageError',
+    'Bool',
+    'Sentinel',
+    'FfiTrampolineData',
+  };
+
+  bool _isVmInternal(String name) {
+    return _vmInternalClasses.contains(name);
   }
 
   /// Handles the diff_heap_allocations tool request.
   Future<CallToolResult> _handleDiffHeapAllocations(CallToolRequest req) async {
     final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
     final expression = req.arg<String>('expression');
-    final forceGc = req.arg<bool>('force_gc') ?? true;
+    final forceGc =
+        req.arg<bool>('force_gc') ?? req.arg<bool>('forceGC') ?? true;
 
     stderr.writeln(
         '[mcp:diff_heap] Starting heap profiling (duration=${duration}s, forceGc=$forceGc)');
@@ -314,6 +306,12 @@ base mixin MemoryDebuggingSupport
       final bytesDelta = currentBytes - baselineBytes;
 
       if (instanceDelta != 0 || bytesDelta != 0) {
+        // Filter out VM-internal noise if delta is tiny
+        if (_isVmInternal(className) &&
+            instanceDelta.abs() <= 1 &&
+            bytesDelta.abs() < 512) {
+          continue;
+        }
         deltas.add({
           'class': className,
           'instances_before': baselineInstances,
@@ -326,21 +324,21 @@ base mixin MemoryDebuggingSupport
       }
     }
 
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 20;
     _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
     final md = StringBuffer('Memory Allocations Delta\n\n')
       ..write(_formatAllocationDiffTable(deltas));
 
     return serializeDualFormat(
-      title: 'Allocation Snapshot Difference',
+      title: 'Memory Delta Analysis',
       markdownBody: md.toString(),
       structuredData: {
         'duration_seconds': duration,
         'expression_run': expression,
         'force_gc': forceGc,
-        'deltas': deltas.take(50).toList(),
+        'deltas': deltas.take(limit).toList(),
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -388,7 +386,6 @@ base mixin MemoryDebuggingSupport
         'retaining_path': pathElements,
         if (includeRawResponse) 'raw_response': retainingPath.json,
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -505,10 +502,12 @@ base mixin MemoryDebuggingSupport
         'Capacity: ${formatBytes(snap1.heapCapacity)} -> ${formatBytes(snap2.heapCapacity)} (${capacityDiff <= 0 ? "" : "+"}${formatBytes(capacityDiff)})');
     md.writeln('Time between snapshots: ${timeDiffS}s');
 
+    final topN = (req.arg<num>('topN'))?.toInt() ?? 10;
+
     if (grew.isNotEmpty) {
       md.writeln();
-      md.writeln('GREW (top 10)');
-      for (final d in grew.take(10)) {
+      md.writeln('GREW (top $topN)');
+      for (final d in grew.take(topN)) {
         final instDiffVal = d['instancesDiff'] as int;
         final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
         md.writeln(
@@ -518,8 +517,8 @@ base mixin MemoryDebuggingSupport
 
     if (shrank.isNotEmpty) {
       md.writeln();
-      md.writeln('SHRANK (top 10)');
-      for (final d in shrank.take(10)) {
+      md.writeln('SHRANK (top $topN)');
+      for (final d in shrank.take(topN)) {
         final instDiffVal = d['instancesDiff'] as int;
         final instDiff = instDiffVal > 0 ? '+$instDiffVal' : '$instDiffVal';
         md.writeln(
@@ -547,10 +546,9 @@ base mixin MemoryDebuggingSupport
         'heap_diff_bytes': heapDiff,
         'heap_pct_change': _pctChange(snap1.heapUsage, snap2.heapUsage),
         'time_diff_seconds': double.tryParse(timeDiffS) ?? 0.0,
-        'grew': grew.take(10).toList(),
-        'shrank': shrank.take(10).toList(),
+        'grew': grew.take(topN).toList(),
+        'shrank': shrank.take(topN).toList(),
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -692,89 +690,8 @@ base mixin MemoryDebuggingSupport
           '$instancesCurrent instances | ${formatBytes(bytesCurrent)} | $className');
     }
 
-    const vmInternalClasses = {
-      '_OneByteString',
-      '_TwoByteString',
-      'String',
-      '_List',
-      '_GrowableList',
-      '_ImmutableList',
-      '_Mint',
-      '_Double',
-      'bool',
-      'Null',
-      'int',
-      'double',
-      'Class',
-      'ForwardingCorpse',
-      'FreeListElement',
-      'TypeParameter',
-      'UnlinkedCall',
-      'ICData',
-      'Field',
-      'Function',
-      'Code',
-      'Instructions',
-      'ObjectPool',
-      'PcDescriptors',
-      'CodeSourceMap',
-      'CompressedStackMaps',
-      'Type',
-      '_Type',
-      'LibraryPrefix',
-      '_FunctionType',
-      'Namespace',
-      'Library',
-      'TypeArguments',
-      'ClosureData',
-      'SubtypeTestCache',
-      'SingleTargetCache',
-      'MegamorphicCache',
-      'WeakProperty',
-      'WeakReference',
-      'FinalizerEntry',
-      '_WeakProperty',
-      '_WeakReference',
-      'KernelProgramInfo',
-      'Script',
-      'Bytecode',
-      '_Int8List',
-      '_Uint8List',
-      '_Uint16List',
-      '_Uint32List',
-      '_Int32List',
-      '_Float32List',
-      '_Float64List',
-      '_ExternalOneByteString',
-      'Array',
-      'GrowableObjectArray',
-      'Context',
-      'ContextScope',
-      'RegExp',
-      '_RegExp',
-      'LocalVarDescriptors',
-      'ExceptionHandlers',
-      'ParameterTypeCheck',
-      'ApiErrorClass',
-      'LanguageError',
-      'Bool',
-      'Sentinel',
-      'FfiTrampolineData',
-    };
-
-    bool isVmInternal(String name) {
-      if (vmInternalClasses.contains(name)) return true;
-      if (name.startsWith('_') &&
-          name.length < 20 &&
-          !name.contains('State') &&
-          !name.contains('Controller')) {
-        return true;
-      }
-      return false;
-    }
-
     final appClasses = sortedByInstancesFiltered
-        .where((m) => !isVmInternal(m.classRef!.name!))
+        .where((m) => !_isVmInternal(m.classRef!.name!))
         .toList();
 
     if (appClasses.isNotEmpty) {
@@ -845,7 +762,6 @@ base mixin MemoryDebuggingSupport
       title: 'Memory Snapshot Summary',
       markdownBody: output.join('\n'),
       structuredData: structuredData,
-      format: req.arg<String>('format'),
     );
   }
 
@@ -891,5 +807,34 @@ base mixin MemoryDebuggingSupport
       md.writeln('\n_...and ${deltas.length - limit} more classes._');
     }
     return md.toString();
+  }
+
+  /// Handles the memory composite tool request.
+  Future<CallToolResult> _handleMemory(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    if (action != 'list' && (vmService == null || isolateId == null)) {
+      return notConnected();
+    }
+    switch (action) {
+      case 'get_snapshot':
+        return _handleGetMemorySnapshot(req);
+      case 'save':
+        return _handleSaveSnapshot(req);
+      case 'compare':
+        return _handleCompareSnapshots(req);
+      case 'list':
+        return _handleListSnapshots(req);
+      case 'audit_leak':
+        return _handleAuditClassMemoryLeak(req);
+      case 'diff_allocations':
+        return _handleDiffHeapAllocations(req);
+      case 'get_referrers':
+        return _handleGetObjectReferrers(req);
+      default:
+        return CallToolResult(
+          content: [TextContent(text: 'Unknown memory action: $action')],
+          isError: true,
+        );
+    }
   }
 }

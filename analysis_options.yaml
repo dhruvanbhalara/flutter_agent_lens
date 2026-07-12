@@ -10,21 +10,16 @@ analyzer:
 
 linter:
   rules:
-    public_member_api_docs: false
     lines_longer_than_80_chars: false
     avoid_catches_without_on_clauses: false
     cascade_invocations: false
     sort_constructors_first: false
-    prefer_final_locals: true
-    avoid_dynamic_calls: true
     require_trailing_commas: false
     always_use_package_imports: false
-    avoid_print: false
     directives_ordering: false
     omit_local_variable_types: false
     unnecessary_parenthesis: false
     avoid_types_on_closure_parameters: false
-    unawaited_futures: false
     prefer_int_literals: false
     unnecessary_null_checks: false
     avoid_equals_and_hash_code_on_mutable_classes: false

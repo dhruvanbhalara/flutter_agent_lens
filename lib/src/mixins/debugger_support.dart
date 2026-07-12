@@ -16,13 +16,15 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     registerTool(
       Tool(
         name: McpTool.getCallStack.name,
-        description:
-            'Fetch the active call stack frames for the running application (when paused).',
+        description: 'Get call stack frames (when paused).',
         inputSchema: ObjectSchema(
           properties: {
             'limit': limitSchema(),
-            'format': formatSchema,
           },
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: false,
         ),
       ),
       _handleGetCallStack,
@@ -40,48 +42,49 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           },
           required: ['mode'],
         ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+        ),
       ),
       _handleSetExceptionPauseMode,
     );
 
     registerTool(
       Tool(
-        name: McpTool.addBreakpoint.name,
-        description: 'Install a breakpoint at a specific line in a file.',
+        name: McpTool.breakpoint.name,
+        description: 'Manage breakpoints. '
+            'Actions: add (set at file:line), remove (by ID).',
         inputSchema: ObjectSchema(
           properties: {
+            'action': StringSchema(
+              description: 'Action to perform: add, remove.',
+            ),
             'file_path': StringSchema(
               description:
-                  'The absolute path or file URI of the target source file.',
+                  'The absolute path or file URI of the target source file (for add).',
             ),
-            'line': NumberSchema(
-              description: 'The 1-based line number.',
+            'line': IntegerSchema(
+              description: 'The 1-based line number (for add).',
             ),
-            'column': NumberSchema(
-              description: 'The optional 1-based column number.',
+            'column': IntegerSchema(
+              description: 'The optional 1-based column number (for add).',
             ),
-            'format': formatSchema,
-          },
-          required: ['file_path', 'line'],
-        ),
-      ),
-      _handleAddBreakpoint,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.removeBreakpoint.name,
-        description: 'Remove an active breakpoint by its ID.',
-        inputSchema: ObjectSchema(
-          properties: {
             'breakpoint_id': StringSchema(
-              description: 'The unique ID of the breakpoint to remove.',
+              description:
+                  'The unique ID of the breakpoint to remove (for remove).',
             ),
           },
-          required: ['breakpoint_id'],
+          required: ['action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
         ),
       ),
-      _handleRemoveBreakpoint,
+      _handleBreakpoint,
     );
 
     registerTool(
@@ -94,12 +97,15 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'expression': StringSchema(
               description: 'The Dart expression to evaluate.',
             ),
-            'frame_index': NumberSchema(
+            'frame_index': IntegerSchema(
               description:
                   'Optional frame index to evaluate the expression in (if the app is paused at a breakpoint).',
             ),
           },
           required: ['expression'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
         ),
       ),
       _handleEvalExpression,
@@ -126,14 +132,14 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         final scriptUri = f.location?.script?.uri ?? 'Unknown';
         final line = f.location?.line?.toString() ?? '?';
         final resolvedPath = pathResolver != null
-            ? pathResolver!.resolveToAbsolutePath(scriptUri)
+            ? await pathResolver!.resolveToAbsolutePath(scriptUri)
             : scriptUri;
         md.writeln('| $i | `$funcName` | `$resolvedPath:$line` |');
       }
     }
 
     return serializeDualFormat(
-      title: 'Active Call Stack',
+      title: 'Call Stack Frames',
       markdownBody: md.toString(),
       structuredData: {
         'frames': frames
@@ -146,7 +152,6 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
                 })
             .toList(),
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -215,7 +220,6 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         'resolved': bp.resolved ?? false,
         'raw_response': bp.json,
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -278,5 +282,21 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
                 '- Class: $classStr')
       ],
     );
+  }
+
+  /// Handles the breakpoint composite tool request.
+  Future<CallToolResult> _handleBreakpoint(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'add':
+        return _handleAddBreakpoint(req);
+      case 'remove':
+        return _handleRemoveBreakpoint(req);
+      default:
+        return CallToolResult(
+          content: [TextContent(text: 'Unknown breakpoint action: $action')],
+          isError: true,
+        );
+    }
   }
 }

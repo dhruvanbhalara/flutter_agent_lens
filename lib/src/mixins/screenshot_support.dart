@@ -15,22 +15,23 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   void registerScreenshotTools() {
     registerTool(
       Tool(
-        name: McpTool.compareLayoutScreenshots.name,
-        description:
-            'Capture screenshots and perform pixel diff checks to find layout changes or bugs.',
+        name: McpTool.screenshot.name,
+        description: 'Manage application screenshots and visual comparisons. '
+            'Actions: take (capture a screenshot), capture_baseline (save a reference layout), '
+            'compare (perform a pixel-diff against a baseline).',
         inputSchema: ObjectSchema(
           properties: {
-            'baseline_name': StringSchema(
-              description:
-                  'The filename prefix for the baseline screenshot (e.g. "home_screen").',
-            ),
             'action': StringSchema(
               description:
-                  'The visual operation to execute (capture_baseline, compare).',
+                  'The screenshot action to perform: take, capture_baseline, compare.',
+            ),
+            'baseline_name': StringSchema(
+              description:
+                  'The filename prefix for the baseline screenshot (required for capture_baseline and compare).',
             ),
             'threshold': NumberSchema(
               description:
-                  'The similarity pass threshold from 0.0 to 1.0 (default: 0.98).',
+                  'The similarity pass threshold from 0.0 to 1.0 (default: 0.98, for compare).',
             ),
             'screenshot_type': StringSchema(
               description:
@@ -40,38 +41,37 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               description:
                   'Target device ID or name if multiple devices are connected (prefixes allowed).',
             ),
-            'format': formatSchema,
-          },
-          required: ['baseline_name', 'action'],
-        ),
-      ),
-      _handleCompareLayoutScreenshots,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.takeScreenshot.name,
-        description:
-            'Capture a standalone screenshot of the running Flutter application.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'screenshot_type': StringSchema(
-              description:
-                  'The capture method (device = native screenshot, skia = Skia Picture via VM service; default: device).',
-            ),
-            'device_id': StringSchema(
-              description:
-                  'Target device ID or name if multiple devices are connected.',
-            ),
             'output_path': StringSchema(
               description:
-                  'Optional destination file path. If not specified, the screenshot will be saved to a default directory.',
+                  'Optional destination file path (only applicable for action: take).',
             ),
           },
+          required: ['action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
         ),
       ),
-      _handleTakeScreenshot,
+      _handleScreenshot,
     );
+  }
+
+  /// Delegates screenshot actions to respective handlers.
+  Future<CallToolResult> _handleScreenshot(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'take':
+        return _handleTakeScreenshot(req);
+      case 'capture_baseline':
+      case 'compare':
+        return _handleCompareLayoutScreenshots(req);
+      default:
+        return CallToolResult(
+          content: [TextContent(text: 'Unknown screenshot action: $action')],
+          isError: true,
+        );
+    }
   }
 
   /// Handles the compare_layout_screenshots tool request.
@@ -262,7 +262,6 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           'current_path': currentPath,
           'diff_path': diffPath,
         },
-        format: req.arg<String>('format'),
       );
     }
   }

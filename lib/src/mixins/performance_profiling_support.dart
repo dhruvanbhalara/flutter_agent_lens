@@ -5,7 +5,7 @@ import 'package:vm_service/vm_service.dart';
 import '../enums/mcp_tool.dart';
 import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
-import 'dtd_support.dart';
+import 'connection_support.dart';
 
 /// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
 base mixin PerformanceProfilingSupport
@@ -21,59 +21,30 @@ base mixin PerformanceProfilingSupport
   /// The target display refresh rate (FPS) of the connected device.
   double? targetFps;
 
-  /// Registers all performance profiling and trigger tools.
+  /// Registers performance profiling and reload/restart tools.
   void registerPerformanceTools() {
     registerTool(
       Tool(
-        name: McpTool.diagnoseJank.name,
-        description: 'Check frame times to find rendering slowdowns (jank).',
+        name: McpTool.profiling.name,
+        description: 'Manage CPU & jank profiling. '
+            'Actions: start (begin session), stop (end and get report), '
+            'get_cpu (sample CPU hotspots), diagnose_jank (check frame times).',
         inputSchema: ObjectSchema(
           properties: {
+            'action': StringSchema(
+              description: 'Action: start, stop, get_cpu, diagnose_jank.',
+            ),
             'duration_seconds': durationSchema(),
-            'format': formatSchema,
+            'limit': limitSchema(defaultValue: 15),
           },
+          required: ['action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
         ),
       ),
-      _handleDiagnoseJank,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.getCpuProfile.name,
-        description:
-            'Sample CPU usage and find execution hotspots in Dart functions.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'duration_seconds': durationSchema(),
-            'format': formatSchema,
-          },
-        ),
-      ),
-      _handleGetCpuProfile,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.startProfiling.name,
-        description:
-            'Start a stateful performance profiling session (CPU & Jank).',
-        inputSchema: emptySchema(),
-      ),
-      _handleStartProfiling,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.stopProfiling.name,
-        description:
-            'Stop the active performance profiling session and get the analysis report.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'format': formatSchema,
-          },
-        ),
-      ),
-      _handleStopProfiling,
+      _handleProfiling,
     );
 
     registerTool(
@@ -81,6 +52,11 @@ base mixin PerformanceProfilingSupport
         name: McpTool.hotReload.name,
         description: 'Trigger a hot reload.',
         inputSchema: emptySchema(),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+        ),
       ),
       handleHotReload,
     );
@@ -90,6 +66,11 @@ base mixin PerformanceProfilingSupport
         name: McpTool.hotRestart.name,
         description: 'Trigger a hot restart of the application.',
         inputSchema: emptySchema(),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+        ),
       ),
       handleHotRestart,
     );
@@ -164,10 +145,11 @@ base mixin PerformanceProfilingSupport
           '- Janky Frame Events (> 16.6ms): $jankyFrames ($jankPercentage%)')
       ..writeln();
 
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
     if (jankyFrames > 0) {
       mdBuffer.writeln('| Event | Duration (ms) | Severity |');
       mdBuffer.writeln('| :--- | :--- | :--- |');
-      for (final f in frameEvents.take(10)) {
+      for (final f in frameEvents.take(limit)) {
         final dur = f['duration_ms'] as double;
         final severity = dur > 33.3 ? 'CRITICAL (>33ms)' : 'WARNING (>16ms)';
         mdBuffer.writeln(
@@ -187,15 +169,14 @@ base mixin PerformanceProfilingSupport
         'jank_percentage': jankPercentage,
         'critical_events': frameEvents,
       },
-      format: req.arg<String>('format'),
     );
   }
 
   /// Handles the hot_reload tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotReload(CallToolRequest req) async {
     bool dtdSuccess = false;
-    if (this is DtdSupport) {
-      final dtd = this as DtdSupport;
+    if (this is ConnectionSupport) {
+      final dtd = this as ConnectionSupport;
       if (dtd.dtdClient != null && vmServiceUri != null) {
         stderr.writeln(
             '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...');
@@ -244,8 +225,8 @@ base mixin PerformanceProfilingSupport
   /// Handles the hot_restart tool request, utilizing DTD if connected.
   Future<CallToolResult> handleHotRestart(CallToolRequest req) async {
     bool dtdSuccess = false;
-    if (this is DtdSupport) {
-      final dtd = this as DtdSupport;
+    if (this is ConnectionSupport) {
+      final dtd = this as ConnectionSupport;
       if (dtd.dtdClient != null && vmServiceUri != null) {
         stderr.writeln(
             '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...');
@@ -345,7 +326,7 @@ base mixin PerformanceProfilingSupport
 
           final url = f.resolvedUrl ?? '';
           final resolvedPath = pathResolver != null
-              ? pathResolver!.resolveToAbsolutePath(url)
+              ? await pathResolver!.resolveToAbsolutePath(url)
               : url;
 
           hotspots.add({
@@ -363,13 +344,14 @@ base mixin PerformanceProfilingSupport
     stderr.writeln(
         '[mcp:cpu_profile] Collected ${cpuSamples.sampleCount} samples, ${hotspots.length} active functions');
 
+    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
     if (hotspots.isEmpty) {
       mdBuffer.writeln('No CPU sampling ticks recorded in the window.');
     } else {
       mdBuffer.writeln(
           '| Function | Exclusive Ticks | Inclusive Ticks | Source Location |');
       mdBuffer.writeln('| :--- | :--- | :--- | :--- |');
-      for (final h in hotspots.take(15)) {
+      for (final h in hotspots.take(limit)) {
         mdBuffer.writeln(
             '| ${h['name']} | ${h['exclusive_ticks']} | ${h['inclusive_ticks']} | `${h['location']}` |');
       }
@@ -381,9 +363,8 @@ base mixin PerformanceProfilingSupport
       structuredData: {
         'duration_seconds': duration,
         'total_samples': cpuSamples.sampleCount ?? 0,
-        'hotspots': hotspots.take(100).toList(),
+        'hotspots': hotspots.take(limit).toList(),
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -394,7 +375,7 @@ base mixin PerformanceProfilingSupport
         content: [
           TextContent(
               text:
-                  'A profiling session is already active. Call stop_profiling first.')
+                  'A profiling session is already active. Call the `profiling` tool with action: `stop` first.')
         ],
         isError: true,
       );
@@ -424,7 +405,7 @@ base mixin PerformanceProfilingSupport
       content: [
         TextContent(
           text:
-              'Profiling started. Interact with the app now, then call `stop_profiling` to get the analysis.',
+              'Profiling started. Interact with the app now, then call the `profiling` tool with action: `stop` to get the analysis.',
         )
       ],
     );
@@ -436,7 +417,8 @@ base mixin PerformanceProfilingSupport
       return CallToolResult(
         content: [
           TextContent(
-              text: 'No active profiling session. Call start_profiling first.')
+              text:
+                  'No active profiling session. Call the `profiling` tool with action: `start` first.')
         ],
         isError: true,
       );
@@ -678,11 +660,10 @@ base mixin PerformanceProfilingSupport
       title: 'Performance Profiling Analysis',
       markdownBody: output.join('\n'),
       structuredData: {
-        'duration_ms': durationMs,
-        'total_events_collected': events.length,
+        'profiling_duration_ms': durationMs,
         'frame_analysis': {
           'total_frames': totalFrames,
-          'jank_frames': jankyFrames,
+          'janky_frames': jankyFrames,
           'jank_percentage': jankPct,
           'average_frame_time_ms': avgFrameTime,
           'max_frame_time_ms': maxFrameTimeMs,
@@ -695,7 +676,26 @@ base mixin PerformanceProfilingSupport
         'cpu_hotspots': cpuHotspots,
         'recommendations': recommendations,
       },
-      format: req.arg<String>('format'),
     );
+  }
+
+  /// Handles the profiling composite tool request.
+  Future<CallToolResult> _handleProfiling(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'start':
+        return _handleStartProfiling(req);
+      case 'stop':
+        return _handleStopProfiling(req);
+      case 'get_cpu':
+        return _handleGetCpuProfile(req);
+      case 'diagnose_jank':
+        return _handleDiagnoseJank(req);
+      default:
+        return CallToolResult(
+          content: [TextContent(text: 'Unknown profiling action: $action')],
+          isError: true,
+        );
+    }
   }
 }

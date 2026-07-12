@@ -29,49 +29,33 @@ base mixin RebuildTrackingSupport
   /// Subscription to the VM Service's extension event stream for rebuilt widgets.
   StreamSubscription<Event>? rebuildSub;
 
-  /// Registers all rebuild tracking related tools in the MCP server.
+  /// Registers rebuild tracking tools.
   void registerRebuildTrackingTools() {
     registerTool(
       Tool(
-        name: McpTool.getWidgetRebuildCounts.name,
-        description:
-            'Find widgets that rebuild frequently by tracking rebuild counts.',
+        name: McpTool.rebuildTracking.name,
+        description: 'Track widget rebuild frequencies. '
+            'Actions: start (begin tracking), stop (end and get report), '
+            'get_counts (one-shot rebuild count snapshot).',
         inputSchema: ObjectSchema(
           properties: {
+            'action': StringSchema(
+              description: 'Action to perform: start, stop, get_counts.',
+            ),
             'duration_seconds': durationSchema(),
-            'format': formatSchema,
-          },
-        ),
-      ),
-      _handleWidgetRebuildCounts,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.startTrackingRebuilds.name,
-        description:
-            'Start a stateful session to track widget rebuild frequencies.',
-        inputSchema: emptySchema(),
-      ),
-      _handleStartTrackingRebuilds,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.stopTrackingRebuilds.name,
-        description:
-            'Stop the active widget rebuild tracking session and get the report.',
-        inputSchema: ObjectSchema(
-          properties: {
-            'topN': NumberSchema(
+            'topN': IntegerSchema(
               description:
                   'Number of top rebuilding widgets to list (default: 30).',
             ),
-            'format': formatSchema,
           },
+          required: ['action'],
+        ),
+        annotations: ToolAnnotations(
+          readOnlyHint: false,
+          destructiveHint: false,
         ),
       ),
-      _handleStopTrackingRebuilds,
+      _handleRebuildTracking,
     );
   }
 
@@ -87,6 +71,7 @@ base mixin RebuildTrackingSupport
 
   Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
     final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final topN = (req.arg<num>('topN'))?.toInt() ?? 30;
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Starting rebuild tracking, duration=${duration}s');
 
@@ -161,11 +146,13 @@ base mixin RebuildTrackingSupport
         '[mcp:widget_rebuild_counts] Location map: ${idToName.length} named, ${idToFile.length} with files');
 
     final widgets = <Map<String, dynamic>>[];
-    widgetCounts.forEach((locId, count) {
+    for (final entry in widgetCounts.entries) {
+      final locId = entry.key;
+      final count = entry.value;
       final name = idToName[locId] ?? 'Widget#$locId';
       final rawFile = idToFile[locId] ?? 'unknown';
       final resolvedPath = pathResolver != null
-          ? pathResolver!.resolveToAbsolutePath(rawFile)
+          ? await pathResolver!.resolveToAbsolutePath(rawFile)
           : rawFile;
       widgets.add({
         'widget': name,
@@ -173,7 +160,7 @@ base mixin RebuildTrackingSupport
         'location': resolvedPath,
         'id': locId,
       });
-    });
+    }
 
     widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
@@ -184,7 +171,7 @@ base mixin RebuildTrackingSupport
     } else {
       mdBuffer.writeln('| Widget | Count | Location |');
       mdBuffer.writeln('| :--- | :--- | :--- |');
-      for (final w in widgets) {
+      for (final w in widgets.take(topN)) {
         mdBuffer.writeln(
             '| `${w['widget']}` | `${w['count']}x` | `${w['location']}` |');
       }
@@ -194,9 +181,8 @@ base mixin RebuildTrackingSupport
       title: 'Widget Rebuilt Counts Analysis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'widgets': widgets,
+        'widgets': widgets.take(topN).toList(),
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -207,7 +193,7 @@ base mixin RebuildTrackingSupport
         content: [
           TextContent(
               text:
-                  'Already tracking rebuilds. Call stop_tracking_rebuilds first.')
+                  'Already tracking rebuilds. Call the `rebuild_tracking` tool with action: `stop` first.')
         ],
         isError: true,
       );
@@ -260,7 +246,7 @@ base mixin RebuildTrackingSupport
       content: [
         TextContent(
           text:
-              'Rebuild tracking started. Interact with the app now, then call `stop_tracking_rebuilds` to see the report.',
+              'Rebuild tracking started. Interact with the app now, then call the `rebuild_tracking` tool with action: `stop` to see the report.',
         )
       ],
     );
@@ -273,7 +259,7 @@ base mixin RebuildTrackingSupport
         content: [
           TextContent(
               text:
-                  'Not tracking rebuilds. Call start_tracking_rebuilds first.')
+                  'Not tracking rebuilds. Call the `rebuild_tracking` tool with action: `start` first.')
         ],
         isError: true,
       );
@@ -322,12 +308,14 @@ base mixin RebuildTrackingSupport
     final widgets = <Map<String, dynamic>>[];
     var totalRebuilds = 0;
 
-    rebuildCounts.forEach((locId, count) {
+    for (final entry in rebuildCounts.entries) {
+      final locId = entry.key;
+      final count = entry.value;
       totalRebuilds += count;
       final name = rebuildIdToName[locId] ?? 'Widget#$locId';
       final rawFile = rebuildIdToFile[locId] ?? 'unknown';
       final resolvedPath = pathResolver != null
-          ? pathResolver!.resolveToAbsolutePath(rawFile)
+          ? await pathResolver!.resolveToAbsolutePath(rawFile)
           : rawFile;
       widgets.add({
         'widget': name,
@@ -335,7 +323,7 @@ base mixin RebuildTrackingSupport
         'location': resolvedPath,
         'id': locId,
       });
-    });
+    }
 
     widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
@@ -401,7 +389,7 @@ base mixin RebuildTrackingSupport
     }
 
     return serializeDualFormat(
-      title: 'Widget Rebuild Analysis',
+      title: 'Widget Rebuild Report',
       markdownBody: output.join('\n'),
       structuredData: {
         'duration_seconds': double.tryParse(durationSec) ?? 0.0,
@@ -409,7 +397,6 @@ base mixin RebuildTrackingSupport
         'total_rebuilds': totalRebuilds,
         'rebuilds': widgets.take(topN).toList(),
       },
-      format: req.arg<String>('format'),
     );
   }
 
@@ -501,5 +488,25 @@ base mixin RebuildTrackingSupport
         }
       }
     });
+  }
+
+  /// Handles the rebuild_tracking composite tool request.
+  Future<CallToolResult> _handleRebuildTracking(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'start':
+        return _handleStartTrackingRebuilds(req);
+      case 'stop':
+        return _handleStopTrackingRebuilds(req);
+      case 'get_counts':
+        return _handleWidgetRebuildCounts(req);
+      default:
+        return CallToolResult(
+          content: [
+            TextContent(text: 'Unknown rebuild tracking action: $action')
+          ],
+          isError: true,
+        );
+    }
   }
 }

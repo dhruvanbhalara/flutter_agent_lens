@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 
@@ -16,7 +17,7 @@ final class PathResolver {
   Map<String, String>? _allWorkspaceFiles;
 
   /// Resolves a VM-reported URI to a local absolute path.
-  String resolveToAbsolutePath(String vmUri) {
+  Future<String> resolveToAbsolutePath(String vmUri) async {
     if (_pathCache.containsKey(vmUri)) {
       return _pathCache[vmUri]!;
     }
@@ -51,7 +52,9 @@ final class PathResolver {
 
     // 3. Resolve path relative to Workspace Root
     final resolvedPath = p.canonicalize(p.join(workspaceRoot, relativePath));
-    if (File(resolvedPath).existsSync()) {
+    // We intentionally use async exists check to avoid blocking the main isolate on large workspaces.
+    // ignore: avoid_slow_async_io
+    if (await File(resolvedPath).exists()) {
       _pathCache[vmUri] = resolvedPath;
       return resolvedPath;
     }
@@ -61,8 +64,10 @@ final class PathResolver {
     if (_allWorkspaceFiles == null) {
       _allWorkspaceFiles = {};
       final directory = Directory(workspaceRoot);
-      if (directory.existsSync()) {
-        _scanDirectory(directory);
+      // We intentionally use async exists check to avoid blocking the main isolate on large workspaces.
+      // ignore: avoid_slow_async_io
+      if (await directory.exists()) {
+        await _scanDirectory(directory);
       }
     }
 
@@ -78,9 +83,13 @@ final class PathResolver {
   }
 
   /// Recursively walks a directory, skipping large/unwanted system folders.
-  void _scanDirectory(Directory dir) {
+  Future<void> _scanDirectory(Directory dir) async {
     try {
-      final entities = dir.listSync(followLinks: false);
+      // Limit total files in cache to prevent OOM
+      if (_allWorkspaceFiles!.length >= 10000) {
+        return;
+      }
+      final entities = await dir.list(followLinks: false).toList();
       for (final entity in entities) {
         if (entity is Directory) {
           final name = p.basename(entity.path);
@@ -93,7 +102,7 @@ final class PathResolver {
               name == 'node_modules') {
             continue;
           }
-          _scanDirectory(entity);
+          await _scanDirectory(entity);
         } else if (entity is File) {
           final name = p.basename(entity.path);
           _allWorkspaceFiles!

@@ -13,42 +13,49 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   void registerDebugFlagTools() {
     registerTool(
       Tool(
-        name: McpTool.togglePackageWidgets.name,
-        description:
-            'Toggle whether package widgets are shown in the widget tree.',
+        name: McpTool.debugFlag.name,
+        description: 'Manage Flutter debug flags and settings. '
+            'Actions: toggle (set a Flutter debug flag like debugPaintSizeEnabled), '
+            'toggle_package_widgets (show/hide package widgets in the widget tree).',
         inputSchema: ObjectSchema(
           properties: {
-            'enabled': BooleanSchema(
-              description: 'Whether to enable showing package widgets.',
+            'action': StringSchema(
+              description:
+                  'The debug flag action: toggle, toggle_package_widgets.',
             ),
-          },
-          required: ['enabled'],
-        ),
-      ),
-      _handleTogglePackageWidgets,
-    );
-
-    registerTool(
-      Tool(
-        name: McpTool.toggleDebugFlag.name,
-        description:
-            'Toggle standard Flutter debug paint/overlay flags (e.g. debugPaintSizeEnabled, debugPaintBaselinesEnabled).',
-        inputSchema: ObjectSchema(
-          properties: {
             'flag_name': StringSchema(
               description:
-                  'Flag name: debugPaintSizeEnabled, debugPaintBaselinesEnabled, repaintRainbow, invertOversizedImages, timeDilation.',
+                  'The name of the Flutter debug flag to change (required for toggle). Supported flags: debugPaintSizeEnabled, debugPaintBaselinesEnabled, repaintRainbow, invertOversizedImages, timeDilation.',
             ),
             'value': StringSchema(
+              description: 'The new value to set (required for toggle).',
+            ),
+            'enabled': BooleanSchema(
               description:
-                  'Value to set: "true"/"false" or number string for timeDilation.',
+                  'Whether to show package widgets (required for toggle_package_widgets).',
             ),
           },
-          required: ['flag_name', 'value'],
+          required: ['action'],
         ),
       ),
-      _handleToggleDebugFlag,
+      _handleDebugFlag,
     );
+  }
+
+  /// Delegates debug flag actions to respective handlers.
+  Future<CallToolResult> _handleDebugFlag(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    switch (action) {
+      case 'toggle':
+        return _handleToggleDebugFlag(req);
+      case 'toggle_package_widgets':
+        return _handleTogglePackageWidgets(req);
+      default:
+        return CallToolResult(
+          content: [TextContent(text: 'Unknown debug flag action: $action')],
+          isError: true,
+        );
+    }
   }
 
   Future<CallToolResult> _handleTogglePackageWidgets(
