@@ -35,10 +35,11 @@ void main() {
       expect(mock.isDtdUri('ws://127.0.0.1:8181/auth_token/ws'), isFalse);
       expect(mock.isDtdUri('http://127.0.0.1:8181/auth_token/ws'), isFalse);
       expect(mock.isDtdUri('ws://127.0.0.1:8181/auth_token/ws/'), isFalse);
+      expect(mock.isDtdUri('http://127.0.0.1:8181/mock-secret-token'), isFalse);
 
       // DTD uris
       expect(mock.isDtdUri('http://127.0.0.1:8181'), isTrue);
-      expect(mock.isDtdUri('http://127.0.0.1:8181/mock-secret-token'), isTrue);
+      expect(mock.isDtdUri('ws://127.0.0.1:8181'), isTrue);
     });
 
     test('normalizeToWsUri converts http/https/ws schemes properly', () {

@@ -52,6 +52,21 @@ void main() {
   });
 
   group('Connection Lifecycle and Tool Registration Tests', () {
+    test('connection with unknown action returns error', () async {
+      mock.registerConnectionTools();
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: McpTool.connection.name,
+          arguments: const {
+            'action': 'unknown_connection_action',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Unknown action:'));
+    });
+
     test(
         'registerDtdTools can be called multiple times without throwing duplicate registration exceptions',
         () {
