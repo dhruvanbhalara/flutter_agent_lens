@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('ClassAllocation Tests', () {

@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
-import 'package:path/path.dart' as p;
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/screenshot_types.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:image/image.dart' as img;
-import '../enums/mcp_tool.dart';
-import '../enums/screenshot_types.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
+import 'package:path/path.dart' as p;
 
 /// Support mixin providing tools for taking and visually comparing screenshots.
 base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {

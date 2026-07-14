@@ -1,9 +1,9 @@
-import 'package:test/test.dart';
-import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
-import 'package:flutter_agent_lens/src/enums/target_platform.dart';
-import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
 import 'package:flutter_agent_lens/src/enums/exception_pause_mode.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
 import 'package:flutter_agent_lens/src/enums/screenshot_types.dart';
+import 'package:flutter_agent_lens/src/enums/target_platform.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('McpTool Enum Tests', () {

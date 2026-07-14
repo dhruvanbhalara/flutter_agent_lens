@@ -1,10 +1,10 @@
-import 'package:test/test.dart';
 import 'package:dart_mcp/server.dart';
-import 'package:stream_channel/stream_channel.dart';
-import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/mixins/connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/console_logging_support.dart';
-import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:stream_channel/stream_channel.dart';
+import 'package:test/test.dart';
 
 base class VmConnectionSupportMock extends MCPServer
     with ToolsSupport, VmConnectionSupport {

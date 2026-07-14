@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'package:test/test.dart';
-import 'package:stream_channel/stream_channel.dart';
-import 'package:vm_service/vm_service.dart';
+
+import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/flutter_agent_lens.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
-import 'package:dart_mcp/server.dart';
+import 'package:stream_channel/stream_channel.dart';
+import 'package:test/test.dart';
+import 'package:vm_service/vm_service.dart';
 
 class FakeVmService extends VmService {
   final Map<String, Map<String, dynamic>> serviceExtensionResponses = {};

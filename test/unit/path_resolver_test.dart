@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'package:test/test.dart';
-import 'package:path/path.dart' as p;
+
 import 'package:flutter_agent_lens/src/path_resolver.dart';
+import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
 
 void main() {
   late Directory tempDir;

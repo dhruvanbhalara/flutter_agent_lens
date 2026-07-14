@@ -1,7 +1,7 @@
-import 'package:test/test.dart';
 import 'package:dart_mcp/server.dart';
-import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/utils/string_utils.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('StringUtils Tests', () {

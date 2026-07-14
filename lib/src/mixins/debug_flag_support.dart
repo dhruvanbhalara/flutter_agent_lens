@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
-import 'package:vm_service/vm_service.dart';
+import 'package:flutter_agent_lens/src/enums/flutter_debug_flag.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:path/path.dart' as p;
-import '../enums/flutter_debug_flag.dart';
-import '../enums/mcp_tool.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
+import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for toggling Flutter debug paint, overlays, and package widget visibility flags.
 base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {

@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
-import '../enums/mcp_tool.dart';
-import '../enums/network_sort_by.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 
 /// Support mixin providing tools for capturing and analyzing HTTP traffic details.
 base mixin NetworkCaptureSupport

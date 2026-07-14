@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter_agent_lens/src/utils/process_runner.dart';
 import 'package:path/path.dart' as p;
-import 'utils/process_runner.dart';
 
 /// Represents a running Flutter or Dart application discovered on the local machine.
 final class DiscoveredApp {

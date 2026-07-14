@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:dart_mcp/stdio.dart';
 import 'package:flutter_agent_lens/flutter_agent_lens.dart';
 
-void main() async {
+Future<void> main() async {
   // Bind stdio channel for local process communication
   final server = FlutterAgentLensServer(
     channel: stdioChannel(input: stdin, output: stdout),
