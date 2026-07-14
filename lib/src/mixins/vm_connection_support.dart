@@ -5,11 +5,16 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/path_resolver.dart';
+import 'package:flutter_agent_lens/src/utils/workspace_package_resolver.dart';
+import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 
 /// Base support mixin providing VM connection management, isolate management,
 /// and common schema definitions for Flutter Agent Lens MCP tools.
 base mixin VmConnectionSupport on MCPServer, ToolsSupport {
+  static final _lineNumberSuffix = RegExp(r':(\d+)$');
+  static final _pubspecNamePattern = RegExp(r'(?:^|\n)name:\s*([A-Za-z0-9_]+)');
+
   /// The active connection to the Dart VM Service.
   VmService? vmService;
 
@@ -27,6 +32,15 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
 
   /// Cached main library ID of the target application.
   String? cachedLibraryId;
+
+  /// Cached project package name (e.g. 'my_app' from 'package:my_app/main.dart').
+  String? cachedPackageName;
+
+  /// Resolver for workspace packages.
+  WorkspacePackageResolver? packageResolver;
+
+  /// Cache for high-frequency isBuiltInWidget lookups.
+  final Map<String, bool> isBuiltInWidgetCache = {};
 
   /// Tracks dynamically registered service methods (e.g. 'hotRestart' -> 's0.hotRestart').
   final Map<String, String> registeredMethodsForService = {};
@@ -178,6 +192,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
           isolateId = isolates.first.id;
         }
         cachedLibraryId = null;
+        cachedPackageName = null;
+        packageResolver = null;
+        isBuiltInWidgetCache.clear();
         stderr.writeln(
             '[mcp] Dynamically refreshed active isolate ID: $isolateId');
         return true;
@@ -367,7 +384,50 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     return firstId;
   }
 
-  /// Formats raw byte counts into human-readable strings (e.g. KB, MB, GB).
+  /// Get the project's package name.
+  /// Reads name from pubspec.yaml if workspaceRoot exists; falls back to isolate libraries.
+  Future<String?> getProjectPackageName() async {
+    if (cachedPackageName != null) return cachedPackageName;
+
+    // Read from pubspec.yaml
+    if (workspaceRoot case final root? when root.isNotEmpty) {
+      try {
+        final file = File(p.join(root, 'pubspec.yaml'));
+        if (file.existsSync()) {
+          final content = await file.readAsString();
+          final match = _pubspecNamePattern.firstMatch(content);
+          if (match != null) {
+            return cachedPackageName = match.group(1);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Fallback: parse isolate libraries
+    final activeIsolateId = isolateId;
+    if (vmService == null || activeIsolateId == null) return null;
+    try {
+      final isolate = await vmService!.getIsolate(activeIsolateId);
+      final libraries = isolate.libraries ?? [];
+      for (final lib in libraries) {
+        final uri = lib.uri ?? '';
+        if (uri.startsWith('package:') && uri.endsWith('main.dart')) {
+          return cachedPackageName =
+              uri.substring(8, uri.indexOf('/')); // 'package:'.length == 8
+        }
+      }
+      // Fallback: use first non-flutter package URI
+      for (final lib in libraries) {
+        final uri = lib.uri ?? '';
+        if (uri.startsWith('package:') && !uri.startsWith('package:flutter/')) {
+          return cachedPackageName = uri.substring(8, uri.indexOf('/'));
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Format byte counts to human readable strings.
   String formatBytes(int bytes) {
     if (bytes == 0) return '0 B';
     final sign = bytes < 0 ? '-' : '';
@@ -379,5 +439,122 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       i++;
     }
     return '$sign${absVal.toStringAsFixed(2)} ${units[i]}';
+  }
+
+  /// Load local and external packages using WorkspacePackageResolver.
+  Future<void> loadWorkspacePackages() async {
+    if (workspaceRoot case final root? when root.isNotEmpty) {
+      packageResolver = WorkspacePackageResolver(root);
+      await packageResolver!.load();
+      isBuiltInWidgetCache.clear();
+    }
+  }
+
+  /// Checks if the path belongs to a built-in/SDK widget or external package.
+  bool isBuiltInWidget(String rawFilePath, {String? projectName}) {
+    final cleanPath = stripLineNumber(rawFilePath);
+    if (isBuiltInWidgetCache.containsKey(cleanPath)) {
+      return isBuiltInWidgetCache[cleanPath]!;
+    }
+    final result = _evaluateIsBuiltIn(cleanPath, projectName: projectName);
+    isBuiltInWidgetCache[cleanPath] = result;
+    return result;
+  }
+
+  bool _evaluateIsBuiltIn(String cleanPath, {String? projectName}) {
+    var path = cleanPath;
+
+    // Convert file URIs
+    if (path.startsWith('file:')) {
+      try {
+        path = Uri.parse(path).toFilePath();
+      } catch (_) {
+        if (path.startsWith('file:///')) {
+          path = path.substring(7);
+        } else if (path.startsWith('file://')) {
+          path = path.substring(7);
+        } else if (path.startsWith('file:')) {
+          path = path.substring(5);
+        }
+      }
+    }
+
+    // Scheme checks
+    if (path.startsWith('dart:') ||
+        path.startsWith('org-dartlang-sdk:') ||
+        path.startsWith('native')) {
+      return true;
+    }
+
+    // Package URIs
+    if (path.startsWith('package:')) {
+      final slashIdx = path.indexOf('/');
+      if (slashIdx != -1) {
+        final pkgName = path.substring(8, slashIdx);
+        final resolver = packageResolver;
+        if (resolver != null) {
+          if (resolver.localPackages.contains(pkgName)) return false;
+          if (resolver.externalPackages.contains(pkgName)) return true;
+        }
+      }
+
+      // Fallback
+      if (projectName case final name? when name.isNotEmpty) {
+        return !path.startsWith('package:$name/');
+      }
+      // Exclude core flutter packages
+      return path.startsWith('package:flutter/') ||
+          path.startsWith('package:flutter_test/');
+    }
+
+    // Make relative paths absolute using workspaceRoot
+    if (p.isRelative(path)) {
+      if (workspaceRoot case final root? when root.isNotEmpty) {
+        path = p.join(root, path);
+      }
+    }
+
+    // Boundary check against workspaceRoot
+    if (workspaceRoot case final root? when root.isNotEmpty) {
+      try {
+        final canonicalRoot = p.canonicalize(root);
+        final canonicalPath = p.canonicalize(path);
+        return !canonicalPath.startsWith(canonicalRoot);
+      } catch (_) {
+        // Treat as external if canonicalization fails
+        return true;
+      }
+    }
+
+    // Fallback if workspaceRoot is null
+    try {
+      final sdkPath =
+          p.canonicalize(p.dirname(p.dirname(Platform.resolvedExecutable)));
+      if (p.canonicalize(path).startsWith(sdkPath)) {
+        return true;
+      }
+    } catch (_) {}
+
+    final lowerPath = path.toLowerCase();
+    if (lowerPath.contains('pub-cache') ||
+        lowerPath.contains('pub_cache') ||
+        lowerPath.contains('.puro') ||
+        lowerPath.contains('.fvm') ||
+        lowerPath.contains('.mise') ||
+        lowerPath.contains('sky_engine') ||
+        lowerPath.contains('/packages/flutter/')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Strip ':lineNumber' suffix.
+  String stripLineNumber(String location) {
+    final match = _lineNumberSuffix.firstMatch(location);
+    if (match != null) {
+      return location.substring(0, match.start);
+    }
+    return location;
   }
 }

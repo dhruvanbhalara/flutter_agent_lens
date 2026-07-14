@@ -48,6 +48,10 @@ base mixin RebuildTrackingSupport
               description:
                   'Number of top rebuilding widgets to list (default: 30).',
             ),
+            'exclude_flutter_widgets': BooleanSchema(
+              description:
+                  'Whether to exclude built-in Flutter/SDK widgets (default: true).',
+            ),
           },
           required: ['action'],
         ),
@@ -70,9 +74,49 @@ base mixin RebuildTrackingSupport
     rebuildIdToFile.clear();
   }
 
+  Future<List<Map<String, dynamic>>> _resolveAndFilterWidgets({
+    required Map<String, int> counts,
+    required Map<String, String> idToName,
+    required Map<String, String> idToFile,
+    required bool excludeBuiltIn,
+    required String? projectName,
+  }) async {
+    final widgets = <Map<String, dynamic>>[];
+    final resolver = pathResolver;
+
+    for (final entry in counts.entries) {
+      final locId = entry.key;
+      final count = entry.value;
+      final name = idToName[locId] ?? 'Widget#$locId';
+      final rawFile = idToFile[locId] ?? 'unknown';
+
+      // Apply filter on raw file path BEFORE resolution
+      if (excludeBuiltIn &&
+          isBuiltInWidget(rawFile, projectName: projectName)) {
+        continue;
+      }
+
+      final resolvedPath = resolver != null
+          ? await resolver.resolveToAbsolutePath(rawFile)
+          : rawFile;
+      widgets.add({
+        'widget': name,
+        'count': count,
+        'location': resolvedPath,
+        'id': locId,
+      });
+    }
+
+    widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+    return widgets;
+  }
+
   Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
     final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
     final topN = (req.arg<num>('topN'))?.toInt() ?? 30;
+    final excludeBuiltIn = req.arg<bool>('exclude_flutter_widgets') ?? true;
+    final projectName = excludeBuiltIn ? await getProjectPackageName() : null;
+
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Starting rebuild tracking, duration=${duration}s');
 
@@ -119,7 +163,7 @@ base mixin RebuildTrackingSupport
           isolateId: isolateId,
           args: {'enabled': 'false'},
         );
-      } catch (e) {
+      } on Exception catch (e) {
         stderr.writeln(
             '[mcp:widget_rebuild_counts] Error disabling trackRebuildDirtyWidgets: $e');
       }
@@ -146,26 +190,19 @@ base mixin RebuildTrackingSupport
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Location map: ${idToName.length} named, ${idToFile.length} with files');
 
-    final widgets = <Map<String, dynamic>>[];
-    for (final entry in widgetCounts.entries) {
-      final locId = entry.key;
-      final count = entry.value;
-      final name = idToName[locId] ?? 'Widget#$locId';
-      final rawFile = idToFile[locId] ?? 'unknown';
-      final resolvedPath = pathResolver != null
-          ? await pathResolver!.resolveToAbsolutePath(rawFile)
-          : rawFile;
-      widgets.add({
-        'widget': name,
-        'count': count,
-        'location': resolvedPath,
-        'id': locId,
-      });
-    }
-
-    widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+    final widgets = await _resolveAndFilterWidgets(
+      counts: widgetCounts,
+      idToName: idToName,
+      idToFile: idToFile,
+      excludeBuiltIn: excludeBuiltIn,
+      projectName: projectName,
+    );
 
     final mdBuffer = StringBuffer('Top Rebuilding Widgets\n\n');
+    if (excludeBuiltIn) {
+      mdBuffer.writeln(
+          '_Note: Built-in Flutter/SDK widgets excluded. Pass `exclude_flutter_widgets: false` to include them._\n');
+    }
     if (widgets.isEmpty) {
       mdBuffer.writeln(
           'No rebuilds captured. Make sure you interacted with the app while tracking.');
@@ -182,6 +219,8 @@ base mixin RebuildTrackingSupport
       title: 'Widget Rebuilt Counts Analysis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
+        'total_recorded_widgets': widgetCounts.length,
+        'filtered_count': widgets.length,
         'widgets': widgets.take(topN).toList(),
       },
     );
@@ -267,6 +306,8 @@ base mixin RebuildTrackingSupport
     }
 
     final topN = (req.arg<num>('topN'))?.toInt() ?? 30;
+    final excludeBuiltIn = req.arg<bool>('exclude_flutter_widgets') ?? true;
+    final projectName = excludeBuiltIn ? await getProjectPackageName() : null;
 
     stderr.writeln(
         '[mcp:widget_rebuild_counts] Stopping rebuild tracking session...');
@@ -280,7 +321,7 @@ base mixin RebuildTrackingSupport
         isolateId: isolateId,
         args: {'enabled': 'false'},
       );
-    } catch (e) {
+    } on Exception catch (e) {
       stderr.writeln(
           '[mcp:widget_rebuild_counts] Error disabling trackRebuildDirtyWidgets: $e');
     }
@@ -302,31 +343,22 @@ base mixin RebuildTrackingSupport
       } else if (rawLocationResult is Map) {
         _parseLocationsMap(rawLocationResult, rebuildIdToName, rebuildIdToFile);
       }
-    } catch (e) {
+    } on Exception catch (e) {
       stderr.writeln('[mcp:widget] Error fetching widget location ID map: $e');
     }
 
-    final widgets = <Map<String, dynamic>>[];
+    final widgets = await _resolveAndFilterWidgets(
+      counts: rebuildCounts,
+      idToName: rebuildIdToName,
+      idToFile: rebuildIdToFile,
+      excludeBuiltIn: excludeBuiltIn,
+      projectName: projectName,
+    );
+
     var totalRebuilds = 0;
-
-    for (final entry in rebuildCounts.entries) {
-      final locId = entry.key;
-      final count = entry.value;
+    for (final count in rebuildCounts.values) {
       totalRebuilds += count;
-      final name = rebuildIdToName[locId] ?? 'Widget#$locId';
-      final rawFile = rebuildIdToFile[locId] ?? 'unknown';
-      final resolvedPath = pathResolver != null
-          ? await pathResolver!.resolveToAbsolutePath(rawFile)
-          : rawFile;
-      widgets.add({
-        'widget': name,
-        'count': count,
-        'location': resolvedPath,
-        'id': locId,
-      });
     }
-
-    widgets.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
     final output = [
       'WIDGET REBUILD REPORT',
@@ -334,9 +366,14 @@ base mixin RebuildTrackingSupport
       'SUMMARY',
       'Tracked for ${durationSec}s',
       'Total rebuilds: $totalRebuilds',
-      'Unique widgets rebuilt: ${widgets.length}',
-      '',
+      'Unique widgets rebuilt: ${rebuildCounts.length}',
     ];
+
+    if (excludeBuiltIn) {
+      output.add(
+          'Filtered widgets: ${widgets.length} (excluding built-in Flutter/SDK widgets)');
+    }
+    output.add('');
 
     if (widgets.isEmpty) {
       output.add(
@@ -358,13 +395,12 @@ base mixin RebuildTrackingSupport
         final name = w['widget'] as String;
         final fileLoc = w['location'] as String;
         final shortFile = getShortFile(fileLoc);
-        final severity = count > 100
-            ? '[HIGH]'
-            : count > 30
-                ? '[MEDIUM]'
-                : count > 10
-                    ? '[LOW]'
-                    : '[OK]';
+        final severity = switch (count) {
+          > 100 => '[HIGH]',
+          > 30 => '[MEDIUM]',
+          > 10 => '[LOW]',
+          _ => '[OK]',
+        };
         output.add('$severity ${count}x | $name [$shortFile]');
       }
 
@@ -394,7 +430,8 @@ base mixin RebuildTrackingSupport
       markdownBody: output.join('\n'),
       structuredData: {
         'duration_seconds': double.tryParse(durationSec) ?? 0.0,
-        'total_recorded_widgets': widgets.length,
+        'total_recorded_widgets': rebuildCounts.length,
+        'filtered_count': widgets.length,
         'total_rebuilds': totalRebuilds,
         'rebuilds': widgets.take(topN).toList(),
       },
@@ -439,7 +476,7 @@ base mixin RebuildTrackingSupport
       if (e.code != 103) {
         stderr.writeln('[mcp:widget] Error listening to extension stream: $e');
       }
-    } catch (e) {
+    } on Exception catch (e) {
       stderr.writeln('[mcp:widget] Error listening to extension stream: $e');
     }
   }
