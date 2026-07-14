@@ -102,6 +102,7 @@ To keep payloads light, these settings are supported:
 - **Layout Controls**:
   - `maxDepth` in `widget` (action: `get_tree`): Sets widget tree depth (default: `8`).
   - `projectOnly` in `widget` (action: `get_tree`): Filters out non-user-project widgets (default: `true`).
+  - `exclude_flutter_widgets` in `rebuild_tracking` (action: `stop` / `get_counts`): Excludes built-in Flutter/SDK and dependency widgets from the rebuild list (default: `true`).
 
 - **Platform Settings**:
   - `platform` in `diagnose_project` (action: `deep_links`): Platform target (e.g. `android` or `ios`, required).
