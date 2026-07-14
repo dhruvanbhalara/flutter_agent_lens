@@ -109,7 +109,7 @@ class PortDiscovery {
           return apps;
         }
 
-        final lines = (psResult.stdout as String).split('\n');
+        final lines = psResult.stdout.toString().split('\n');
         var ddsCount = 0;
 
         for (final line in lines) {
