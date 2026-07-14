@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:path/path.dart' as p;
+import '../enums/flutter_debug_flag.dart';
 import '../enums/mcp_tool.dart';
 import '../extensions/call_tool_request_x.dart';
 import 'vm_connection_support.dart';
@@ -204,39 +205,21 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final valStr = req.requireArg<String>('value');
     stderr.writeln('[mcp:toggle_flag] Flag: $flagName, Target value: $valStr');
 
-    final String extensionName;
-    final Map<String, dynamic> args;
-
-    final cleanFlag = flagName.trim();
-    if (cleanFlag == 'debugPaint' || cleanFlag == 'debugPaintSizeEnabled') {
-      extensionName = 'ext.flutter.debugPaint';
-      final boolVal = valStr == 'true';
-      args = {'enabled': boolVal ? 'true' : 'false'};
-    } else if (cleanFlag == 'debugPaintBaselines' ||
-        cleanFlag == 'debugPaintBaselinesEnabled') {
-      extensionName = 'ext.flutter.debugPaintBaselinesEnabled';
-      final boolVal = valStr == 'true';
-      args = {'enabled': boolVal ? 'true' : 'false'};
-    } else if (cleanFlag == 'repaintRainbow' ||
-        cleanFlag == 'debugRepaintRainbowEnabled') {
-      extensionName = 'ext.flutter.repaintRainbow';
-      final boolVal = valStr == 'true';
-      args = {'enabled': boolVal ? 'true' : 'false'};
-    } else if (cleanFlag == 'invertOversizedImages' ||
-        cleanFlag == 'debugInvertOversizedImages') {
-      extensionName = 'ext.flutter.invertOversizedImages';
-      final boolVal = valStr == 'true';
-      args = {'enabled': boolVal ? 'true' : 'false'};
-    } else if (cleanFlag == 'timeDilation') {
-      extensionName = 'ext.flutter.timeDilation';
-      final doubleVal = double.tryParse(valStr) ?? 1.0;
-      args = {'timeDilation': doubleVal.toString()};
-    } else {
+    final flag = FlutterDebugFlag.fromString(flagName);
+    if (flag == null) {
       return CallToolResult(
         content: [TextContent(text: 'Unsupported debug flag: $flagName')],
         isError: true,
       );
     }
+
+    final extensionName = 'ext.flutter.${flag.extensionSuffix}';
+    final args = switch (flag) {
+      FlutterDebugFlag.timeDilation => {
+          'timeDilation': (double.tryParse(valStr) ?? 1.0).toString(),
+        },
+      _ => {'enabled': valStr == 'true' ? 'true' : 'false'},
+    };
 
     try {
       final response = await vmService!.callServiceExtension(
