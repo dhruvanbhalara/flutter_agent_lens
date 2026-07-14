@@ -60,18 +60,14 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Delegates screenshot actions to respective handlers.
   Future<CallToolResult> _handleScreenshot(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'take':
-        return _handleTakeScreenshot(req);
-      case 'capture_baseline':
-      case 'compare':
-        return _handleCompareLayoutScreenshots(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'take' => _handleTakeScreenshot(req),
+      'capture_baseline' || 'compare' => _handleCompareLayoutScreenshots(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown screenshot action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 
   /// Handles the compare_layout_screenshots tool request.

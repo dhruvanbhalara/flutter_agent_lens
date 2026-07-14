@@ -45,17 +45,14 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Delegates debug flag actions to respective handlers.
   Future<CallToolResult> _handleDebugFlag(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'toggle':
-        return _handleToggleDebugFlag(req);
-      case 'toggle_package_widgets':
-        return _handleTogglePackageWidgets(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'toggle' => _handleToggleDebugFlag(req),
+      'toggle_package_widgets' => _handleTogglePackageWidgets(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown debug flag action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 
   Future<CallToolResult> _handleTogglePackageWidgets(

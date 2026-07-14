@@ -687,20 +687,15 @@ base mixin PerformanceProfilingSupport
   /// Handles the profiling composite tool request.
   Future<CallToolResult> _handleProfiling(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'start':
-        return _handleStartProfiling(req);
-      case 'stop':
-        return _handleStopProfiling(req);
-      case 'get_cpu':
-        return _handleGetCpuProfile(req);
-      case 'diagnose_jank':
-        return _handleDiagnoseJank(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'start' => _handleStartProfiling(req),
+      'stop' => _handleStopProfiling(req),
+      'get_cpu' => _handleGetCpuProfile(req),
+      'diagnose_jank' => _handleDiagnoseJank(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown profiling action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

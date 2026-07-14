@@ -258,14 +258,10 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           '[mcp:evaluate_expression] Evaluating in library: $expression');
     }
 
-    final dynamic res;
-    if (frameIndex != null) {
-      res =
-          await vmService!.evaluateInFrame(isolateId!, frameIndex, expression);
-    } else {
-      final libraryId = await getEvaluationLibraryId();
-      res = await vmService!.evaluate(isolateId!, libraryId, expression);
-    }
+    final Object res = frameIndex != null
+        ? await vmService!.evaluateInFrame(isolateId!, frameIndex, expression)
+        : await vmService!
+            .evaluate(isolateId!, await getEvaluationLibraryId(), expression);
 
     final rawValStr = res is InstanceRef
         ? (res.valueAsString ?? res.toString())
@@ -287,16 +283,13 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Handles the breakpoint composite tool request.
   Future<CallToolResult> _handleBreakpoint(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'add':
-        return _handleAddBreakpoint(req);
-      case 'remove':
-        return _handleRemoveBreakpoint(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'add' => _handleAddBreakpoint(req),
+      'remove' => _handleRemoveBreakpoint(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown breakpoint action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

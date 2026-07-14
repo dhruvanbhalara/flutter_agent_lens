@@ -816,26 +816,18 @@ base mixin MemoryDebuggingSupport
     if (action != 'list' && (vmService == null || isolateId == null)) {
       return notConnected();
     }
-    switch (action) {
-      case 'get_snapshot':
-        return _handleGetMemorySnapshot(req);
-      case 'save':
-        return _handleSaveSnapshot(req);
-      case 'compare':
-        return _handleCompareSnapshots(req);
-      case 'list':
-        return _handleListSnapshots(req);
-      case 'audit_leak':
-        return _handleAuditClassMemoryLeak(req);
-      case 'diff_allocations':
-        return _handleDiffHeapAllocations(req);
-      case 'get_referrers':
-        return _handleGetObjectReferrers(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'get_snapshot' => _handleGetMemorySnapshot(req),
+      'save' => _handleSaveSnapshot(req),
+      'compare' => _handleCompareSnapshots(req),
+      'list' => _handleListSnapshots(req),
+      'audit_leak' => _handleAuditClassMemoryLeak(req),
+      'diff_allocations' => _handleDiffHeapAllocations(req),
+      'get_referrers' => _handleGetObjectReferrers(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown memory action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

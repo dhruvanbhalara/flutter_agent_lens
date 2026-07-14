@@ -61,19 +61,15 @@ base mixin WidgetInspectionSupport
   /// Delegates widget actions to respective handlers.
   Future<CallToolResult> _handleWidget(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'inspect':
-        return _handleInspectLayoutConstraints(req);
-      case 'toggle_selection':
-        return _handleToggleWidgetSelection(req);
-      case 'get_tree':
-        return _handleGetWidgetTree(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'inspect' => _handleInspectLayoutConstraints(req),
+      'toggle_selection' => _handleToggleWidgetSelection(req),
+      'get_tree' => _handleGetWidgetTree(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown widget action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 
   /// Clears active inspection cache.

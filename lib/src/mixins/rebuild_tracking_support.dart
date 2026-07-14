@@ -493,20 +493,16 @@ base mixin RebuildTrackingSupport
   /// Handles the rebuild_tracking composite tool request.
   Future<CallToolResult> _handleRebuildTracking(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'start':
-        return _handleStartTrackingRebuilds(req);
-      case 'stop':
-        return _handleStopTrackingRebuilds(req);
-      case 'get_counts':
-        return _handleWidgetRebuildCounts(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'start' => _handleStartTrackingRebuilds(req),
+      'stop' => _handleStopTrackingRebuilds(req),
+      'get_counts' => _handleWidgetRebuildCounts(req),
+      _ => CallToolResult(
           content: [
             TextContent(text: 'Unknown rebuild tracking action: $action')
           ],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

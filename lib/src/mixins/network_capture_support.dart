@@ -514,18 +514,14 @@ base mixin NetworkCaptureSupport
   /// Handles the network composite tool request.
   Future<CallToolResult> _handleNetwork(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'start':
-        return _handleStartNetworkCapture(req);
-      case 'stop':
-        return _handleStopNetworkCapture(req);
-      case 'get_profile':
-        return _handleGetNetworkProfile(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'start' => _handleStartNetworkCapture(req),
+      'stop' => _handleStopNetworkCapture(req),
+      'get_profile' => _handleGetNetworkProfile(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown network action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

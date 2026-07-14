@@ -152,19 +152,15 @@ base mixin ConnectionSupport
   /// Consolidated connection handler.
   Future<CallToolResult> _handleConnection(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'connect':
-        return _handleConnect(req);
-      case 'connect_dtd':
-        return _handleConnectDtd(req);
-      case 'disconnect':
-        return _handleDisconnect(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'connect' => _handleConnect(req),
+      'connect_dtd' => _handleConnectDtd(req),
+      'disconnect' => _handleDisconnect(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 
   /// Handles the connect tool request.

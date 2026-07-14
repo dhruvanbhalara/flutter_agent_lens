@@ -68,17 +68,14 @@ base mixin DiagnoseProjectSupport
   /// Consolidated project diagnostics handler.
   Future<CallToolResult> _handleDiagnoseProject(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'bundle_size':
-        return _handleAnalyzeBundleSize(req);
-      case 'deep_links':
-        return _handleValidateDeepLinks(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'bundle_size' => _handleAnalyzeBundleSize(req),
+      'deep_links' => _handleValidateDeepLinks(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 
   /// Handles the analyze_bundle_size tool request.
