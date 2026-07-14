@@ -279,10 +279,15 @@ base mixin PerformanceProfilingSupport
 
     // Refresh the isolate ID and cache after the restart
     final vm = await vmService!.getVM();
-    if (vm.isolates != null && vm.isolates!.isNotEmpty) {
-      isolateId = vm.isolates!.first.id!;
-      cachedLibraryId = null;
-      stderr.writeln('[mcp:hot_restart] Refreshed main isolate ID: $isolateId');
+    final isolates = vm.isolates ?? [];
+    if (isolates.isNotEmpty) {
+      final newId = isolates.first.id;
+      if (newId != null) {
+        isolateId = newId;
+        cachedLibraryId = null;
+        stderr
+            .writeln('[mcp:hot_restart] Refreshed main isolate ID: $isolateId');
+      }
     }
 
     return CallToolResult(content: [

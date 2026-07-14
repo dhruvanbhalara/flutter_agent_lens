@@ -312,11 +312,17 @@ base mixin ConnectionSupport
             .writeln('[mcp:connect] Error enabling HTTP timeline logging: $e');
       }
 
-      final selectedIsolateName = vm.isolates
-              ?.firstWhere((i) => i.id == isolateId,
-                  orElse: () => vm.isolates!.first)
-              .name ??
-          'unknown';
+      final currentIsolates = vm.isolates ?? [];
+      final String selectedIsolateName;
+      if (currentIsolates.isNotEmpty) {
+        selectedIsolateName = currentIsolates
+                .firstWhere((i) => i.id == isolateId,
+                    orElse: () => currentIsolates.first)
+                .name ??
+            'unknown';
+      } else {
+        selectedIsolateName = 'unknown';
+      }
 
       // Register connected tools
       try {
