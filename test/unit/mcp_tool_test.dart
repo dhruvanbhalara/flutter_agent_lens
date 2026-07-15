@@ -30,6 +30,18 @@ void main() {
       expect(FlutterDebugFlag.fromString('timeDilation'),
           equals(FlutterDebugFlag.timeDilation));
       expect(FlutterDebugFlag.fromString('unknownFlag'), isNull);
+
+      // Additional lookup coverage
+      expect(FlutterDebugFlag.fromString('debugpaint'),
+          equals(FlutterDebugFlag.debugPaint));
+      expect(FlutterDebugFlag.fromString('DEBUGPaintSizeENABLED'),
+          equals(FlutterDebugFlag.debugPaint));
+      expect(FlutterDebugFlag.fromString('debugPaintBaselines'),
+          equals(FlutterDebugFlag.debugPaintBaselines));
+      expect(FlutterDebugFlag.fromString('debugrepaintrainbowenabled'),
+          equals(FlutterDebugFlag.repaintRainbow));
+      expect(FlutterDebugFlag.fromString('debuginvertoversizedimages'),
+          equals(FlutterDebugFlag.invertOversizedImages));
     });
   });
 

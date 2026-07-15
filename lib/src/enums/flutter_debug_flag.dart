@@ -26,25 +26,17 @@ enum FlutterDebugFlag {
 
   /// Resolves the debug flag from the tool parameter name input.
   /// Returns `null` if the flag is unsupported.
-  static FlutterDebugFlag? fromString(String name) {
-    final lower = name.toLowerCase();
-    if (lower == 'debugpaint' || lower == 'debugpaintsizeenabled') {
-      return FlutterDebugFlag.debugPaint;
-    }
-    if (lower == 'debugpaintbaselines' ||
-        lower == 'debugpaintbaselinesenabled') {
-      return FlutterDebugFlag.debugPaintBaselines;
-    }
-    if (lower == 'repaintrainbow' || lower == 'debugrepaintrainbowenabled') {
-      return FlutterDebugFlag.repaintRainbow;
-    }
-    if (lower == 'invertoversizedimages' ||
-        lower == 'debuginvertoversizedimages') {
-      return FlutterDebugFlag.invertOversizedImages;
-    }
-    if (lower == 'timedilation') {
-      return FlutterDebugFlag.timeDilation;
-    }
-    return null;
-  }
+  static FlutterDebugFlag? fromString(String name) =>
+      _lookup[name.toLowerCase()];
+
+  static final Map<String, FlutterDebugFlag> _lookup = {
+    for (final flag in FlutterDebugFlag.values) ...{
+      flag.flagName.toLowerCase(): flag,
+      flag.extensionSuffix.toLowerCase(): flag,
+    },
+    'debugpaint': FlutterDebugFlag.debugPaint,
+    'debugpaintbaselines': FlutterDebugFlag.debugPaintBaselines,
+    'debugrepaintrainbowenabled': FlutterDebugFlag.repaintRainbow,
+    'debuginvertoversizedimages': FlutterDebugFlag.invertOversizedImages,
+  };
 }
