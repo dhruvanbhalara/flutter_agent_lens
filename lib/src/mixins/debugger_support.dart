@@ -267,7 +267,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final rawValStr = res is InstanceRef
         ? (res.valueAsString ?? res.toString())
         : res.toString();
-    final valStr = StringUtils.truncate(rawValStr, maxLength: 5000);
+    final valStr = truncateString(rawValStr, maxLength: 5000);
     final kindStr = res is InstanceRef ? res.kind : 'Unknown';
     final classStr = res is InstanceRef ? res.classRef?.name : 'Unknown';
     return CallToolResult(
