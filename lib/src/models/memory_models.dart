@@ -73,10 +73,11 @@ final class MemorySnapshot {
       heapUsage: (map['heapUsage'] as num?)?.toInt() ?? 0,
       heapCapacity: (map['heapCapacity'] as num?)?.toInt() ?? 0,
       externalUsage: (map['externalUsage'] as num?)?.toInt() ?? 0,
-      topClasses: topClassesList
-          .whereType<Map<dynamic, dynamic>>()
-          .map((c) => ClassAllocation.fromMap(Map<String, dynamic>.from(c)))
-          .toList(),
+      topClasses: List.unmodifiable(
+        topClassesList
+            .whereType<Map<dynamic, dynamic>>()
+            .map((c) => ClassAllocation.fromMap(Map<String, dynamic>.from(c))),
+      ),
     );
   }
 

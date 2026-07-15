@@ -22,6 +22,20 @@ final class DiscoveredApp {
 
   /// A descriptive identifier indicating how this app was discovered.
   final String configPath;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiscoveredApp &&
+          other.serviceUri == serviceUri &&
+          other.projectName == projectName &&
+          other.configPath == configPath;
+
+  @override
+  int get hashCode => Object.hash(serviceUri, projectName, configPath);
+
+  @override
+  String toString() => 'DiscoveredApp(project: $projectName, uri: $serviceUri)';
 }
 
 /// Finds running Flutter/Dart applications by scanning OS processes.

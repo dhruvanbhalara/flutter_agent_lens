@@ -120,5 +120,29 @@ void main() {
       expect(snapshot1.hashCode, equals(snapshot2.hashCode));
       expect(snapshot1, isNot(equals(snapshotDifferent)));
     });
+
+    test('topClasses is unmodifiable', () {
+      final json = {
+        'name': 'baseline',
+        'timestamp': 12345,
+        'heapUsage': 100,
+        'heapCapacity': 200,
+        'externalUsage': 50,
+        'topClasses': [
+          {
+            'name': 'MyWidget',
+            'bytes': 1024,
+            'instances': 42,
+          }
+        ],
+      };
+      final snapshot = MemorySnapshot.fromMap(json);
+      expect(
+        () => snapshot.topClasses.add(
+          const ClassAllocation(name: 'NewWidget', bytes: 10, instances: 1),
+        ),
+        throwsUnsupportedError,
+      );
+    });
   });
 }
