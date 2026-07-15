@@ -14,7 +14,7 @@ import 'package:path/path.dart' as p;
 base mixin DiagnoseProjectSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   /// The process runner helper, allowing test mocks.
-  final ProcessRunner processRunner = const ProcessRunner();
+  ProcessRunner processRunner = const DefaultProcessRunner();
 
   /// Registers the consolidated project diagnostics tool.
   void registerDiagnoseProjectTools() {

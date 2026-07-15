@@ -57,7 +57,7 @@ class PortDiscovery {
   final ProcessRunner processRunner;
 
   /// Creates a new [PortDiscovery] instance.
-  const PortDiscovery({this.processRunner = const ProcessRunner()});
+  const PortDiscovery({this.processRunner = const DefaultProcessRunner()});
 
   static final RegExp _vmUriPattern = RegExp(r'--vm-service-uri=(http://\S+)');
   static final RegExp _pidPattern = RegExp(r'^\S+\s+(\d+)');
