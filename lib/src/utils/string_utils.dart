@@ -41,16 +41,3 @@ void _formatMapHelper(
   buffer.writeln();
   buffer.write('$pad}');
 }
-
-/// Standardized utility methods for string manipulation, truncation,
-/// and map formatting to optimize token usage.
-@Deprecated('Use top-level truncateString and formatMapString instead')
-class StringUtils {
-  /// Truncates the given [value] to [maxLength], appending a truncation notice if needed.
-  static String truncate(String value, {int maxLength = 10000}) =>
-      truncateString(value, maxLength: maxLength);
-
-  /// Formats the map as a structured string up to [maxDepth] to optimize token size.
-  static String formatMap(Map<dynamic, dynamic> data, {int maxDepth = 3}) =>
-      formatMapString(data, maxDepth: maxDepth);
-}
