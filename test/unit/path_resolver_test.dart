@@ -64,18 +64,31 @@ void main() {
       expect(resolved, equals(p.canonicalize(file.path)));
     });
 
-    test('cache eviction limits to 1000 items (FIFO)', () async {
-      // Populate 1000 items in cache
-      for (var i = 0; i < 1000; i++) {
+    test('cache eviction uses LRU semantics', () async {
+      const packageUri = 'package:my_app/src/home.dart';
+      final file = File(p.join(tempDir.path, 'lib', 'src', 'home.dart'));
+      await file.create(recursive: true);
+      final expectedPath = p.canonicalize(file.path);
+
+      await resolver.resolveToAbsolutePath(packageUri);
+
+      // Populate 999 other items in cache
+      for (var i = 0; i < 999; i++) {
         await resolver.resolveToAbsolutePath('file:///dummy_$i.dart');
       }
+
+      // Touch packageUri to promote it to MRU (most recently used)
+      await resolver.resolveToAbsolutePath(packageUri);
 
       // Add one more to trigger eviction
       await resolver.resolveToAbsolutePath('file:///dummy_new.dart');
 
-      // The oldest one should be evicted
-      expect(await resolver.resolveToAbsolutePath('file:///dummy_0.dart'),
-          equals(Platform.isWindows ? r'C:\dummy_0.dart' : '/dummy_0.dart'));
+      // Delete the file from disk so that if it is a cache miss, it returns packageUri itself instead of resolved path
+      await file.delete();
+
+      // Since packageUri was promoted, it should still be in cache
+      final resolved = await resolver.resolveToAbsolutePath(packageUri);
+      expect(resolved, equals(expectedPath));
     });
 
     test('unicode path resolution', () async {

@@ -18,8 +18,10 @@ final class PathResolver {
 
   /// Resolves a VM-reported URI to a local absolute path.
   Future<String> resolveToAbsolutePath(String vmUri) async {
-    if (_pathCache.containsKey(vmUri)) {
-      return _pathCache[vmUri]!;
+    final cached = _pathCache.remove(vmUri);
+    if (cached != null) {
+      _pathCache[vmUri] = cached;
+      return cached;
     }
 
     // Skip fallback search for known system, internal or non-path URIs

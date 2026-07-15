@@ -54,13 +54,15 @@ final class FlutterAgentLensServer extends MCPServer
   /// Cleans up active streams and subscriptions on connection close.
   @override
   Future<void> cleanupStreams() async {
-    await cleanupLogging();
-    await cleanupWidgetInspection();
-    await cleanupRebuildTracking();
-    await cleanupPerformanceProfiling();
+    await Future.wait([
+      cleanupLogging(),
+      cleanupWidgetInspection(),
+      cleanupRebuildTracking(),
+      cleanupPerformanceProfiling(),
+      cleanupNetworkCapture(),
+      if (serviceStreamSub != null) serviceStreamSub!.cancel(),
+    ]);
     cleanupMemoryDebugging();
-    await cleanupNetworkCapture();
-    await serviceStreamSub?.cancel();
     serviceStreamSub = null;
     registeredMethodsForService.clear();
     cachedLibraryId = null;
