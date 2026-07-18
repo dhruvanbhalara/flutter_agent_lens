@@ -143,6 +143,36 @@ base mixin DiagnoseProjectSupport
       }
       final customFile = File(resolvedPath);
       if (customFile.existsSync()) {
+        try {
+          final absoluteWorkspaceRoot =
+              Directory(root).resolveSymbolicLinksSync();
+          final absoluteTargetFile = customFile.resolveSymbolicLinksSync();
+          if (!p.isWithin(absoluteWorkspaceRoot, absoluteTargetFile) &&
+              absoluteWorkspaceRoot != absoluteTargetFile) {
+            return CallToolResult(
+              content: [
+                TextContent(
+                    text:
+                        'Access denied: target path is outside the workspace root.')
+              ],
+              isError: true,
+            );
+          }
+        } catch (_) {
+          final canonicalWorkspaceRoot = p.canonicalize(root);
+          final canonicalTargetFile = p.canonicalize(resolvedPath);
+          if (!p.isWithin(canonicalWorkspaceRoot, canonicalTargetFile) &&
+              canonicalWorkspaceRoot != canonicalTargetFile) {
+            return CallToolResult(
+              content: [
+                TextContent(
+                    text:
+                        'Access denied: target path is outside the workspace root.')
+              ],
+              isError: true,
+            );
+          }
+        }
         sizeFile = customFile;
       } else {
         return CallToolResult(
@@ -341,6 +371,34 @@ base mixin DiagnoseProjectSupport
     final buildVariant = req.arg<String>('build_variant');
     final configuration = req.arg<String>('configuration');
     final target = req.arg<String>('target') ?? 'Runner';
+
+    final alphaNumericHyphenUnderscore = RegExp(r'^[a-zA-Z0-9_\-]+$');
+    if (buildVariant != null &&
+        buildVariant.isNotEmpty &&
+        (buildVariant.startsWith('-') ||
+            !alphaNumericHyphenUnderscore.hasMatch(buildVariant))) {
+      return CallToolResult(
+        content: [TextContent(text: 'Invalid build_variant value.')],
+        isError: true,
+      );
+    }
+    if (configuration != null &&
+        configuration.isNotEmpty &&
+        (configuration.startsWith('-') ||
+            !alphaNumericHyphenUnderscore.hasMatch(configuration))) {
+      return CallToolResult(
+        content: [TextContent(text: 'Invalid configuration value.')],
+        isError: true,
+      );
+    }
+    if (target.isNotEmpty &&
+        (target.startsWith('-') ||
+            !alphaNumericHyphenUnderscore.hasMatch(target))) {
+      return CallToolResult(
+        content: [TextContent(text: 'Invalid target value.')],
+        isError: true,
+      );
+    }
 
     stderr.writeln(
         '[mcp:deeplinks] Validating deep links, platform=${platform.value}');
