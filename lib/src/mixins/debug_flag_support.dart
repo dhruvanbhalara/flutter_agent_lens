@@ -75,7 +75,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     }
 
-    final packagePaths = _getPackageDirectories(root);
+    final packagePaths = await _getPackageDirectories(root);
     if (packagePaths.isEmpty) {
       return CallToolResult(
         content: [
@@ -166,18 +166,21 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     );
   }
 
-  List<String> _getPackageDirectories(String workspaceRoot) {
+  Future<List<String>> _getPackageDirectories(String workspaceRoot) async {
     final directories = <String>[];
     final configPath =
         p.join(workspaceRoot, '.dart_tool', 'package_config.json');
     final file = File(configPath);
-    if (!file.existsSync()) {
+    // The package configuration is read asynchronously outside the main rendering path.
+    // ignore: avoid_slow_async_io
+    if (!await file.exists()) {
       stderr.writeln(
           '[mcp:package_resolver] package_config.json not found at $configPath');
       return directories;
     }
 
-    final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    final content = await file.readAsString();
+    final json = jsonDecode(content) as Map<String, dynamic>;
     final packages = json['packages'] as List<dynamic>?;
     if (packages == null) return directories;
 
@@ -188,13 +191,11 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       final rootUriStr = package['rootUri'] as String?;
       if (rootUriStr == null) continue;
 
-      final uri = Uri.parse(rootUriStr);
-      if (!uri.isAbsolute) {
-        final absolutePath =
-            p.canonicalize(p.join(configDir.path, uri.toFilePath()));
-        directories.add(absolutePath);
-      } else if (uri.scheme == 'file') {
-        directories.add(p.canonicalize(uri.toFilePath()));
+      final rootUri = Uri.parse(rootUriStr);
+      final absoluteUri =
+          rootUri.isAbsolute ? rootUri : configDir.uri.resolveUri(rootUri);
+      if (absoluteUri.scheme == 'file') {
+        directories.add(p.canonicalize(absoluteUri.toFilePath()));
       }
     }
 
