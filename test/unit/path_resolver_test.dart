@@ -115,5 +115,22 @@ void main() {
           await badResolver.resolveToAbsolutePath('package:foo/bar.dart');
       expect(resolved, equals('package:foo/bar.dart'));
     });
+
+    test('directory walk terminates when file limit is reached', () async {
+      final dir1 = Directory(p.join(tempDir.path, 'dir1'));
+      await dir1.create();
+      final dir2 = Directory(p.join(tempDir.path, 'dir2'));
+      await dir2.create();
+
+      // Create 10000 files in dir1
+      for (var i = 0; i < 10000; i++) {
+        File(p.join(dir1.path, 'file_$i.dart')).createSync();
+      }
+
+      // Resolving a file should scan and stop at 10,000 files
+      final resolved =
+          await resolver.resolveToAbsolutePath('package:nonexistent/file.dart');
+      expect(resolved, equals('package:nonexistent/file.dart'));
+    });
   });
 }
