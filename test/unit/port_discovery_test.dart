@@ -126,14 +126,12 @@ void main() {
 
       final discovery = PortDiscovery(processRunner: mockRunner);
 
-      if (Platform.isWindows) {
-        final apps = await discovery.discoverActiveApps();
-        expect(apps, isNotEmpty);
-        expect(apps.first.projectName, equals('my_flutter_app'));
-        expect(
-            apps.first.serviceUri, equals('ws://127.0.0.1:8181/auth_token/ws'));
-      }
-    });
+      final apps = await discovery.discoverActiveApps();
+      expect(apps, isNotEmpty);
+      expect(apps.first.projectName, equals('my_flutter_app'));
+      expect(
+          apps.first.serviceUri, equals('ws://127.0.0.1:8181/auth_token/ws'));
+    }, skip: !Platform.isWindows ? 'Requires Windows' : null);
 
     test('ps/lsof scan on Unix successfully parses running DDS processes',
         () async {
@@ -159,13 +157,11 @@ void main() {
 
       final discovery = PortDiscovery(processRunner: mockRunner);
 
-      if (!Platform.isWindows) {
-        final apps = await discovery.discoverActiveApps();
-        expect(apps, isNotEmpty);
-        expect(apps.first.projectName, equals('my_flutter_app'));
-        expect(
-            apps.first.serviceUri, equals('ws://127.0.0.1:8181/auth_token/ws'));
-      }
-    });
+      final apps = await discovery.discoverActiveApps();
+      expect(apps, isNotEmpty);
+      expect(apps.first.projectName, equals('my_flutter_app'));
+      expect(
+          apps.first.serviceUri, equals('ws://127.0.0.1:8181/auth_token/ws'));
+    }, skip: Platform.isWindows ? 'Requires Unix' : null);
   });
 }
