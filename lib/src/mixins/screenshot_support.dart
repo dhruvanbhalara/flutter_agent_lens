@@ -87,6 +87,17 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     }
 
     final baselineName = req.requireArg<String>('baseline_name');
+    if (!RegExp(r'^[a-zA-Z0-9_\-]+$').hasMatch(baselineName)) {
+      return CallToolResult(
+        content: [
+          TextContent(
+            text:
+                'Invalid baseline_name: Only alphanumeric characters, underscores, and hyphens are allowed.',
+          )
+        ],
+        isError: true,
+      );
+    }
     final actionStr = req.requireArg<String>('action');
     final threshold = (req.arg<num>('threshold'))?.toDouble() ?? 0.98;
     final screenshotTypeStr = req.arg<String>('screenshot_type');
@@ -338,9 +349,28 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     required String? deviceId,
   }) async {
     if (vmService != null) {
+      // 1. Try direct VM Service extension screenshot first (highly efficient, zero process overhead)
+      try {
+        final response = await vmService!.callServiceExtension(
+          'ext.flutter.screenshot',
+          isolateId: isolateId,
+        );
+        final result = response.json?['result'] as Map<String, dynamic>?;
+        final base64Data = response.json?['screenshot'] as String? ??
+            result?['screenshot'] as String?;
+        if (base64Data != null) {
+          final bytes = base64Decode(base64Data);
+          await File(targetPath).writeAsBytes(bytes);
+          return 'vm_service';
+        }
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:screenshot] VM Service screenshot failed ($e). Falling back to CLI...');
+      }
+
+      // 2. Fallback to CLI screenshot
       String? effectiveDeviceId = deviceId;
       String? os;
-
       try {
         final vm = await vmService!.getVM();
         os = vm.operatingSystem?.toLowerCase();
@@ -370,61 +400,33 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           '--device-id=$effectiveDeviceId',
       ];
 
-      try {
-        final result = await Process.run(executable, args).timeout(
-          const Duration(seconds: 15),
-          onTimeout: () {
-            throw TimeoutException(
-                'Flutter screenshot command timed out after 15 seconds.');
-          },
-        );
+      final result = await Process.run(executable, args).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw TimeoutException(
+              'Flutter screenshot command timed out after 15 seconds.');
+        },
+      );
 
-        if (result.exitCode != 0) {
-          final errorMsg = result.stderr.toString();
-          if (screenshotType == 'skia' &&
-              errorMsg.contains(
-                  'Cannot capture SKP screenshot with Impeller enabled.')) {
-            stderr.writeln(
-                '[mcp:screenshot] Skia capture blocked by Impeller. Retrying as device screenshot.');
-            return _captureDeviceScreenshot(
-              targetPath: targetPath,
-              screenshotType: 'device',
-              deviceId: deviceId,
-            );
-          }
-          throw ProcessException(
-            executable,
-            args,
-            'Failed to capture screenshot (Exit Code ${result.exitCode}):\n${errorMsg.trim()}',
-            result.exitCode,
-          );
-        }
-      } catch (e) {
-        stderr.writeln(
-            '[mcp:screenshot] CLI screenshot failed: $e. Trying VM Service fallback...');
-        try {
-          final response = await vmService!.callServiceExtension(
-            'ext.flutter.screenshot',
-            isolateId: isolateId,
-          );
-          final result = response.json?['result'] as Map<String, dynamic>?;
-          final base64Data = response.json?['screenshot'] as String? ??
-              result?['screenshot'] as String?;
-          if (base64Data != null) {
-            final bytes = base64Decode(base64Data);
-            await File(targetPath).writeAsBytes(bytes);
-            stderr.writeln(
-                '[mcp:screenshot] Successfully captured screenshot via VM Service fallback.');
-            return 'vm_service';
-          } else {
-            throw StateError(
-                'No screenshot data found in service extension response.');
-          }
-        } catch (fallbackError) {
+      if (result.exitCode != 0) {
+        final errorMsg = result.stderr.toString();
+        if (screenshotType == 'skia' &&
+            errorMsg.contains(
+                'Cannot capture SKP screenshot with Impeller enabled.')) {
           stderr.writeln(
-              '[mcp:screenshot] VM Service screenshot fallback failed: $fallbackError');
-          rethrow;
+              '[mcp:screenshot] Skia capture blocked by Impeller. Retrying as device screenshot.');
+          return _captureDeviceScreenshot(
+            targetPath: targetPath,
+            screenshotType: 'device',
+            deviceId: deviceId,
+          );
         }
+        throw ProcessException(
+          executable,
+          args,
+          'Failed to capture screenshot (Exit Code ${result.exitCode}):\n${errorMsg.trim()}',
+          result.exitCode,
+        );
       }
       return screenshotType;
     }
