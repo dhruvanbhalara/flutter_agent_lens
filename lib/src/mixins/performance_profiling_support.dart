@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/connection_support.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:vm_service/vm_service.dart';
-import '../enums/mcp_tool.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
-import 'connection_support.dart';
 
 /// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
 base mixin PerformanceProfilingSupport
@@ -279,10 +280,15 @@ base mixin PerformanceProfilingSupport
 
     // Refresh the isolate ID and cache after the restart
     final vm = await vmService!.getVM();
-    if (vm.isolates != null && vm.isolates!.isNotEmpty) {
-      isolateId = vm.isolates!.first.id!;
-      cachedLibraryId = null;
-      stderr.writeln('[mcp:hot_restart] Refreshed main isolate ID: $isolateId');
+    final isolates = vm.isolates ?? [];
+    if (isolates.isNotEmpty) {
+      final newId = isolates.first.id;
+      if (newId != null) {
+        isolateId = newId;
+        cachedLibraryId = null;
+        stderr
+            .writeln('[mcp:hot_restart] Refreshed main isolate ID: $isolateId');
+      }
     }
 
     return CallToolResult(content: [
@@ -682,20 +688,15 @@ base mixin PerformanceProfilingSupport
   /// Handles the profiling composite tool request.
   Future<CallToolResult> _handleProfiling(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'start':
-        return _handleStartProfiling(req);
-      case 'stop':
-        return _handleStopProfiling(req);
-      case 'get_cpu':
-        return _handleGetCpuProfile(req);
-      case 'diagnose_jank':
-        return _handleDiagnoseJank(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'start' => _handleStartProfiling(req),
+      'stop' => _handleStopProfiling(req),
+      'get_cpu' => _handleGetCpuProfile(req),
+      'diagnose_jank' => _handleDiagnoseJank(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown profiling action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

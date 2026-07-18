@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter_agent_lens/src/utils/process_runner.dart';
 import 'package:path/path.dart' as p;
-import 'utils/process_runner.dart';
 
 /// Represents a running Flutter or Dart application discovered on the local machine.
 final class DiscoveredApp {
@@ -21,6 +22,20 @@ final class DiscoveredApp {
 
   /// A descriptive identifier indicating how this app was discovered.
   final String configPath;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiscoveredApp &&
+          other.serviceUri == serviceUri &&
+          other.projectName == projectName &&
+          other.configPath == configPath;
+
+  @override
+  int get hashCode => Object.hash(serviceUri, projectName, configPath);
+
+  @override
+  String toString() => 'DiscoveredApp(project: $projectName, uri: $serviceUri)';
 }
 
 /// Finds running Flutter/Dart applications by scanning OS processes.
@@ -42,7 +57,7 @@ class PortDiscovery {
   final ProcessRunner processRunner;
 
   /// Creates a new [PortDiscovery] instance.
-  const PortDiscovery({this.processRunner = const ProcessRunner()});
+  const PortDiscovery({this.processRunner = const DefaultProcessRunner()});
 
   static final RegExp _vmUriPattern = RegExp(r'--vm-service-uri=(http://\S+)');
   static final RegExp _pidPattern = RegExp(r'^\S+\s+(\d+)');
@@ -109,7 +124,7 @@ class PortDiscovery {
           return apps;
         }
 
-        final lines = (psResult.stdout as String).split('\n');
+        final lines = psResult.stdout.toString().split('\n');
         var ddsCount = 0;
 
         for (final line in lines) {

@@ -1,7 +1,7 @@
-import 'package:test/test.dart';
 import 'package:dart_mcp/server.dart';
-import 'package:vm_service/vm_service.dart';
 import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
+import 'package:test/test.dart';
+import 'package:vm_service/vm_service.dart';
 
 void main() {
   group('ToolErrorHandler Tests', () {

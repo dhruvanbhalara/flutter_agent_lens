@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
-import '../enums/mcp_tool.dart';
-import '../enums/network_sort_by.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 
 /// Support mixin providing tools for capturing and analyzing HTTP traffic details.
 base mixin NetworkCaptureSupport
@@ -514,18 +514,14 @@ base mixin NetworkCaptureSupport
   /// Handles the network composite tool request.
   Future<CallToolResult> _handleNetwork(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'start':
-        return _handleStartNetworkCapture(req);
-      case 'stop':
-        return _handleStopNetworkCapture(req);
-      case 'get_profile':
-        return _handleGetNetworkProfile(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'start' => _handleStartNetworkCapture(req),
+      'stop' => _handleStopNetworkCapture(req),
+      'get_profile' => _handleGetNetworkProfile(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown network action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

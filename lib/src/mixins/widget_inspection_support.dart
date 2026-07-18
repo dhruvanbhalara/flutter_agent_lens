@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
-import 'package:vm_service/vm_service.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:path/path.dart' as p;
-import '../enums/mcp_tool.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
+import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for widget inspection, layout diagnostics, and widget tree retrieval.
 base mixin WidgetInspectionSupport
@@ -61,19 +62,15 @@ base mixin WidgetInspectionSupport
   /// Delegates widget actions to respective handlers.
   Future<CallToolResult> _handleWidget(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'inspect':
-        return _handleInspectLayoutConstraints(req);
-      case 'toggle_selection':
-        return _handleToggleWidgetSelection(req);
-      case 'get_tree':
-        return _handleGetWidgetTree(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'inspect' => _handleInspectLayoutConstraints(req),
+      'toggle_selection' => _handleToggleWidgetSelection(req),
+      'get_tree' => _handleGetWidgetTree(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown widget action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 
   /// Clears active inspection cache.

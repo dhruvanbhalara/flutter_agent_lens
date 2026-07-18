@@ -1,16 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:dtd/dtd.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/console_logging_support.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/path_resolver.dart';
+import 'package:flutter_agent_lens/src/port_discovery.dart';
 import 'package:vm_service/vm_service.dart' hide Event;
 import 'package:vm_service/vm_service_io.dart';
-import 'package:dtd/dtd.dart';
-import '../enums/mcp_tool.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
-import 'console_logging_support.dart';
-import '../port_discovery.dart';
-import '../path_resolver.dart';
 
 /// Support mixin providing tools for connecting, disconnecting, retrieving
 /// app information, and autodiscovering running Flutter/Dart applications.
@@ -152,19 +153,15 @@ base mixin ConnectionSupport
   /// Consolidated connection handler.
   Future<CallToolResult> _handleConnection(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'connect':
-        return _handleConnect(req);
-      case 'connect_dtd':
-        return _handleConnectDtd(req);
-      case 'disconnect':
-        return _handleDisconnect(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'connect' => _handleConnect(req),
+      'connect_dtd' => _handleConnectDtd(req),
+      'disconnect' => _handleDisconnect(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 
   /// Handles the connect tool request.
@@ -312,11 +309,17 @@ base mixin ConnectionSupport
             .writeln('[mcp:connect] Error enabling HTTP timeline logging: $e');
       }
 
-      final selectedIsolateName = vm.isolates
-              ?.firstWhere((i) => i.id == isolateId,
-                  orElse: () => vm.isolates!.first)
-              .name ??
-          'unknown';
+      final currentIsolates = vm.isolates ?? [];
+      final String selectedIsolateName;
+      if (currentIsolates.isNotEmpty) {
+        selectedIsolateName = currentIsolates
+                .firstWhere((i) => i.id == isolateId,
+                    orElse: () => currentIsolates.first)
+                .name ??
+            'unknown';
+      } else {
+        selectedIsolateName = 'unknown';
+      }
 
       // Register connected tools
       try {

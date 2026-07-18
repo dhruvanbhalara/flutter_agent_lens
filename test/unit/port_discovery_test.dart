@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:test/test.dart';
+
 import 'package:flutter_agent_lens/src/port_discovery.dart';
 import 'package:flutter_agent_lens/src/utils/process_runner.dart';
+import 'package:test/test.dart';
 
-class MockProcessRunner extends ProcessRunner {
+class MockProcessRunner implements ProcessRunner {
   final ProcessResult Function(String executable, List<String> arguments) onRun;
 
   const MockProcessRunner(this.onRun);

@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
-import 'package:path/path.dart' as p;
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/screenshot_types.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:image/image.dart' as img;
-import '../enums/mcp_tool.dart';
-import '../enums/screenshot_types.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
+import 'package:path/path.dart' as p;
 
 /// Support mixin providing tools for taking and visually comparing screenshots.
 base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
@@ -60,18 +61,14 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Delegates screenshot actions to respective handlers.
   Future<CallToolResult> _handleScreenshot(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'take':
-        return _handleTakeScreenshot(req);
-      case 'capture_baseline':
-      case 'compare':
-        return _handleCompareLayoutScreenshots(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'take' => _handleTakeScreenshot(req),
+      'capture_baseline' || 'compare' => _handleCompareLayoutScreenshots(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown screenshot action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 
   /// Handles the compare_layout_screenshots tool request.

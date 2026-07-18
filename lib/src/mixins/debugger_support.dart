@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/exception_pause_mode.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:vm_service/vm_service.dart' hide ExceptionPauseMode;
-import '../enums/exception_pause_mode.dart';
-import '../enums/mcp_tool.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
-import '../utils/string_utils.dart';
 
 /// Support mixin providing debugger capabilities including call stack retrieval,
 /// breakpoint management, pause configuration, and expression evaluation.
@@ -258,19 +259,15 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           '[mcp:evaluate_expression] Evaluating in library: $expression');
     }
 
-    final dynamic res;
-    if (frameIndex != null) {
-      res =
-          await vmService!.evaluateInFrame(isolateId!, frameIndex, expression);
-    } else {
-      final libraryId = await getEvaluationLibraryId();
-      res = await vmService!.evaluate(isolateId!, libraryId, expression);
-    }
+    final Object res = frameIndex != null
+        ? await vmService!.evaluateInFrame(isolateId!, frameIndex, expression)
+        : await vmService!
+            .evaluate(isolateId!, await getEvaluationLibraryId(), expression);
 
     final rawValStr = res is InstanceRef
         ? (res.valueAsString ?? res.toString())
         : res.toString();
-    final valStr = StringUtils.truncate(rawValStr, maxLength: 5000);
+    final valStr = truncateString(rawValStr, maxLength: 5000);
     final kindStr = res is InstanceRef ? res.kind : 'Unknown';
     final classStr = res is InstanceRef ? res.classRef?.name : 'Unknown';
     return CallToolResult(
@@ -287,16 +284,13 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Handles the breakpoint composite tool request.
   Future<CallToolResult> _handleBreakpoint(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'add':
-        return _handleAddBreakpoint(req);
-      case 'remove':
-        return _handleRemoveBreakpoint(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'add' => _handleAddBreakpoint(req),
+      'remove' => _handleRemoveBreakpoint(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown breakpoint action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

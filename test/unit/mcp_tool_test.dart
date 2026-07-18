@@ -1,9 +1,10 @@
-import 'package:test/test.dart';
-import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
-import 'package:flutter_agent_lens/src/enums/target_platform.dart';
-import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
 import 'package:flutter_agent_lens/src/enums/exception_pause_mode.dart';
+import 'package:flutter_agent_lens/src/enums/flutter_debug_flag.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
 import 'package:flutter_agent_lens/src/enums/screenshot_types.dart';
+import 'package:flutter_agent_lens/src/enums/target_platform.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('McpTool Enum Tests', () {
@@ -17,6 +18,30 @@ void main() {
       expect(McpTool.connection.requiresConnection, isFalse);
       expect(McpTool.discoverApps.requiresConnection, isFalse);
       expect(McpTool.memory.requiresConnection, isTrue);
+    });
+  });
+
+  group('FlutterDebugFlag Enum Tests', () {
+    test('fromString parsed successfully', () {
+      expect(FlutterDebugFlag.fromString('debugPaintSizeEnabled'),
+          equals(FlutterDebugFlag.debugPaint));
+      expect(FlutterDebugFlag.fromString('repaintRainbow'),
+          equals(FlutterDebugFlag.repaintRainbow));
+      expect(FlutterDebugFlag.fromString('timeDilation'),
+          equals(FlutterDebugFlag.timeDilation));
+      expect(FlutterDebugFlag.fromString('unknownFlag'), isNull);
+
+      // Additional lookup coverage
+      expect(FlutterDebugFlag.fromString('debugpaint'),
+          equals(FlutterDebugFlag.debugPaint));
+      expect(FlutterDebugFlag.fromString('DEBUGPaintSizeENABLED'),
+          equals(FlutterDebugFlag.debugPaint));
+      expect(FlutterDebugFlag.fromString('debugPaintBaselines'),
+          equals(FlutterDebugFlag.debugPaintBaselines));
+      expect(FlutterDebugFlag.fromString('debugrepaintrainbowenabled'),
+          equals(FlutterDebugFlag.repaintRainbow));
+      expect(FlutterDebugFlag.fromString('debuginvertoversizedimages'),
+          equals(FlutterDebugFlag.invertOversizedImages));
     });
   });
 

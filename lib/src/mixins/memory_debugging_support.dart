@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/models/memory_models.dart';
 import 'package:vm_service/vm_service.dart';
-import '../enums/mcp_tool.dart';
-import '../extensions/call_tool_request_x.dart';
-import '../models/memory_models.dart';
-import 'vm_connection_support.dart';
 
 /// Support mixin providing tools for analyzing heap usage, tracking class instances,
 /// and capturing and comparing memory snapshots.
@@ -110,7 +111,8 @@ base mixin MemoryDebuggingSupport
     final mdBuffer = StringBuffer();
 
     for (final instanceRef in instances) {
-      final instanceId = instanceRef.id!;
+      final instanceId = instanceRef.id;
+      if (instanceId == null) continue;
       bool isMounted = true;
       try {
         final evalResult =
@@ -126,8 +128,8 @@ base mixin MemoryDebuggingSupport
             await vmService!.getRetainingPath(isolateId!, instanceId, 15);
         final pathElements = <String>[];
 
-        for (final RetainingObject element
-            in (retainingPath.elements ?? []).cast<RetainingObject>()) {
+        final elements = retainingPath.elements ?? [];
+        for (final element in elements.whereType<RetainingObject>()) {
           final val = element.value;
           if (val is InstanceRef) {
             pathElements.add('${val.classRef?.name} (${val.id})');
@@ -354,8 +356,8 @@ base mixin MemoryDebuggingSupport
         await vmService!.getRetainingPath(isolateId!, objectId, limit);
     final pathElements = <String>[];
 
-    for (final RetainingObject element
-        in (retainingPath.elements ?? []).cast<RetainingObject>()) {
+    final elements = retainingPath.elements ?? [];
+    for (final element in elements.whereType<RetainingObject>()) {
       final val = element.value;
       if (val is InstanceRef) {
         pathElements.add('${val.classRef?.name} (${val.id})');
@@ -599,7 +601,7 @@ base mixin MemoryDebuggingSupport
 
     final topClasses = sorted
         .map((m) => ClassAllocation(
-              name: m.classRef!.name!,
+              name: m.classRef?.name ?? 'Unknown',
               bytes: m.bytesCurrent ?? 0,
               instances: m.instancesCurrent ?? 0,
             ))
@@ -671,7 +673,7 @@ base mixin MemoryDebuggingSupport
     for (final member in sortedBySizeFiltered.take(topN)) {
       final bytesCurrent = member.bytesCurrent ?? 0;
       final instancesCurrent = member.instancesCurrent ?? 0;
-      final className = member.classRef!.name!;
+      final className = member.classRef?.name ?? 'Unknown';
       final pct = heapUsage > 0
           ? ((bytesCurrent / heapUsage) * 100).toStringAsFixed(1)
           : '0.0';
@@ -685,13 +687,13 @@ base mixin MemoryDebuggingSupport
     for (final member in sortedByInstancesFiltered.take(10)) {
       final bytesCurrent = member.bytesCurrent ?? 0;
       final instancesCurrent = member.instancesCurrent ?? 0;
-      final className = member.classRef!.name!;
+      final className = member.classRef?.name ?? 'Unknown';
       output.add(
           '$instancesCurrent instances | ${formatBytes(bytesCurrent)} | $className');
     }
 
     final appClasses = sortedByInstancesFiltered
-        .where((m) => !_isVmInternal(m.classRef!.name!))
+        .where((m) => !_isVmInternal(m.classRef?.name ?? ''))
         .toList();
 
     if (appClasses.isNotEmpty) {
@@ -700,7 +702,7 @@ base mixin MemoryDebuggingSupport
       for (final cls in appClasses.take(20)) {
         final bytesCurrent = cls.bytesCurrent ?? 0;
         final instancesCurrent = cls.instancesCurrent ?? 0;
-        final className = cls.classRef!.name!;
+        final className = cls.classRef?.name ?? 'Unknown';
         output.add(
             '$instancesCurrent instances | ${formatBytes(bytesCurrent)} | $className');
       }
@@ -715,7 +717,7 @@ base mixin MemoryDebuggingSupport
       for (final cls in suspiciousClasses.take(5)) {
         final bytesCurrent = cls.bytesCurrent ?? 0;
         final instancesCurrent = cls.instancesCurrent ?? 0;
-        final className = cls.classRef!.name!;
+        final className = cls.classRef?.name ?? 'Unknown';
         output.add(
             '- $className: $instancesCurrent instances (${formatBytes(bytesCurrent)}) - check for leaks or excessive allocations');
       }
@@ -735,7 +737,7 @@ base mixin MemoryDebuggingSupport
       'top_classes': sortedBySizeFiltered
           .take(topN)
           .map((m) => {
-                'class': m.classRef!.name!,
+                'class': m.classRef?.name ?? 'Unknown',
                 'bytes': m.bytesCurrent ?? 0,
                 'instances': m.instancesCurrent ?? 0,
               })
@@ -743,7 +745,7 @@ base mixin MemoryDebuggingSupport
       'top_instances': sortedByInstancesFiltered
           .take(10)
           .map((m) => {
-                'class': m.classRef!.name!,
+                'class': m.classRef?.name ?? 'Unknown',
                 'bytes': m.bytesCurrent ?? 0,
                 'instances': m.instancesCurrent ?? 0,
               })
@@ -751,7 +753,7 @@ base mixin MemoryDebuggingSupport
       'app_classes': appClasses
           .take(20)
           .map((m) => {
-                'class': m.classRef!.name!,
+                'class': m.classRef?.name ?? 'Unknown',
                 'bytes': m.bytesCurrent ?? 0,
                 'instances': m.instancesCurrent ?? 0,
               })
@@ -815,26 +817,18 @@ base mixin MemoryDebuggingSupport
     if (action != 'list' && (vmService == null || isolateId == null)) {
       return notConnected();
     }
-    switch (action) {
-      case 'get_snapshot':
-        return _handleGetMemorySnapshot(req);
-      case 'save':
-        return _handleSaveSnapshot(req);
-      case 'compare':
-        return _handleCompareSnapshots(req);
-      case 'list':
-        return _handleListSnapshots(req);
-      case 'audit_leak':
-        return _handleAuditClassMemoryLeak(req);
-      case 'diff_allocations':
-        return _handleDiffHeapAllocations(req);
-      case 'get_referrers':
-        return _handleGetObjectReferrers(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'get_snapshot' => _handleGetMemorySnapshot(req),
+      'save' => _handleSaveSnapshot(req),
+      'compare' => _handleCompareSnapshots(req),
+      'list' => _handleListSnapshots(req),
+      'audit_leak' => _handleAuditClassMemoryLeak(req),
+      'diff_allocations' => _handleDiffHeapAllocations(req),
+      'get_referrers' => _handleGetObjectReferrers(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown memory action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

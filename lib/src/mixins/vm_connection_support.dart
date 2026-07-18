@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/path_resolver.dart';
 import 'package:vm_service/vm_service.dart';
-import '../enums/mcp_tool.dart';
-import '../path_resolver.dart';
 
 /// Base support mixin providing VM connection management, isolate management,
 /// and common schema definitions for Flutter Agent Lens MCP tools.
@@ -144,19 +145,21 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
 
   /// Helper to determine if an error is related to garbage collection or isolate sentinels.
   bool _isCollectedError(Object e) {
-    if (e is SentinelException) return true;
-    if (e is RPCError) {
-      if (e.code == 106 ||
-          e.message.contains('collected') ||
-          e.message.contains('Sentinel') ||
-          e.message.contains('sentinel')) {
-        return true;
-      }
-    }
-    final str = e.toString();
-    return str.contains('Collected') ||
-        str.contains('Sentinel') ||
-        str.contains('sentinel');
+    return switch (e) {
+      SentinelException() => true,
+      RPCError(:final code, :final message)
+          when code == 106 ||
+              message.contains('collected') ||
+              message.contains('Sentinel') ||
+              message.contains('sentinel') =>
+        true,
+      final error
+          when error.toString().contains('Collected') ||
+              error.toString().contains('Sentinel') ||
+              error.toString().contains('sentinel') =>
+        true,
+      _ => false,
+    };
   }
 
   /// Refreshes the active main isolate ID from the running Dart VM.
@@ -220,9 +223,6 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
         cleaned.endsWith('/ws/') ||
         cleaned.contains('/ws?')) {
       return false;
-    }
-    if (cleaned.contains('mock-secret-token')) {
-      return true;
     }
     if (cleaned.contains('auth_token=')) {
       return false;

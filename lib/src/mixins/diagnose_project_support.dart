@@ -1,20 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:dart_mcp/server.dart';
-import 'package:path/path.dart' as p;
 
-import '../enums/mcp_tool.dart';
-import '../enums/target_platform.dart';
-import '../extensions/call_tool_request_x.dart';
-import '../utils/process_runner.dart';
-import 'vm_connection_support.dart';
+import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/target_platform.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/process_runner.dart';
+import 'package:path/path.dart' as p;
 
 /// Support mixin providing tools for analyzing application bundle sizes and validating deep links.
 base mixin DiagnoseProjectSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   /// The process runner helper, allowing test mocks.
-  final ProcessRunner processRunner = const ProcessRunner();
+  ProcessRunner processRunner = const DefaultProcessRunner();
 
   /// Registers the consolidated project diagnostics tool.
   void registerDiagnoseProjectTools() {
@@ -68,17 +68,14 @@ base mixin DiagnoseProjectSupport
   /// Consolidated project diagnostics handler.
   Future<CallToolResult> _handleDiagnoseProject(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'bundle_size':
-        return _handleAnalyzeBundleSize(req);
-      case 'deep_links':
-        return _handleValidateDeepLinks(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'bundle_size' => _handleAnalyzeBundleSize(req),
+      'deep_links' => _handleValidateDeepLinks(req),
+      _ => CallToolResult(
           content: [TextContent(text: 'Unknown action: $action')],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 
   /// Handles the analyze_bundle_size tool request.

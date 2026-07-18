@@ -1,8 +1,8 @@
-import 'package:test/test.dart';
 import 'package:dart_mcp/server.dart';
-import 'package:stream_channel/stream_channel.dart';
-import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/diagnose_project_support.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:stream_channel/stream_channel.dart';
+import 'package:test/test.dart';
 
 base class DiagnoseProjectMock extends MCPServer
     with ToolsSupport, VmConnectionSupport, DiagnoseProjectSupport {

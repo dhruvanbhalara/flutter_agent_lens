@@ -15,8 +15,8 @@ linter:
     cascade_invocations: false
     sort_constructors_first: false
     require_trailing_commas: false
-    always_use_package_imports: false
-    directives_ordering: false
+    always_use_package_imports: true
+    directives_ordering: true
     omit_local_variable_types: false
     unnecessary_parenthesis: false
     avoid_types_on_closure_parameters: false

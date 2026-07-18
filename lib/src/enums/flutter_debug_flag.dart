@@ -24,17 +24,19 @@ enum FlutterDebugFlag {
   /// The actual suffix of the extension key under `ext.flutter.*`.
   final String extensionSuffix;
 
-  /// Resolves the debug flag from the tool parameter name input, defaulting to [debugPaint].
-  static FlutterDebugFlag fromString(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('paintbaselines')) {
-      return FlutterDebugFlag.debugPaintBaselines;
-    }
-    if (lower.contains('rainbow')) return FlutterDebugFlag.repaintRainbow;
-    if (lower.contains('oversized')) {
-      return FlutterDebugFlag.invertOversizedImages;
-    }
-    if (lower.contains('dilation')) return FlutterDebugFlag.timeDilation;
-    return FlutterDebugFlag.debugPaint;
-  }
+  /// Resolves the debug flag from the tool parameter name input.
+  /// Returns `null` if the flag is unsupported.
+  static FlutterDebugFlag? fromString(String name) =>
+      _lookup[name.toLowerCase()];
+
+  static final Map<String, FlutterDebugFlag> _lookup = {
+    for (final flag in FlutterDebugFlag.values) ...{
+      flag.flagName.toLowerCase(): flag,
+      flag.extensionSuffix.toLowerCase(): flag,
+    },
+    'debugpaint': FlutterDebugFlag.debugPaint,
+    'debugpaintbaselines': FlutterDebugFlag.debugPaintBaselines,
+    'debugrepaintrainbowenabled': FlutterDebugFlag.repaintRainbow,
+    'debuginvertoversizedimages': FlutterDebugFlag.invertOversizedImages,
+  };
 }

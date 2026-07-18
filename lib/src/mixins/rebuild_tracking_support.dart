@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
-import 'package:vm_service/vm_service.dart';
+import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:path/path.dart' as p;
-import '../enums/mcp_tool.dart';
-import '../extensions/call_tool_request_x.dart';
-import 'vm_connection_support.dart';
+import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing widget rebuild frequency tracking and analysis tools.
 base mixin RebuildTrackingSupport
@@ -493,20 +494,16 @@ base mixin RebuildTrackingSupport
   /// Handles the rebuild_tracking composite tool request.
   Future<CallToolResult> _handleRebuildTracking(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    switch (action) {
-      case 'start':
-        return _handleStartTrackingRebuilds(req);
-      case 'stop':
-        return _handleStopTrackingRebuilds(req);
-      case 'get_counts':
-        return _handleWidgetRebuildCounts(req);
-      default:
-        return CallToolResult(
+    return switch (action) {
+      'start' => _handleStartTrackingRebuilds(req),
+      'stop' => _handleStopTrackingRebuilds(req),
+      'get_counts' => _handleWidgetRebuildCounts(req),
+      _ => CallToolResult(
           content: [
             TextContent(text: 'Unknown rebuild tracking action: $action')
           ],
           isError: true,
-        );
-    }
+        ),
+    };
   }
 }

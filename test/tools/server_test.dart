@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'package:test/test.dart';
-import 'package:stream_channel/stream_channel.dart';
-import 'package:vm_service/vm_service.dart';
+
+import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/flutter_agent_lens.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
-import 'package:dart_mcp/server.dart';
+import 'package:stream_channel/stream_channel.dart';
+import 'package:test/test.dart';
+import 'package:vm_service/vm_service.dart';
 
 class FakeVmService extends VmService {
   final Map<String, Map<String, dynamic>> serviceExtensionResponses = {};
@@ -688,6 +689,78 @@ void main() {
       expect(result.isError, isTrue);
       expect((result.content.first as TextContent).text,
           contains('Unknown screenshot action'));
+    });
+
+    test('memory with invalid action returns error', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'invalid_memory_action',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Unknown memory action'));
+    });
+
+    test('profiling with invalid action returns error', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.profiling.name,
+          arguments: const {
+            'action': 'invalid_profiling_action',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Unknown profiling action'));
+    });
+
+    test('breakpoint with invalid action returns error', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.breakpoint.name,
+          arguments: const {
+            'action': 'invalid_breakpoint_action',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Unknown breakpoint action'));
+    });
+
+    test('network with invalid action returns error', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.network.name,
+          arguments: const {
+            'action': 'invalid_network_action',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Unknown network action'));
     });
 
     test('memory get_snapshot when not connected returns error result',
