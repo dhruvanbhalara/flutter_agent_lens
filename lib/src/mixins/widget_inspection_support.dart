@@ -303,14 +303,18 @@ base mixin WidgetInspectionSupport
     }
 
     if (childrenList != null) {
+      final futures = <Future<void>>[];
       for (var i = 0; i < childrenList.length; i++) {
         final child = childrenList[i];
         if (child is Map) {
           final childMap = Map<String, dynamic>.from(child);
           childrenList[i] = childMap;
-          await _expandWidgetChildren(
-              childMap, objectGroup, depth + 1, maxDepth);
+          futures.add(_expandWidgetChildren(
+              childMap, objectGroup, depth + 1, maxDepth));
         }
+      }
+      if (futures.isNotEmpty) {
+        await Future.wait(futures);
       }
     }
   }
