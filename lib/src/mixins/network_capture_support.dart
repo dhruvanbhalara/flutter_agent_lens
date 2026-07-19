@@ -433,7 +433,7 @@ base mixin NetworkCaptureSupport
 
       final statusSymbol = switch (reqMap) {
         {'error': final err} when err != null => '[ERROR] $err',
-        {'statusCode': final int code} => switch (code) {
+        {'response': {'statusCode': final int code}} => switch (code) {
             >= 400 => '[ERROR] $code',
             >= 300 => '[WARN]  $code',
             _ => '[OK]    $code',

@@ -16,6 +16,9 @@ final class PathResolver {
   /// Cached dictionary of all files in the workspace (for fallback lookups).
   Map<String, String>? _allWorkspaceFiles;
 
+  /// Future guarding concurrent workspace directory scanning.
+  Future<void>? _scanFuture;
+
   /// Resolves a VM-reported URI to a local absolute path.
   Future<String> resolveToAbsolutePath(String vmUri) async {
     final cached = _pathCache.remove(vmUri);
@@ -64,13 +67,16 @@ final class PathResolver {
     // 4. Fallback search (For complex layouts / multi-module monorepos) using lazy cached files
     final fileName = p.basename(relativePath);
     if (_allWorkspaceFiles == null) {
-      _allWorkspaceFiles = {};
-      final directory = Directory(workspaceRoot);
-      // We intentionally use async exists check to avoid blocking the main isolate on large workspaces.
-      // ignore: avoid_slow_async_io
-      if (await directory.exists()) {
-        await _scanDirectory(directory);
-      }
+      _scanFuture ??= () async {
+        _allWorkspaceFiles = {};
+        final directory = Directory(workspaceRoot);
+        // We intentionally use async exists check to avoid blocking the main isolate on large workspaces.
+        // ignore: avoid_slow_async_io
+        if (await directory.exists()) {
+          await _scanDirectory(directory);
+        }
+      }();
+      await _scanFuture;
     }
 
     final matchedPath = _allWorkspaceFiles![fileName];
@@ -93,6 +99,9 @@ final class PathResolver {
       }
       final entities = await dir.list(followLinks: false).toList();
       for (final entity in entities) {
+        if (_allWorkspaceFiles!.length >= 10000) {
+          return;
+        }
         if (entity is Directory) {
           final name = p.basename(entity.path);
           if (name == '.git' ||

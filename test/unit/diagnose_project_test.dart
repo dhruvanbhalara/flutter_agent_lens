@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/mixins/diagnose_project_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:path/path.dart' as p;
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 
@@ -144,6 +146,86 @@ void main() {
       expect(result.isError, isTrue);
       final text = (result.content.first as TextContent).text;
       expect(text, contains('Unsupported platform'));
+    });
+
+    test(
+        'bundle_size action with absolute path outside workspace root rejects input',
+        () async {
+      mock.workspaceRoot = '/some/workspace';
+      final tempFile =
+          await File(p.join(Directory.systemTemp.path, 'outside_analysis.json'))
+              .create();
+      try {
+        final result = await mock.callTool(
+          CallToolRequest(
+            name: 'diagnose_project',
+            arguments: {
+              'action': 'bundle_size',
+              'analysis_path': tempFile.path,
+            },
+          ),
+        );
+
+        expect(result.isError, isTrue);
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Access denied'));
+      } finally {
+        await tempFile.delete();
+      }
+    });
+
+    test('deep_links action with invalid build_variant rejects input',
+        () async {
+      mock.workspaceRoot = '/some/workspace';
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'diagnose_project',
+          arguments: const {
+            'action': 'deep_links',
+            'platform': 'android',
+            'build_variant': '--inject-flag',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Invalid build_variant value'));
+    });
+
+    test('deep_links action with invalid configuration rejects input',
+        () async {
+      mock.workspaceRoot = '/some/workspace';
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'diagnose_project',
+          arguments: const {
+            'action': 'deep_links',
+            'platform': 'ios',
+            'configuration': 'Release; inject_cmd',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Invalid configuration value'));
+    });
+
+    test('deep_links action with invalid target rejects input', () async {
+      mock.workspaceRoot = '/some/workspace';
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'diagnose_project',
+          arguments: const {
+            'action': 'deep_links',
+            'platform': 'ios',
+            'configuration': 'Release',
+            'target': '../escaped_path',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Invalid target value'));
     });
   });
 }

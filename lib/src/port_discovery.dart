@@ -62,6 +62,9 @@ class PortDiscovery {
   static final RegExp _vmUriPattern = RegExp(r'--vm-service-uri=(http://\S+)');
   static final RegExp _pidPattern = RegExp(r'^\S+\s+(\d+)');
 
+  static List<DiscoveredApp>? _cachedApps;
+  static DateTime? _lastDiscoveryTime;
+
   String _sanitizeUri(String rawUri) {
     final parsed = Uri.tryParse(rawUri);
     if (parsed == null) return '<malformed URI>';
@@ -70,6 +73,16 @@ class PortDiscovery {
 
   /// Finds running Flutter/Dart applications by scanning OS processes.
   Future<List<DiscoveredApp>> discoverActiveApps() async {
+    if (processRunner is DefaultProcessRunner) {
+      final now = DateTime.now();
+      if (_lastDiscoveryTime != null &&
+          _cachedApps != null &&
+          now.difference(_lastDiscoveryTime!) < const Duration(seconds: 5)) {
+        stderr.writeln('[discovery] Returning cached active apps.');
+        return _cachedApps!;
+      }
+    }
+
     final apps = <DiscoveredApp>[];
     stderr.writeln('[discovery] Starting process-based app discovery...');
 
@@ -179,6 +192,10 @@ class PortDiscovery {
       stderr.writeln('[discovery] Process scan failed: $e');
     }
 
+    if (processRunner is DefaultProcessRunner) {
+      _cachedApps = List.from(apps);
+      _lastDiscoveryTime = DateTime.now();
+    }
     return apps;
   }
 

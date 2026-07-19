@@ -691,6 +691,28 @@ void main() {
           contains('Unknown screenshot action'));
     });
 
+    test(
+        'screenshot compare with invalid baseline_name returns validation error',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+      server.workspaceRoot = '/some/workspace';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.screenshot.name,
+          arguments: const {
+            'action': 'compare',
+            'baseline_name': '../../invalid_name',
+          },
+        ),
+      );
+      expect(result.isError, isTrue);
+      expect((result.content.first as TextContent).text,
+          contains('Invalid baseline_name'));
+    });
+
     test('memory with invalid action returns error', () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';

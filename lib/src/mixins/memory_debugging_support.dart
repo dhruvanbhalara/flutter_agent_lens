@@ -110,40 +110,63 @@ base mixin MemoryDebuggingSupport
     final reports = <Map<String, dynamic>>[];
     final mdBuffer = StringBuffer();
 
-    for (final instanceRef in instances) {
-      final instanceId = instanceRef.id;
-      if (instanceId == null) continue;
-      bool isMounted = true;
-      try {
-        final evalResult =
-            await vmService!.evaluate(isolateId!, instanceId, 'this.mounted');
-        isMounted =
-            evalResult is InstanceRef && evalResult.valueAsString == 'true';
-      } catch (_) {
-        // Class doesn't have a mounted property, skip it
-        continue;
-      }
-      if (!isMounted) {
-        final retainingPath =
-            await vmService!.getRetainingPath(isolateId!, instanceId, 15);
-        final pathElements = <String>[];
-
-        final elements = retainingPath.elements ?? [];
-        for (final element in elements.whereType<RetainingObject>()) {
-          final val = element.value;
-          if (val is InstanceRef) {
-            pathElements.add('${val.classRef?.name} (${val.id})');
-          } else {
-            pathElements.add(val.toString());
-          }
+    final mountedResults = await Future.wait(
+      instances.map((instanceRef) async {
+        final instanceId = instanceRef.id;
+        if (instanceId == null) {
+          return (instanceId: null, isMounted: true);
         }
+        try {
+          final evalResult = await vmService!.evaluate(
+            isolateId!,
+            instanceId,
+            'this.mounted',
+          );
+          final isMounted =
+              evalResult is InstanceRef && evalResult.valueAsString == 'true';
+          return (instanceId: instanceId, isMounted: isMounted);
+        } catch (_) {
+          return (instanceId: instanceId, isMounted: true);
+        }
+      }),
+    );
 
-        reports.add({
-          'instance_id': instanceId,
-          'mounted': false,
-          'retaining_path': pathElements,
-        });
-      }
+    final unmountedInstances = mountedResults
+        .where((r) => r.instanceId != null && !r.isMounted)
+        .map((r) => r.instanceId!)
+        .toList();
+
+    if (unmountedInstances.isNotEmpty) {
+      final retainingPathResults = await Future.wait(
+        unmountedInstances.map((instanceId) async {
+          try {
+            final retainingPath =
+                await vmService!.getRetainingPath(isolateId!, instanceId, 15);
+            final pathElements = <String>[];
+            final elements = retainingPath.elements ?? [];
+            for (final element in elements.whereType<RetainingObject>()) {
+              final val = element.value;
+              if (val is InstanceRef) {
+                pathElements.add('${val.classRef?.name} (${val.id})');
+              } else {
+                pathElements.add(val.toString());
+              }
+            }
+            return {
+              'instance_id': instanceId,
+              'mounted': false,
+              'retaining_path': pathElements,
+            };
+          } catch (e) {
+            return {
+              'instance_id': instanceId,
+              'mounted': false,
+              'retaining_path': ['Error retrieving retaining path: $e'],
+            };
+          }
+        }),
+      );
+      reports.addAll(retainingPathResults);
     }
 
     if (reports.isEmpty) {
