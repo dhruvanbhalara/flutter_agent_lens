@@ -60,6 +60,9 @@ enum McpTool {
   /// Trigger a scroll gesture on the running application.
   triggerScrollGesture('trigger_scroll_gesture'),
 
+  /// Retrieve the application's current routing/navigation stacks.
+  getNavigationStack('get_navigation_stack'),
+
   /// Set response format for all tools (markdown or json).
   setResponseFormat('set_response_format', requiresConnection: false);
 
