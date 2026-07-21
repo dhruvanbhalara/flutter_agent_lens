@@ -1,3 +1,8 @@
+## 1.6.1
+
+### Added
+- Added `exclude_flutter_widgets` option (default: `true`) to `rebuild_tracking` to filter out built-in framework and dependency widgets.
+
 ## 1.6.0
 
 ### Changed

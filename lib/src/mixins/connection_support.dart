@@ -22,6 +22,8 @@ base mixin ConnectionSupport
         VmConnectionSupport,
         ConsoleLoggingSupport,
         RootsTrackingSupport {
+  static const _validSchemes = {'ws', 'wss', 'http', 'https'};
+
   /// The active connection to the Dart Tooling Daemon.
   DartToolingDaemon? dtdClient;
 
@@ -185,8 +187,7 @@ base mixin ConnectionSupport
           'Required parameter "uri" or "vmServiceUri" is missing.'),
     };
     final parsed = Uri.tryParse(rawUri);
-    if (parsed == null ||
-        !{'ws', 'wss', 'http', 'https'}.contains(parsed.scheme)) {
+    if (parsed == null || !_validSchemes.contains(parsed.scheme)) {
       return CallToolResult(
         content: [
           TextContent(
@@ -368,7 +369,9 @@ base mixin ConnectionSupport
   Future<void> _resolveWorkspaceRoot(CallToolRequest req) async {
     workspaceRoot = req.arg<String>('workspace_root');
 
-    if (workspaceRoot == null || workspaceRoot!.isEmpty) {
+    if (workspaceRoot case final root? when root.isNotEmpty) {
+      // workspaceRoot is already resolved and not empty
+    } else {
       try {
         final clientRoots = await roots;
         if (clientRoots.isNotEmpty) {
@@ -385,8 +388,9 @@ base mixin ConnectionSupport
       }
     }
 
-    if (workspaceRoot != null) {
-      pathResolver = PathResolver(workspaceRoot!);
+    if (workspaceRoot case final root? when root.isNotEmpty) {
+      pathResolver = PathResolver(root);
+      await loadWorkspacePackages();
     }
   }
 
@@ -461,9 +465,10 @@ base mixin ConnectionSupport
         content: [TextContent(text: report.toString().trim())],
       );
     } catch (e) {
-      if (dtdClient != null) {
+      final client = dtdClient;
+      if (client != null) {
         try {
-          await dtdClient!.close();
+          await client.close();
         } catch (_) {}
         dtdClient = null;
         dtdUri = null;
@@ -564,6 +569,12 @@ base mixin ConnectionSupport
     vmService = null;
     vmServiceUri = null;
     isolateId = null;
+    workspaceRoot = null;
+    pathResolver = null;
+    cachedLibraryId = null;
+    cachedPackageName = null;
+    packageResolver = null;
+    isBuiltInWidgetCache.clear();
     return CallToolResult(
       content: [TextContent(text: 'Disconnected from Flutter app.')],
     );
