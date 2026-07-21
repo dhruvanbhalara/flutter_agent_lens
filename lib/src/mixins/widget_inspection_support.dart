@@ -57,6 +57,20 @@ base mixin WidgetInspectionSupport
       ),
       _handleWidget,
     );
+
+    registerTool(
+      Tool(
+        name: McpTool.getNavigationStack.name,
+        description:
+            "Retrieve the application's current routing/navigation stacks.",
+        inputSchema: emptySchema(),
+        annotations: ToolAnnotations(
+          readOnlyHint: true,
+          idempotentHint: true,
+        ),
+      ),
+      _handleGetNavigationStack,
+    );
   }
 
   /// Delegates widget actions to respective handlers.
@@ -456,6 +470,271 @@ base mixin WidgetInspectionSupport
     final sourceLine = creationLocation['line'] as int?;
     return (sourceFile, sourceLine);
   }
+
+  /// Handles retrieving the navigation stack tree from the running application.
+  Future<CallToolResult> _handleGetNavigationStack(CallToolRequest req) async {
+    stderr.writeln('[mcp:get_navigation_stack] Retrieving navigation tree...');
+    try {
+      if (isolateId == null || vmService == null) {
+        return CallToolResult(
+          content: [TextContent(text: 'No active VM connection.')],
+          isError: true,
+        );
+      }
+
+      final isolate = await vmService!.getIsolate(isolateId!);
+      if (isolate.libraries == null) {
+        return CallToolResult(
+          content: [TextContent(text: 'No libraries found in target isolate.')],
+          isError: true,
+        );
+      }
+
+      // Evaluate the navigation script inside 'navigator.dart' to access the private '_history' field.
+      final navigatorLib = isolate.libraries!.firstWhere(
+        (lib) => lib.uri == 'package:flutter/src/widgets/navigator.dart',
+        orElse: () =>
+            throw StateError('Navigator library not found in target isolate.'),
+      );
+
+      // 'navigator.dart' does not import 'widget_inspector.dart' so WidgetInspectorService is undefined there.
+      // We resolve the WidgetInspectorService.instance ID in the inspector library, then pass it via 'scope'.
+      final inspectorLib = isolate.libraries!.firstWhere(
+        (lib) => lib.uri == 'package:flutter/src/widgets/widget_inspector.dart',
+        orElse: () => navigatorLib,
+      );
+
+      String? inspectorServiceId;
+      if (inspectorLib.id != null &&
+          inspectorLib.uri ==
+              'package:flutter/src/widgets/widget_inspector.dart') {
+        try {
+          final inspectorServiceEval = await vmService!.evaluate(
+            isolateId!,
+            inspectorLib.id!,
+            'WidgetInspectorService.instance',
+          );
+          if (inspectorServiceEval is InstanceRef) {
+            inspectorServiceId = inspectorServiceEval.id;
+          }
+        } catch (_) {}
+      }
+
+      final libId = navigatorLib.id;
+      if (libId == null) {
+        return CallToolResult(
+          content: [TextContent(text: 'Navigator library ID is null.')],
+          isError: true,
+        );
+      }
+
+      final eval = await vmService!.evaluate(
+        isolateId!,
+        libId,
+        _navigationStackScript.replaceAll('\n', ' ').replaceAll('\r', ' '),
+        scope: inspectorServiceId != null
+            ? {'inspectorService': inspectorServiceId}
+            : null,
+      );
+      if (eval is! InstanceRef) {
+        return CallToolResult(
+          content: [
+            TextContent(
+                text:
+                    'Evaluation failed. Unexpected result type: ${eval.runtimeType}')
+          ],
+          isError: true,
+        );
+      }
+
+      var jsonStr = eval.valueAsString;
+      if (eval.valueAsStringIsTruncated == true) {
+        final fullObj = await vmService!.getObject(isolateId!, eval.id!);
+        if (fullObj is Instance) {
+          jsonStr = fullObj.valueAsString;
+        }
+      }
+      if (jsonStr == null) {
+        return CallToolResult(
+          content: [TextContent(text: 'Evaluation result string is null.')],
+          isError: true,
+        );
+      }
+
+      final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
+      if (decoded.containsKey('error')) {
+        return CallToolResult(
+          content: [
+            TextContent(text: 'Navigation tree error: ${decoded['error']}')
+          ],
+          isError: true,
+        );
+      }
+
+      final currentUrl = decoded['currentUrl'] as String?;
+      final staticRouteTree = decoded['staticRouteTree'] as String?;
+      final navRaw = decoded['navigators'] as List<dynamic>? ?? [];
+      final delegates = decoded['delegates'] as List<dynamic>? ?? [];
+      final evalLogs = decoded['logs'] as List<dynamic>? ?? [];
+      stderr.writeln(
+          '[mcp:get_navigation_stack] Found router delegates in tree: $delegates');
+      stderr.writeln('[mcp:get_navigation_stack] Eval logs: $evalLogs');
+
+      final navList = navRaw.cast<Map<String, dynamic>>().toList();
+      final navMap = <int, Map<String, dynamic>>{};
+      for (final nav in navList) {
+        final id = nav['id'] as int?;
+        if (id != null) {
+          navMap[id] = nav;
+        }
+      }
+
+      final md = StringBuffer();
+      if (currentUrl != null) {
+        md.writeln('Current URL: $currentUrl');
+        md.writeln();
+      }
+
+      if (staticRouteTree != null && staticRouteTree.trim().isNotEmpty) {
+        md.writeln('Static Route Tree:');
+        md.writeln(staticRouteTree.trim());
+        md.writeln();
+      }
+
+      int maxRouteCount = 0;
+
+      void renderNav(int id, String indent, {required bool isLast}) {
+        final nav = navMap[id];
+        if (nav == null) return;
+
+        final routes = nav['routes'] as List<dynamic>? ?? [];
+        final parentId = nav['parentId'] as int?;
+        final depth = routes.length;
+        if (depth > maxRouteCount) maxRouteCount = depth;
+
+        final label = parentId == null ? 'Navigator [root]' : 'Navigator';
+        md.writeln('$indent$label ($depth routes)');
+
+        final children = navList.where((n) => n['parentId'] == id).toList();
+        final renderedChildren = <int>{};
+
+        for (var i = 0; i < routes.length; i++) {
+          final r = routes[i] as Map<String, dynamic>;
+          var name = r['name'] as String? ?? 'anonymous';
+          final screenName = r['screenName'] as String?;
+          final routeHash = r['hash'] as int? ?? 0;
+          final isCurrent = r['isCurrent'] == true;
+          final isFirst = r['isFirst'] == true;
+          final routeType = r['type'] as String? ?? '';
+
+          bool isScrambled = false;
+          if (name.length == 32) {
+            isScrambled = true;
+            for (final charCode in name.codeUnits) {
+              if (charCode < 89 || charCode > 121) {
+                isScrambled = false;
+                break;
+              }
+            }
+          }
+
+          final isHashcode = RegExp(r'^\d+$').hasMatch(name);
+
+          if (screenName != null) {
+            if (name == 'anonymous' || isScrambled || isHashcode) {
+              name = screenName;
+            } else if (name != screenName) {
+              name = '$name ($screenName)';
+            }
+          } else if (isScrambled) {
+            name = 'GoRouter Shell (wrapper)';
+          }
+
+          final nestedChildren = children
+              .where((n) => n['parentRouteHash'] == routeHash && routeHash != 0)
+              .toList();
+
+          final isLastRoute = i == routes.length - 1 &&
+              children
+                  .where((n) => !renderedChildren.contains(n['id'] as int))
+                  .isEmpty;
+
+          final branch = isLastRoute ? '$indent  └──' : '$indent  ├──';
+          final tag = isCurrent ? ' [current]' : (isFirst ? ' [root]' : '');
+          final cleanType =
+              routeType.replaceAll('<dynamic>', '').replaceAll('<void>', '');
+          final typeStr = (cleanType.isNotEmpty && cleanType != 'Route')
+              ? ' ($cleanType)'
+              : '';
+          md.writeln('$branch $name$typeStr$tag');
+
+          for (var ci = 0; ci < nestedChildren.length; ci++) {
+            final childId = nestedChildren[ci]['id'] as int;
+            renderedChildren.add(childId);
+            final childIsLast = ci == nestedChildren.length - 1 && isLastRoute;
+            renderNav(childId, '$indent      ', isLast: childIsLast);
+          }
+        }
+
+        final remainingChildren = children
+            .where((n) => !renderedChildren.contains(n['id'] as int))
+            .toList();
+
+        for (var ci = 0; ci < remainingChildren.length; ci++) {
+          final childId = remainingChildren[ci]['id'] as int;
+          final childIsLast = ci == remainingChildren.length - 1;
+          renderNav(childId, '$indent      ', isLast: childIsLast);
+        }
+      }
+
+      final roots = navList.where((n) => n['parentId'] == null).toList();
+
+      if (roots.isEmpty && navList.isNotEmpty) {
+        for (final n in navList) {
+          renderNav(n['id'] as int, '', isLast: true);
+        }
+      } else {
+        for (var i = 0; i < roots.length; i++) {
+          renderNav(roots[i]['id'] as int, '', isLast: i == roots.length - 1);
+        }
+      }
+
+      if (navList.isEmpty) {
+        md.writeln('No active navigators found.');
+      }
+
+      md.writeln();
+      final hasLeak = maxRouteCount >= 20;
+      if (hasLeak) {
+        md.writeln(
+            'WARNING: Navigator stack depth $maxRouteCount exceeds limit of 20. Possible navigation leak.');
+      } else {
+        md.writeln('Max stack depth: $maxRouteCount/20. No leak detected.');
+      }
+
+      return serializeDualFormat(
+        title: 'Navigation Tree',
+        markdownBody: md.toString(),
+        structuredData: {
+          'current_url': currentUrl,
+          'static_route_tree': staticRouteTree,
+          'navigator_count': navList.length,
+          'max_depth': maxRouteCount,
+          'has_leak_warning': hasLeak,
+          'navigators': navList,
+          'delegates': delegates,
+          'logs': evalLogs,
+        },
+      );
+    } catch (e, stack) {
+      stderr.writeln(
+          '[mcp:get_navigation_stack] Error retrieving navigation: $e\n$stack');
+      return CallToolResult(
+        content: [TextContent(text: 'Failed to retrieve navigation stack: $e')],
+        isError: true,
+      );
+    }
+  }
 }
 
 /// Represents a flattened, simplified widget node from the widget tree.
@@ -510,3 +789,350 @@ final class _FlatWidget {
     };
   }
 }
+
+const String _navigationStackScript = r'''
+jsonEncode((() {
+  final blacklist = {
+    "Builder", "StatefulBuilder", "StatelessBuilder", "Directionality",
+    "MediaQuery", "Theme", "AnimatedTheme", "IconTheme", "DefaultTextStyle",
+    "Localizations", "Semantics", "Focus", "FocusScope", "Actions", "Shortcuts",
+    "Navigator", "Overlay", "AbsorbPointer", "IgnorePointer", "GestureDetector",
+    "RawGestureDetector", "Listener", "MouseRegion", "TickerMode", "AnimatedSize",
+    "CustomPaint", "RepaintBoundary", "CompositedTransformTarget", "CompositedTransformFollower",
+    "Padding", "Align", "Center", "SizedBox", "ConstrainedBox", "Container",
+    "AnimatedBuilder", "SlideTransition", "FadeTransition", "ScaleTransition",
+    "RotationTransition", "SizeTransition", "DecoratedBox", "ColoredBox",
+    "DefaultSelectionStyle", "SelectionArea", "OverlayPortal", "CheckedModeBanner",
+    "Title", "DefaultTextEditingActions", "TapRegion", "ShortcutRegistrar",
+    "NotificationListener", "KeyedSubtree", "BlockSemantics", "ExcludeSemantics",
+    "ModalBarrier", "SemanticsDebugger", "RawImage", "Image", "Icon",
+    "InheritedTheme", "DefaultColor", "RichText", "RawKeyboardListener",
+    "PrimaryScrollController", "ScrollConfiguration", "Scrollable", "Viewport",
+    "ShrinkWrappingViewport", "SliverPadding", "SliverList", "SliverGrid",
+    "ListWheelViewport", "IgnoreBaseline", "Visibility", "AnimatedDefaultTextStyle",
+    "AnimatedPhysicalModel", "PhysicalModel", "MetaSheets", "BlocProvider",
+    "BlocBuilder", "BlocListener", "MultiBlocProvider", "Provider", "Consumer",
+    "ListenableProvider", "ChangeNotifierProvider", "PageStorage", "Offstage",
+    "AutomaticKeepAlive", "KeepAlive", "FocusMarker", "ShortcutsMarker",
+    "ActionsMarker", "PopScope", "FocusTraversalGroup", "InheritedGoRouter",
+    "InheritedProvider", "ListenableProvider", "DeferredInheritedProvider"
+  };
+  String? currentUrl;
+  String? staticRouteTree;
+  final delegatesList = <String>[];
+  final logsList = <String>[];
+
+  void inspectRouter(dynamic el) {
+    if (el == null) return;
+    try {
+      dynamic delegate;
+      dynamic parser;
+      dynamic provider;
+
+      final wt = el.widget.runtimeType.toString();
+      if (wt.startsWith("Router<") || wt == "Router") {
+        try {
+          final dynamic router = el.widget;
+          delegate = router.routerDelegate;
+          parser = router.routeInformationParser;
+          provider = router.routeInformationProvider;
+        } catch (_) {}
+      }
+
+      if (delegate == null) {
+        try { delegate = (el.widget as dynamic).routerDelegate; } catch (_) {}
+      }
+      if (parser == null) {
+        try { parser = (el.widget as dynamic).routeInformationParser; } catch (_) {}
+      }
+      if (provider == null) {
+        try { provider = (el.widget as dynamic).routeInformationProvider; } catch (_) {}
+      }
+
+      if (provider != null) {
+        try {
+          final dynamic routeInfo = provider.value;
+          if (routeInfo != null) {
+            final String? loc = routeInfo.uri?.toString() ?? routeInfo.location;
+            if (loc != null && loc.isNotEmpty) {
+              logsList.add("Found location via RouteInformationProvider: $loc");
+              if (currentUrl == null || loc.length > currentUrl!.length) {
+                currentUrl = loc;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (delegate != null) {
+        final delType = delegate.runtimeType.toString();
+        delegatesList.add(delType);
+
+        try {
+          final dynamic config = delegate.currentConfiguration;
+          if (config != null) {
+            String? loc;
+            if (parser != null) {
+              try {
+                final dynamic routeInfo = parser.restoreRouteInformation(config);
+                loc = routeInfo?.uri?.toString() ?? routeInfo?.location;
+              } catch (_) {}
+            }
+            if (loc == null) {
+              try { loc = config.uri?.toString(); } catch (_) {}
+            }
+            if (loc == null) {
+              try { loc = config.location as String?; } catch (_) {}
+            }
+            if (loc != null && loc.isNotEmpty) {
+              logsList.add("Found location via generic Router config: $loc");
+              if (currentUrl == null || loc.length > currentUrl!.length) {
+                currentUrl = loc;
+              }
+            }
+          }
+        } catch (e) {
+          logsList.add("Generic Router resolve log: $e");
+        }
+
+        try {
+          final dynamic configuration = (delegate as dynamic).configuration;
+          if (configuration != null) {
+            staticRouteTree ??= configuration.debugKnownRoutes() as String?;
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+    el.visitChildren(inspectRouter);
+  }
+
+  String? getScreenName(dynamic route) {
+    if (route == null) return null;
+    final genericWrappers = {"Builder", "StatefulBuilder", "StatelessBuilder", "anonymous"};
+    String? reflectedName;
+    try {
+      final dynamic builder = (route as dynamic).builder;
+      if (builder != null) {
+        final str = builder.runtimeType.toString();
+        if (str.contains('=>')) reflectedName = str.split('=>').last.trim();
+      }
+    } catch (_) {}
+    if (reflectedName == null) {
+      try {
+        final dynamic pageBuilder = (route as dynamic).pageBuilder;
+        if (pageBuilder != null) {
+          final str = pageBuilder.runtimeType.toString();
+          if (str.contains('=>')) reflectedName = str.split('=>').last.trim();
+        }
+      } catch (_) {}
+    }
+    if (reflectedName == null) {
+      try {
+        final dynamic child = (route.settings as dynamic).child;
+        if (child != null) reflectedName = child.runtimeType.toString();
+      } catch (_) {}
+    }
+
+    if (reflectedName != null) {
+      final cleanReflected = reflectedName.split("<").first;
+      final isGeneric = genericWrappers.contains(cleanReflected) ||
+          cleanReflected.contains("Provider") ||
+          cleanReflected.contains("Consumer") ||
+          cleanReflected.contains("Selector");
+      if (!isGeneric) {
+        return reflectedName;
+      }
+    }
+
+    try {
+      final context = route.subtreeContext;
+      if (context != null) {
+        String? foundName;
+        String? fallbackName;
+        void walk(dynamic el, int depth) {
+          if (foundName != null || el == null || depth > 40) return;
+          try {
+            final dynamic widget = el.widget;
+            if (inspectorService != null && inspectorService._isValueCreatedByLocalProject(widget)) {
+              final wType = widget.runtimeType.toString();
+              final baseWType = wType.split("<").first;
+              bool isGeneric = genericWrappers.contains(baseWType) ||
+                  baseWType.contains("Provider") ||
+                  baseWType.contains("Consumer") ||
+                  baseWType.contains("Selector") ||
+                  baseWType.contains("Bloc") ||
+                  baseWType.contains("Builder") ||
+                  blacklist.contains(baseWType);
+              if (!isGeneric) {
+                foundName = wType;
+                return;
+              }
+            }
+          } catch (_) {}
+          final typeStr = el.widget.runtimeType.toString();
+          final baseType = typeStr.split("<").first;
+          bool ignore = blacklist.contains(baseType) ||
+              baseType.contains("Provider") ||
+              baseType.contains("Bloc") ||
+              baseType.contains("Consumer") ||
+              baseType.contains("Selector") ||
+              baseType.contains("GoRouter") ||
+              baseType.contains("Scope");
+          if (!typeStr.startsWith("_") && !ignore) {
+            fallbackName ??= typeStr;
+          }
+          el.visitChildren((child) => walk(child, depth + 1));
+        }
+        walk(context, 0);
+        if (foundName != null) return foundName;
+        if (fallbackName != null) return fallbackName;
+      }
+    } catch (_) {}
+
+    try {
+      final name = route.settings?.name;
+      if (name != null && name != '/' && name != 'anonymous') {
+        return name;
+      }
+    } catch (_) {}
+
+    return reflectedName;
+  }
+
+  /* Walks up the element tree using element reflection to find the ModalRoute.
+     We do this to avoid referencing the 'ModalRoute' class identifier directly,
+     which might compile-fail depending on library context/imports. */
+  dynamic findParentRoute(dynamic el) {
+    dynamic current = el;
+    while (current != null) {
+      try {
+        if (current.runtimeType.toString() == "StatefulElement" &&
+            current.state.runtimeType.toString().contains("_ModalScopeState")) {
+          return current.state.widget.route;
+        }
+      } catch (_) {}
+      try {
+        current = current._parent;
+      } catch (_) {
+        break;
+      }
+    }
+    return null;
+  }
+
+  final navList = <Map<String, dynamic>>[];
+  void findNavigators(dynamic el, int? parentNavId) {
+    if (el == null) return;
+    int? myNavId = parentNavId;
+    try {
+      if (el.runtimeType.toString() == "StatefulElement" &&
+          el.state.runtimeType.toString() == "NavigatorState") {
+        final nav = el.state;
+        final id = nav.hashCode;
+        int? parentRouteHash;
+        try {
+          final pr = findParentRoute(el);
+          if (pr != null) parentRouteHash = pr.hashCode;
+        } catch (_) {}
+        final routes = <Map<String, dynamic>>[];
+        try {
+          final present = <dynamic>[];
+          for (final e in nav._history) {
+            try {
+              if (e.runtimeType.toString().contains("RouteEntry")) {
+                bool presentFlag = true;
+                try { presentFlag = e.isPresent; } catch (_) {}
+                if (presentFlag && e.route != null) {
+                  present.add(e.route);
+                }
+              } else {
+                present.add(e);
+              }
+            } catch (_) {}
+          }
+          final total = present.length;
+          final cap = 20;
+          final kept = total <= cap ? present : [...present.take(10), ...present.skip(total - 10)];
+          bool trimmed = total > cap;
+          for (final route in kept) {
+            String? name;
+            try {
+              name = route.settings.name;
+            } catch (_) {}
+            if (name == null) {
+              try {
+                final keyVal = (route.settings as dynamic).key?.value;
+                if (keyVal is String && keyVal.isNotEmpty) name = keyVal;
+              } catch (_) {}
+            }
+            if (name == null) name = "anonymous";
+
+            bool isCurrent = false;
+            bool isFirst = false;
+            try { isCurrent = route.isCurrent; } catch (_) {}
+            try { isFirst = route.isFirst; } catch (_) {}
+
+            String? screenName = getScreenName(route);
+            String routeType = "Route";
+            try {
+              routeType = route.runtimeType.toString();
+            } catch (_) {}
+            String settingsType = "RouteSettings";
+            try {
+              settingsType = route.settings.runtimeType.toString();
+            } catch (_) {}
+            int routeHash = route.hashCode;
+
+            routes.add({
+              "name": name,
+              "screenName": screenName,
+              "type": routeType,
+              "settingsType": settingsType,
+              "hash": routeHash,
+              "isCurrent": isCurrent,
+              "isFirst": isFirst
+            });
+          }
+          if (trimmed) {
+            routes.insert(10, {
+              "name": "...(${total - 20} routes omitted)...",
+              "screenName": null,
+              "type": "",
+              "settingsType": "",
+              "hash": 0,
+              "isCurrent": false,
+              "isFirst": false
+            });
+          }
+        } catch (_) {}
+        navList.add({
+          "id": id,
+          "parentId": parentNavId,
+          "parentRouteHash": parentRouteHash,
+          "total": routes.length,
+          "routes": routes
+        });
+        myNavId = id;
+      }
+    } catch (_) {}
+    el.visitChildren((child) => findNavigators(child, myNavId));
+  }
+
+  try {
+    final root = WidgetsBinding.instance.rootElement;
+    if (root != null) {
+      inspectRouter(root);
+      findNavigators(root, null);
+    }
+  } catch (e) {
+    return {"error": e.toString()};
+  }
+  return {
+    "currentUrl": currentUrl,
+    "staticRouteTree": staticRouteTree,
+    "navigators": navList,
+    "delegates": delegatesList,
+    "logs": logsList
+  };
+})())
+''';
