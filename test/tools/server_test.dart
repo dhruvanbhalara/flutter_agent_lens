@@ -15,6 +15,10 @@ class FakeVmService extends VmService {
   RPCError? Function(String method)? customServiceExtensionError;
   Object? Function(String expression)? customEvaluateError;
 
+  final StreamController<Event> _gcEventController =
+      StreamController<Event>.broadcast();
+  List<String> activeStreamSubscriptions = [];
+
   FakeVmService()
       : super(
           const Stream<dynamic>.empty(),
@@ -23,6 +27,55 @@ class FakeVmService extends VmService {
 
   @override
   Stream<Event> get onExtensionEvent => const Stream<Event>.empty();
+
+  @override
+  Stream<Event> get onGCEvent => _gcEventController.stream;
+
+  void emitGcEvent({String gcType = 'Scavenge', int? timestamp}) {
+    _gcEventController.add(Event(
+      kind: 'GC',
+      timestamp: timestamp ?? DateTime.now().millisecondsSinceEpoch,
+      gcType: gcType,
+    ));
+  }
+
+  @override
+  Future<Success> streamListen(String streamId) async {
+    if (activeStreamSubscriptions.contains(streamId)) {
+      throw RPCError('streamListen', 103, 'Stream already subscribed');
+    }
+    activeStreamSubscriptions.add(streamId);
+    return Success();
+  }
+
+  @override
+  Future<Success> streamCancel(String streamId) async {
+    activeStreamSubscriptions.remove(streamId);
+    return Success();
+  }
+
+  @override
+  Future<ProcessMemoryUsage> getProcessMemoryUsage() async {
+    return ProcessMemoryUsage(
+      root: ProcessMemoryItem(
+        name: 'Total',
+        description: 'Total process memory',
+        size: 50 * 1024 * 1024,
+        children: [
+          ProcessMemoryItem(
+            name: 'Dart',
+            description: 'Dart heap memory',
+            size: 20 * 1024 * 1024,
+          ),
+          ProcessMemoryItem(
+            name: 'Native',
+            description: 'Native memory',
+            size: 30 * 1024 * 1024,
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Future<Response> callServiceExtension(
@@ -369,6 +422,281 @@ void main() {
       final text = (result.content.first as TextContent).text;
       expect(text, contains('+1.46 KB')); // 1500 bytes diff
       expect(text, contains('+5'));
+    });
+
+    test('memory force_gc triggers GC and reports heap changes', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'force_gc',
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Garbage Collection'));
+      expect(text, contains('Before'));
+      expect(text, contains('After'));
+    });
+
+    test('memory start_gc_stream and stop_gc_stream lifecycle', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final startResult = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'start_gc_stream',
+          },
+        ),
+      );
+      expect(startResult.isError, isNot(isTrue));
+      expect((startResult.content.first as TextContent).text,
+          contains('GC Stream Monitoring Started'));
+
+      fakeVmService.emitGcEvent();
+
+      final stopResult = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'stop_gc_stream',
+          },
+        ),
+      );
+      expect(stopResult.isError, isNot(isTrue));
+      expect((stopResult.content.first as TextContent).text,
+          contains('GC Stream Monitoring Stopped'));
+    });
+
+    test('memory get_memory_timeline samples memory usage', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'get_memory_timeline',
+            'duration_seconds': 1,
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Memory Timeline'));
+      expect(text, contains('Heap Used'));
+    });
+
+    test('memory watch_gc_pressure assesses pressure level', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'watch_gc_pressure',
+            'duration_seconds': 1,
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('GC Pressure Analysis'));
+      expect(text, contains('Pressure Level'));
+    });
+
+    test('memory explain_memory_breakdown returns detailed breakdown',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'explain_memory_breakdown',
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Memory Usage Breakdown'));
+      expect(text, contains('Resident Set Size (RSS)'));
+      expect(text, contains('Dart Heap'));
+    });
+
+    test(
+        'memory start_gc_stream called twice handles RPCError 103 idempotently',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final res1 = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {'action': 'start_gc_stream'},
+        ),
+      );
+      expect(res1.isError, isNot(isTrue));
+
+      // Calling start_gc_stream again when stream is already subscribed
+      final res2 = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {'action': 'start_gc_stream'},
+        ),
+      );
+      expect(res2.isError, isNot(isTrue));
+
+      // Cleanup
+      await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {'action': 'stop_gc_stream'},
+        ),
+      );
+    });
+
+    test(
+        'memory stop_gc_stream when not started returns empty events gracefully',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {'action': 'stop_gc_stream'},
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Total Events Captured**: 0'));
+    });
+
+    test('memory stop_gc_stream respects limit parameter', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {'action': 'start_gc_stream'},
+        ),
+      );
+
+      // Emit 5 events
+      for (var i = 0; i < 5; i++) {
+        fakeVmService.emitGcEvent();
+      }
+      await Future<void>.delayed(Duration.zero);
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'stop_gc_stream',
+            'limit': 2,
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Events Returned**: 2'));
+    });
+
+    test('memory get_memory_timeline clamps negative or excessive duration',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'get_memory_timeline',
+            'duration_seconds': -10, // Clamped to 1s
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Memory Timeline (1s recording)'));
+    });
+
+    test('memory watch_gc_pressure categorizes pressure levels correctly',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'watch_gc_pressure',
+            'duration_seconds': 1,
+            'limit': 10,
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Pressure Level**: `LOW`'));
+    });
+
+    test(
+        'memory explain_memory_breakdown handles raster cache extension failure gracefully',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      fakeVmService.customServiceExtensionError = (method) {
+        if (method == 'ext.ui.window.getSkiaEstimateRasterCacheMemory') {
+          return RPCError('callServiceExtension', -32601, 'Method not found');
+        }
+        return null;
+      };
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: const {
+            'action': 'explain_memory_breakdown',
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Raster Cache**: N/A'));
+
+      fakeVmService.customServiceExtensionError = null;
     });
 
     test('profiling get_cpu scans execution hotspots', () async {

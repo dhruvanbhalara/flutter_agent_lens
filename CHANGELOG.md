@@ -1,9 +1,13 @@
 ## Unreleased
 
+
 ### Added
 - Added `get_request_details` action to `network` composite tool for detailed inspection of HTTP request/response headers, cookies, timing, and decoded body payloads.
+- Added 6 new memory tool actions (`force_gc`, `start_gc_stream`, `stop_gc_stream`, `get_memory_timeline`, `watch_gc_pressure`, `explain_memory_breakdown`) to `memory` composite tool.
+
 
 ## 1.6.2
+
 
 ### Added
 - Added `get_navigation_stack` MCP tool to inspect active routes, current URL, and nested navigator trees via the Dart VM Service.

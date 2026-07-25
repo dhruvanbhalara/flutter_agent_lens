@@ -146,3 +146,81 @@ final class MemorySnapshot {
     return true;
   }
 }
+
+/// Represents a single point-in-time memory sample for timeline recording.
+final class MemoryTimelineSample {
+  /// Creates a new [MemoryTimelineSample] instance.
+  const MemoryTimelineSample({
+    required this.timestamp,
+    required this.heapUsed,
+    required this.heapCapacity,
+    required this.externalUsage,
+    required this.rss,
+    required this.gcEventsInInterval,
+  });
+
+  /// Factory constructor to parse a [MemoryTimelineSample] from a Map.
+  factory MemoryTimelineSample.fromMap(Map<String, dynamic> map) {
+    return MemoryTimelineSample(
+      timestamp: (map['timestamp'] as num?)?.toInt() ?? 0,
+      heapUsed: (map['heap_used'] as num?)?.toInt() ?? 0,
+      heapCapacity: (map['heap_capacity'] as num?)?.toInt() ?? 0,
+      externalUsage: (map['external_usage'] as num?)?.toInt() ?? 0,
+      rss: (map['rss'] as num?)?.toInt() ?? 0,
+      gcEventsInInterval: (map['gc_events_in_interval'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// Millisecond timestamp of the sample.
+  final int timestamp;
+
+  /// Active heap usage in bytes.
+  final int heapUsed;
+
+  /// Total heap capacity in bytes.
+  final int heapCapacity;
+
+  /// External memory usage in bytes.
+  final int externalUsage;
+
+  /// Resident Set Size (RSS) process memory in bytes.
+  final int rss;
+
+  /// Number of GC events recorded since the previous sample.
+  final int gcEventsInInterval;
+
+  /// Serializes the timeline sample to a Map.
+  Map<String, dynamic> toMap() => {
+        'timestamp': timestamp,
+        'heap_used': heapUsed,
+        'heap_capacity': heapCapacity,
+        'external_usage': externalUsage,
+        'rss': rss,
+        'gc_events_in_interval': gcEventsInInterval,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MemoryTimelineSample &&
+          timestamp == other.timestamp &&
+          heapUsed == other.heapUsed &&
+          heapCapacity == other.heapCapacity &&
+          externalUsage == other.externalUsage &&
+          rss == other.rss &&
+          gcEventsInInterval == other.gcEventsInInterval;
+
+  @override
+  int get hashCode => Object.hash(
+        timestamp,
+        heapUsed,
+        heapCapacity,
+        externalUsage,
+        rss,
+        gcEventsInInterval,
+      );
+
+  @override
+  String toString() =>
+      'MemoryTimelineSample(ts: $timestamp, heap: $heapUsed, rss: $rss)';
+}

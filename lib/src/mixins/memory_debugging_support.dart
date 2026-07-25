@@ -15,21 +15,39 @@ base mixin MemoryDebuggingSupport
   /// Named cache of taken memory snapshots.
   final Map<String, MemorySnapshot> memorySnapshots = {};
 
+  /// Subscription to the VM Service's GC event stream.
+  StreamSubscription<Event>? _gcStreamSub;
+
+  /// Ring buffer of collected GC events (max 500).
+  final List<Map<String, dynamic>> _gcEventBuffer = [];
+
+  /// Whether GC stream monitoring is currently active.
+  bool _gcStreamActive = false;
+
+  /// Timestamp in milliseconds when GC stream monitoring started.
+  int? _gcStreamStartTime;
+
   /// Registers all memory debugging and profiling tools.
   void registerMemoryTools() {
     registerTool(
       Tool(
         name: McpTool.memory.name,
         description:
-            'Manage memory snapshots, heap diffs, class memory audits, and retaining path traces. '
+            'Manage memory snapshots, heap diffs, class memory audits, retaining path traces, '
+            'GC triggers, GC streams, memory timelines, and memory explanations. '
             'Actions: get_snapshot (heap overview), save (named snapshot), compare (diff two snapshots), '
             'list (show saved), audit_leak (inspect class instances), diff_allocations (delta heap over time), '
-            'get_referrers (trace object retaining path).',
+            'get_referrers (trace object retaining path), force_gc (trigger GC & report freed memory), '
+            'start_gc_stream (subscribe to GC events), stop_gc_stream (end GC subscription & get events), '
+            'get_memory_timeline (record RSS/heap/GC over duration), watch_gc_pressure (monitor GC frequency), '
+            'explain_memory_breakdown (plain English RSS/heap/external/raster overview).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
               description:
-                  'The memory action: get_snapshot, save, compare, list, audit_leak, diff_allocations, get_referrers.',
+                  'The memory action: get_snapshot, save, compare, list, audit_leak, diff_allocations, '
+                  'get_referrers, force_gc, start_gc_stream, stop_gc_stream, get_memory_timeline, '
+                  'watch_gc_pressure, explain_memory_breakdown.',
             ),
             'name': StringSchema(description: 'Snapshot name (for save).'),
             'before':
@@ -69,9 +87,79 @@ base mixin MemoryDebuggingSupport
     );
   }
 
-  /// Disposes and clears all saved memory snapshots.
+  /// Disposes and clears all saved memory snapshots and stream subscriptions.
   void cleanupMemoryDebugging() {
     memorySnapshots.clear();
+    unawaited(_gcStreamSub?.cancel());
+    _gcStreamSub = null;
+    _gcEventBuffer.clear();
+    _gcStreamActive = false;
+    _gcStreamStartTime = null;
+  }
+
+  /// Helper to fetch heap usage stats from [AllocationProfile].
+  Future<({int heapUsage, int heapCapacity, int externalUsage})> _getHeapStats({
+    bool gc = false,
+  }) async {
+    final profile = await vmService!.getAllocationProfile(isolateId!, gc: gc);
+    return (
+      heapUsage: profile.memoryUsage?.heapUsage ?? 0,
+      heapCapacity: profile.memoryUsage?.heapCapacity ?? 0,
+      externalUsage: profile.memoryUsage?.externalUsage ?? 0,
+    );
+  }
+
+  /// Helper to fetch total RSS process memory in bytes.
+  Future<int> _getRssBytes() async {
+    try {
+      final usage = await vmService!.getProcessMemoryUsage();
+      return usage.root?.size ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Ensures subscription to EventStreams.kGC is active.
+  Future<void> _ensureGcStream() async {
+    if (_gcStreamActive) return;
+    try {
+      await vmService!.streamListen(EventStreams.kGC);
+    } catch (e) {
+      if (e is! RPCError || e.code != 103) {
+        rethrow;
+      }
+    }
+    await _gcStreamSub?.cancel();
+    _gcStreamSub = vmService!.onGCEvent.listen((Event event) {
+      final item = <String, dynamic>{
+        'kind': event.kind ?? 'GC',
+        'timestamp': event.timestamp ?? DateTime.now().millisecondsSinceEpoch,
+        if (event.gcType != null) 'gcType': event.gcType,
+      };
+      if (event.json != null) {
+        final raw = event.json!;
+        if (raw.containsKey('reason')) item['reason'] = raw['reason'];
+        if (raw.containsKey('duration')) item['duration'] = raw['duration'];
+      }
+      _gcEventBuffer.add(item);
+      if (_gcEventBuffer.length > 500) {
+        _gcEventBuffer.removeAt(0);
+      }
+    });
+    _gcStreamActive = true;
+    _gcStreamStartTime = DateTime.now().millisecondsSinceEpoch;
+  }
+
+  /// Internal cleanup for GC event stream.
+  Future<void> _stopGcStreamInternal() async {
+    await _gcStreamSub?.cancel();
+    _gcStreamSub = null;
+    _gcStreamActive = false;
+    if (vmService != null) {
+      try {
+        await vmService!.streamCancel(EventStreams.kGC);
+      } catch (_) {}
+    }
   }
 
   /// Handles the audit_class_memory_leak tool request.
@@ -834,6 +922,315 @@ base mixin MemoryDebuggingSupport
     return md.toString();
   }
 
+  /// Handles the force_gc tool request.
+  Future<CallToolResult> _handleForceGc(CallToolRequest req) async {
+    final before = await _getHeapStats();
+    final after = await _getHeapStats(gc: true);
+
+    final freedBytes = before.heapUsage - after.heapUsage;
+    final freedPct = before.heapUsage > 0
+        ? (freedBytes / before.heapUsage * 100).toStringAsFixed(1)
+        : '0.0';
+
+    final text = StringBuffer()
+      ..writeln('| Metric | Before | After | Delta / Freed |')
+      ..writeln('| :--- | :--- | :--- | :--- |')
+      ..writeln(
+          '| **Heap Usage** | ${formatBytes(before.heapUsage)} | ${formatBytes(after.heapUsage)} | ${formatBytes(freedBytes)} ($freedPct% freed) |')
+      ..writeln(
+          '| **Heap Capacity** | ${formatBytes(before.heapCapacity)} | ${formatBytes(after.heapCapacity)} | ${formatBytes(after.heapCapacity - before.heapCapacity)} |')
+      ..writeln(
+          '| **External Usage** | ${formatBytes(before.externalUsage)} | ${formatBytes(after.externalUsage)} | ${formatBytes(after.externalUsage - before.externalUsage)} |');
+
+    final data = {
+      'action': 'force_gc',
+      'heap_before': before.heapUsage,
+      'heap_after': after.heapUsage,
+      'freed_bytes': freedBytes,
+      'freed_percentage': freedPct,
+      'capacity_before': before.heapCapacity,
+      'capacity_after': after.heapCapacity,
+      'external_before': before.externalUsage,
+      'external_after': after.externalUsage,
+    };
+
+    return serializeDualFormat(
+      title: '### Garbage Collection (force_gc) Result',
+      markdownBody: text.toString(),
+      structuredData: data,
+    );
+  }
+
+  /// Handles the start_gc_stream tool request.
+  Future<CallToolResult> _handleStartGcStream(CallToolRequest req) async {
+    await _ensureGcStream();
+    return serializeDualFormat(
+      title: '### GC Stream Monitoring Started',
+      markdownBody:
+          'Now collecting garbage collection events on stream `${EventStreams.kGC}`.',
+      structuredData: {
+        'action': 'start_gc_stream',
+        'status': 'active',
+        'start_timestamp': _gcStreamStartTime,
+      },
+    );
+  }
+
+  /// Handles the stop_gc_stream tool request.
+  Future<CallToolResult> _handleStopGcStream(CallToolRequest req) async {
+    final limit = req.arg<num>('limit')?.toInt() ?? 50;
+    final count = _gcEventBuffer.length;
+    final durationMs = _gcStreamStartTime != null
+        ? DateTime.now().millisecondsSinceEpoch - _gcStreamStartTime!
+        : 0;
+    final returnedEvents = _gcEventBuffer.take(limit).toList();
+
+    await _stopGcStreamInternal();
+
+    final text = StringBuffer()
+      ..writeln('- **Duration**: ${(durationMs / 1000).toStringAsFixed(1)}s')
+      ..writeln('- **Total Events Captured**: $count')
+      ..writeln('- **Events Returned**: ${returnedEvents.length}');
+
+    if (returnedEvents.isNotEmpty) {
+      text.writeln('\n#### Recent GC Events');
+      for (final e in returnedEvents) {
+        text.writeln(
+            '- Type: ${e['gcType'] ?? e['kind']} at ${e['timestamp']}');
+      }
+    }
+
+    final data = {
+      'action': 'stop_gc_stream',
+      'status': 'stopped',
+      'duration_ms': durationMs,
+      'total_events': count,
+      'events': returnedEvents,
+    };
+
+    _gcEventBuffer.clear();
+
+    return serializeDualFormat(
+      title: '### GC Stream Monitoring Stopped',
+      markdownBody: text.toString(),
+      structuredData: data,
+    );
+  }
+
+  /// Handles the get_memory_timeline tool request.
+  Future<CallToolResult> _handleGetMemoryTimeline(CallToolRequest req) async {
+    final rawDuration = req.arg<num>('duration_seconds')?.toInt() ?? 5;
+    final duration = rawDuration.clamp(1, 60);
+
+    final wasActive = _gcStreamActive;
+    if (!wasActive) {
+      await _ensureGcStream();
+    }
+
+    final samples = <MemoryTimelineSample>[];
+    final startEventCount = _gcEventBuffer.length;
+    var lastCheckEventCount = startEventCount;
+
+    for (var i = 0; i <= duration; i++) {
+      if (i > 0) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+      final heap = await _getHeapStats();
+      final rss = await _getRssBytes();
+      final currentEventCount = _gcEventBuffer.length;
+      final gcInInterval = currentEventCount - lastCheckEventCount;
+      lastCheckEventCount = currentEventCount;
+
+      samples.add(MemoryTimelineSample(
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        heapUsed: heap.heapUsage,
+        heapCapacity: heap.heapCapacity,
+        externalUsage: heap.externalUsage,
+        rss: rss,
+        gcEventsInInterval: gcInInterval,
+      ));
+    }
+
+    if (!wasActive) {
+      await _stopGcStreamInternal();
+    }
+
+    final text = StringBuffer()
+      ..writeln(
+          '| Timestamp | Heap Used | Heap Capacity | External | RSS | GC Events |')
+      ..writeln('| :--- | :--- | :--- | :--- | :--- | :--- |');
+
+    for (final s in samples) {
+      final timeStr = DateTime.fromMillisecondsSinceEpoch(s.timestamp)
+          .toLocal()
+          .toString()
+          .split(' ')
+          .last
+          .split('.')
+          .first;
+      text.writeln(
+          '| $timeStr | ${formatBytes(s.heapUsed)} | ${formatBytes(s.heapCapacity)} | ${formatBytes(s.externalUsage)} | ${formatBytes(s.rss)} | ${s.gcEventsInInterval} |');
+    }
+
+    final data = {
+      'action': 'get_memory_timeline',
+      'duration_seconds': duration,
+      'sample_count': samples.length,
+      'samples': samples.map((s) => s.toMap()).toList(),
+    };
+
+    return serializeDualFormat(
+      title: '### Memory Timeline (${duration}s recording)',
+      markdownBody: text.toString(),
+      structuredData: data,
+    );
+  }
+
+  /// Handles the watch_gc_pressure tool request.
+  Future<CallToolResult> _handleWatchGcPressure(CallToolRequest req) async {
+    final rawDuration = req.arg<num>('duration_seconds')?.toInt() ?? 10;
+    final duration = rawDuration.clamp(1, 60);
+    final limit = req.arg<num>('limit')?.toInt() ?? 50;
+
+    final wasActive = _gcStreamActive;
+    if (!wasActive) {
+      await _ensureGcStream();
+    }
+
+    final startIndex = _gcEventBuffer.length;
+    await Future<void>.delayed(Duration(seconds: duration));
+
+    final newEvents = _gcEventBuffer.skip(startIndex).toList();
+    if (!wasActive) {
+      await _stopGcStreamInternal();
+    }
+
+    final gcCount = newEvents.length;
+    final gcPerSec = gcCount / duration;
+
+    String pressureLevel;
+    if (gcPerSec < 0.5) {
+      pressureLevel = 'low';
+    } else if (gcPerSec <= 2.0) {
+      pressureLevel = 'moderate';
+    } else {
+      pressureLevel = 'high';
+    }
+
+    // Inter-GC intervals
+    final intervals = <double>[];
+    for (var i = 1; i < newEvents.length; i++) {
+      final prev = newEvents[i - 1]['timestamp'] as int;
+      final curr = newEvents[i]['timestamp'] as int;
+      intervals.add((curr - prev) / 1000.0);
+    }
+    final avgInterval = intervals.isNotEmpty
+        ? (intervals.reduce((a, b) => a + b) / intervals.length)
+            .toStringAsFixed(2)
+        : 'N/A';
+
+    // gcType distribution
+    final typeCounts = <String, int>{};
+    for (final e in newEvents) {
+      final type = (e['gcType'] as String?) ?? 'Unknown';
+      typeCounts[type] = (typeCounts[type] ?? 0) + 1;
+    }
+
+    final text = StringBuffer()
+      ..writeln('- **Pressure Level**: `${pressureLevel.toUpperCase()}`')
+      ..writeln('- **GC Event Count**: $gcCount')
+      ..writeln('- **GC Frequency**: ${gcPerSec.toStringAsFixed(2)} GC/sec')
+      ..writeln('- **Avg Inter-GC Interval**: ${avgInterval}s');
+
+    if (typeCounts.isNotEmpty) {
+      text.writeln('- **GC Type Distribution**:');
+      typeCounts.forEach((type, count) {
+        text.writeln('  - $type: $count');
+      });
+    }
+
+    final returnedEvents = newEvents.take(limit).toList();
+
+    final data = {
+      'action': 'watch_gc_pressure',
+      'duration_seconds': duration,
+      'pressure_level': pressureLevel,
+      'gc_count': gcCount,
+      'gc_frequency_per_sec': gcPerSec,
+      'avg_interval_seconds': avgInterval,
+      'gc_type_distribution': typeCounts,
+      'events': returnedEvents,
+    };
+
+    return serializeDualFormat(
+      title: '### GC Pressure Analysis (${duration}s window)',
+      markdownBody: text.toString(),
+      structuredData: data,
+    );
+  }
+
+  /// Handles the explain_memory_breakdown tool request.
+  Future<CallToolResult> _handleExplainMemoryBreakdown(
+      CallToolRequest req) async {
+    final rss = await _getRssBytes();
+    final heap = await _getHeapStats();
+
+    int? rasterBytes;
+    try {
+      final rasterRes = await vmService!.callServiceExtension(
+        'ext.ui.window.getSkiaEstimateRasterCacheMemory',
+        isolateId: isolateId!,
+      );
+      final json = rasterRes.json;
+      if (json != null && json.containsKey('result')) {
+        rasterBytes = json['result'] as int?;
+      }
+    } catch (_) {
+      // Extension unavailable
+    }
+
+    final text = StringBuffer()
+      ..writeln('- **Resident Set Size (RSS)**: ${formatBytes(rss)}')
+      ..writeln(
+          '  _Total physical memory allocated to the application process by the operating system._')
+      ..writeln()
+      ..writeln(
+          '- **Dart Heap Used**: ${formatBytes(heap.heapUsage)} / ${formatBytes(heap.heapCapacity)} (${(heap.heapCapacity > 0 ? (heap.heapUsage / heap.heapCapacity * 100) : 0).toStringAsFixed(1)}% capacity)')
+      ..writeln(
+          '  _Memory managed directly by the Dart garbage collector for Dart objects._')
+      ..writeln()
+      ..writeln('- **External Memory**: ${formatBytes(heap.externalUsage)}')
+      ..writeln(
+          '  _Native memory bound to Dart objects (e.g. image bytes, native plugin buffers)._');
+
+    if (rasterBytes != null) {
+      text
+        ..writeln()
+        ..writeln('- **Raster Cache**: ${formatBytes(rasterBytes)}')
+        ..writeln(
+            '  _GPU memory reserved for rendered picture and image raster caches._');
+    } else {
+      text
+        ..writeln()
+        ..writeln('- **Raster Cache**: N/A (service extension unavailable)');
+    }
+
+    final data = {
+      'action': 'explain_memory_breakdown',
+      'rss_bytes': rss,
+      'heap_used_bytes': heap.heapUsage,
+      'heap_capacity_bytes': heap.heapCapacity,
+      'external_bytes': heap.externalUsage,
+      if (rasterBytes != null) 'raster_cache_bytes': rasterBytes,
+    };
+
+    return serializeDualFormat(
+      title: '### Memory Usage Breakdown',
+      markdownBody: text.toString(),
+      structuredData: data,
+    );
+  }
+
   /// Handles the memory composite tool request.
   Future<CallToolResult> _handleMemory(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
@@ -848,6 +1245,12 @@ base mixin MemoryDebuggingSupport
       'audit_leak' => _handleAuditClassMemoryLeak(req),
       'diff_allocations' => _handleDiffHeapAllocations(req),
       'get_referrers' => _handleGetObjectReferrers(req),
+      'force_gc' => _handleForceGc(req),
+      'start_gc_stream' => _handleStartGcStream(req),
+      'stop_gc_stream' => _handleStopGcStream(req),
+      'get_memory_timeline' => _handleGetMemoryTimeline(req),
+      'watch_gc_pressure' => _handleWatchGcPressure(req),
+      'explain_memory_breakdown' => _handleExplainMemoryBreakdown(req),
       _ => CallToolResult(
           content: [TextContent(text: 'Unknown memory action: $action')],
           isError: true,
