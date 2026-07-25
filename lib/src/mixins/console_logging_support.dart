@@ -30,15 +30,27 @@ base mixin ConsoleLoggingSupport
   /// Subscription to the VM Service's logging/developer stream.
   StreamSubscription<Event>? loggingSub;
 
-  /// Registers the console log retrieval tool.
+  /// Optional callback invoked when new log entries are formatted and added.
+  void Function(String line)? _watchLogCallback;
+
+  /// Registers the console log tools.
   void registerLoggingTools() {
     registerTool(
       Tool(
-        name: McpTool.fetchConsoleLogs.name,
-        description: 'Read recent stdout/stderr/developer logs.',
+        name: McpTool.consoleLogs.name,
+        description: 'Manage console logs. '
+            'Actions: fetch (read buffered logs), '
+            'watch (stream live logs over a duration window).',
         inputSchema: ObjectSchema(
           properties: {
+            'action': StringSchema(
+              description: 'Action to perform: fetch, watch. Default: fetch.',
+            ),
             'limit': limitSchema(defaultValue: 50),
+            'duration_seconds': durationSchema(defaultValue: 5.0),
+            'filter': StringSchema(
+              description: 'Optional text filter substring for watch action.',
+            ),
           },
         ),
         annotations: ToolAnnotations(
@@ -46,7 +58,7 @@ base mixin ConsoleLoggingSupport
           idempotentHint: false,
         ),
       ),
-      _handleFetchConsoleLogs,
+      _handleConsoleLogs,
     );
   }
 
@@ -113,6 +125,7 @@ base mixin ConsoleLoggingSupport
         duplicateLogCount = 0;
         logBuffer.add(formatted);
       }
+      _watchLogCallback?.call(formatted);
     }
     if (logBuffer.length > 200) {
       logBuffer.removeRange(0, logBuffer.length - 200);
@@ -121,12 +134,12 @@ base mixin ConsoleLoggingSupport
 
   /// Cancels all active log stream subscriptions and resets state.
   Future<void> cleanupLogging() async {
-    final futures = [
+    final futures = <Future<void>>[
       if (stdoutSub != null) stdoutSub!.cancel(),
       if (stderrSub != null) stderrSub!.cancel(),
       if (loggingSub != null) loggingSub!.cancel(),
     ];
-    await Future.wait(futures);
+    await Future.wait<void>(futures);
     stdoutSub = null;
     stderrSub = null;
     loggingSub = null;
@@ -166,12 +179,25 @@ base mixin ConsoleLoggingSupport
     return null;
   }
 
-  /// Handles the fetch_console_logs tool request.
+  /// Handles the console_logs composite tool request.
+  Future<CallToolResult> _handleConsoleLogs(CallToolRequest req) async {
+    final action = req.arg<String>('action') ?? 'fetch';
+    return switch (action) {
+      'fetch' => _handleFetchConsoleLogs(req),
+      'watch' => _handleWatchLogs(req),
+      _ => CallToolResult(
+          content: [TextContent(text: 'Unknown console_logs action: $action')],
+          isError: true,
+        ),
+    };
+  }
+
+  /// Handles the fetch action for console_logs.
   Future<CallToolResult> _handleFetchConsoleLogs(CallToolRequest req) async {
     final limit = (req.arg<num>('limit'))?.toInt() ?? 50;
     final maxLimit = limit.clamp(1, 200);
     stderr.writeln(
-        '[mcp:fetch_console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$maxLimit');
+        '[mcp:console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$maxLimit');
 
     final totalLines = logBuffer.length;
     final startIndex = totalLines > maxLimit ? totalLines - maxLimit : 0;
@@ -191,6 +217,55 @@ base mixin ConsoleLoggingSupport
         'total_buffered_lines': totalLines,
         'returned_lines': recentLogs.length,
         'logs': recentLogs,
+      },
+    );
+  }
+
+  /// Handles watching live console logs over a specified duration window.
+  Future<CallToolResult> _handleWatchLogs(CallToolRequest req) async {
+    final rawDuration = req.arg<num>('duration_seconds') ?? 5;
+    final duration = rawDuration.toInt().clamp(1, 30);
+    final filter = req.arg<String>('filter');
+
+    stderr.writeln(
+        '[mcp:watch_logs] Watching logs for ${duration}s, filter="$filter"');
+
+    final watchBuffer = <String>[];
+    _watchLogCallback = watchBuffer.add;
+
+    try {
+      await Future<void>.delayed(Duration(seconds: duration));
+    } finally {
+      _watchLogCallback = null;
+    }
+
+    final List<String> matchingLogs;
+    if (filter != null && filter.isNotEmpty) {
+      final lowerFilter = filter.toLowerCase();
+      matchingLogs = watchBuffer
+          .where((line) => line.toLowerCase().contains(lowerFilter))
+          .toList();
+    } else {
+      matchingLogs = watchBuffer;
+    }
+
+    final mdBuffer =
+        StringBuffer('Live Console Logs ($duration s duration window)\n\n');
+    if (matchingLogs.isEmpty) {
+      mdBuffer.writeln('No matching logs received during watch window.');
+    } else {
+      matchingLogs.forEach(mdBuffer.writeln);
+    }
+
+    return serializeDualFormat(
+      title: 'Live Console Logs',
+      markdownBody: mdBuffer.toString(),
+      structuredData: {
+        'duration_seconds': duration,
+        if (filter != null && filter.isNotEmpty) 'filter': filter,
+        'total_captured_lines': watchBuffer.length,
+        'returned_lines': matchingLogs.length,
+        'logs': matchingLogs,
       },
     );
   }
