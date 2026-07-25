@@ -1,3 +1,8 @@
+## Unreleased
+
+### Added
+- Added `get_request_details` action to `network` composite tool for detailed inspection of HTTP request/response headers, cookies, timing, and decoded body payloads.
+
 ## 1.6.2
 
 ### Added
