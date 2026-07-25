@@ -26,11 +26,17 @@ base mixin NetworkCaptureSupport
         name: McpTool.network.name,
         description: 'Manage HTTP network capture. '
             'Actions: start (begin capture), stop (end and get report), '
-            'get_profile (read HTTP request history).',
+            'get_profile (read HTTP request history), '
+            'get_request_details (inspect full headers, cookies, timing, and body for a request).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
-              description: 'Action to perform: start, stop, get_profile.',
+              description:
+                  'Action to perform: start, stop, get_profile, get_request_details.',
+            ),
+            'requestId': StringSchema(
+              description:
+                  'Request ID to inspect for get_request_details action.',
             ),
             'sortBy': StringSchema(
               description: 'Sort by: time, duration, size (for stop action).',
@@ -511,6 +517,206 @@ base mixin NetworkCaptureSupport
     );
   }
 
+  /// Handles the get_request_details tool request.
+  Future<CallToolResult> _handleGetHttpRequestDetails(
+      CallToolRequest req) async {
+    final requestId =
+        req.arg<String>('requestId') ?? req.arg<String>('request_id');
+
+    if (vmService == null) return notConnected();
+
+    if (!await _checkHttpProfileSupport()) {
+      return _getUnsupportedError();
+    }
+
+    Map<String, dynamic>? targetRequest;
+    final vm = vmService!;
+    final isoId = isolateId!;
+
+    // If requestId is specified, try fetching that specific request via ext.dart.io.getHttpProfileRequest
+    if (requestId != null && requestId.isNotEmpty && requestId != 'latest') {
+      stderr.writeln(
+          '[mcp:network_details] Fetching request details for ID $requestId...');
+      try {
+        final response = await vm.callServiceExtension(
+          'ext.dart.io.getHttpProfileRequest',
+          isolateId: isoId,
+          args: {'id': requestId},
+        );
+        final jsonMap = response.json ?? {};
+        final rawResult = jsonMap['result'];
+        if (rawResult is Map) {
+          targetRequest = _sanitizeRequest(rawResult);
+        } else if (jsonMap.containsKey('request')) {
+          targetRequest = _sanitizeRequest(jsonMap);
+        }
+      } catch (_) {}
+    }
+
+    // Fallback: search getHttpProfile list (or pick the latest request if requestId is missing/latest)
+    if (targetRequest == null) {
+      final allRequests = await _getHttpRequests();
+      if (allRequests.isNotEmpty) {
+        if (requestId == null || requestId.isEmpty || requestId == 'latest') {
+          stderr.writeln(
+              '[mcp:network_details] Auto-selecting most recent HTTP request...');
+          targetRequest = allRequests.last;
+        } else {
+          for (final r in allRequests) {
+            if (r['id']?.toString() == requestId) {
+              targetRequest = r;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (targetRequest == null) {
+      final msg =
+          (requestId == null || requestId.isEmpty || requestId == 'latest')
+              ? 'No HTTP requests recorded in VM profile history.'
+              : 'Request with ID `$requestId` was not found.';
+      return CallToolResult(
+        content: [TextContent(text: msg)],
+        isError: true,
+      );
+    }
+
+    final id = targetRequest['id']?.toString() ?? requestId;
+    final method = targetRequest['method']?.toString() ?? 'N/A';
+    final uri = targetRequest['uri']?.toString() ?? 'N/A';
+
+    final rawReq = targetRequest['request'];
+    final reqData = rawReq is Map ? Map<String, dynamic>.from(rawReq) : null;
+    final rawRes = targetRequest['response'];
+    final resData = rawRes is Map ? Map<String, dynamic>.from(rawRes) : null;
+
+    final statusCode = resData?['statusCode']?.toString() ?? 'Pending';
+    final reasonPhrase = resData?['reasonPhrase']?.toString() ?? '';
+    final statusStr =
+        reasonPhrase.isNotEmpty ? '$statusCode $reasonPhrase' : statusCode;
+
+    final startUs = targetRequest['startTime'] as int?;
+    final endUs = targetRequest['endTime'] as int?;
+    String durationStr = 'Pending';
+    double? durationMs;
+    if (startUs != null && endUs != null) {
+      durationMs = (endUs - startUs) / 1000.0;
+      durationStr = '${durationMs.toStringAsFixed(1)} ms';
+    }
+
+    String startTimeStr = 'Unknown';
+    if (startUs != null) {
+      final dt = DateTime.fromMicrosecondsSinceEpoch(startUs);
+      startTimeStr = dt.toIso8601String();
+    }
+
+    final rawReqHeaders = reqData?['headers'];
+    final reqHeaders = rawReqHeaders is Map
+        ? Map<String, dynamic>.from(rawReqHeaders)
+        : <String, dynamic>{};
+    final rawResHeaders = resData?['headers'];
+    final resHeaders = rawResHeaders is Map
+        ? Map<String, dynamic>.from(rawResHeaders)
+        : <String, dynamic>{};
+    final reqCookies = reqData?['cookies'] as List<dynamic>? ?? [];
+    final resCookies = resData?['cookies'] as List<dynamic>? ?? [];
+
+    final reqBodyRaw = reqData?['body'];
+    final resBodyRaw = resData?['body'];
+
+    String formatBody(dynamic raw) {
+      if (raw == null) return 'N/A';
+      if (raw is String) {
+        try {
+          final parsed = jsonDecode(raw);
+          return const JsonEncoder.withIndent('  ').convert(parsed);
+        } catch (_) {
+          return raw;
+        }
+      }
+      if (raw is Map || raw is List) {
+        return const JsonEncoder.withIndent('  ').convert(raw);
+      }
+      return raw.toString();
+    }
+
+    final md = StringBuffer();
+    md.writeln('HTTP Request Details $id');
+    md.writeln('Method: $method');
+    md.writeln('URI: $uri');
+    md.writeln('Status: $statusStr');
+    md.writeln('Duration: $durationStr');
+    md.writeln('Start Time: $startTimeStr');
+
+    final error = targetRequest['error']?.toString();
+    if (error != null && error.isNotEmpty) {
+      md.writeln('Error: $error');
+    }
+
+    if (reqHeaders.isNotEmpty) {
+      md.writeln('Request Headers:');
+      reqHeaders.forEach((k, v) => md.writeln('$k: $v'));
+    }
+
+    if (reqCookies.isNotEmpty) {
+      md.writeln('Request Cookies:');
+      for (final c in reqCookies) {
+        md.writeln(c.toString());
+      }
+    }
+
+    final formattedReqBody = formatBody(reqBodyRaw);
+    if (formattedReqBody != 'N/A' && formattedReqBody.isNotEmpty) {
+      md.writeln('Request Body:');
+      md.writeln(formattedReqBody);
+    }
+
+    if (resHeaders.isNotEmpty) {
+      md.writeln('Response Headers:');
+      resHeaders.forEach((k, v) => md.writeln('$k: $v'));
+    }
+
+    if (resCookies.isNotEmpty) {
+      md.writeln('Response Cookies:');
+      for (final c in resCookies) {
+        md.writeln(c.toString());
+      }
+    }
+
+    final formattedResBody = formatBody(resBodyRaw);
+    if (formattedResBody != 'N/A' && formattedResBody.isNotEmpty) {
+      md.writeln('Response Body:');
+      md.writeln(formattedResBody);
+    }
+
+    return serializeDualFormat(
+      title: 'HTTP Request Details $id',
+      markdownBody: md.toString(),
+      structuredData: {
+        'id': id,
+        'method': method,
+        'uri': uri,
+        'statusCode': statusCode,
+        'reasonPhrase': reasonPhrase,
+        'duration_ms': durationMs,
+        'startTime': startTimeStr,
+        'error': error,
+        'request': {
+          'headers': reqHeaders,
+          'cookies': reqCookies,
+          'body': reqBodyRaw,
+        },
+        'response': {
+          'headers': resHeaders,
+          'cookies': resCookies,
+          'body': resBodyRaw,
+        },
+      },
+    );
+  }
+
   /// Handles the network composite tool request.
   Future<CallToolResult> _handleNetwork(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
@@ -518,6 +724,7 @@ base mixin NetworkCaptureSupport
       'start' => _handleStartNetworkCapture(req),
       'stop' => _handleStopNetworkCapture(req),
       'get_profile' => _handleGetNetworkProfile(req),
+      'get_request_details' => _handleGetHttpRequestDetails(req),
       _ => CallToolResult(
           content: [TextContent(text: 'Unknown network action: $action')],
           isError: true,
