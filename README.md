@@ -72,8 +72,8 @@ This server groups functions into action-based tools to keep the schema footprin
 | **Memory** | `memory` | `get_snapshot`, `save`, `compare`, `list`, `audit_leak`, `diff_allocations`, `get_referrers`, `force_gc`, `start_gc_stream`, `stop_gc_stream`, `get_memory_timeline`, `watch_gc_pressure`, `explain_memory_breakdown` | Monitor heap, save snapshots, diff allocations, find memory leaks, trigger GC, stream GC events, sample memory timelines, and trace object references. |
 | **Diagnostics** | `profiling` | `start`, `stop`, `get_cpu`, `diagnose_jank` | Track render times, find CPU hotspots, and diagnose UI lag. |
 | | `rebuild_tracking` | `start`, `stop`, `get_counts` | Track widget rebuild cycles and counts. |
-| **Logs & Network** | `network` | `start`, `stop`, `get_profile`, `get_request_details` | Capture HTTP network calls, inspect request headers, cookies, and bodies. |
-| | `fetch_console_logs` | *N/A* | Read stdout, stderr, and developer logs. |
+| **Logs & Network** | `network` | `start`, `stop`, `get_profile`, `watch`, `get_request_details` | Capture HTTP network calls, stream requests over duration window, inspect headers and bodies. |
+| | `console_logs` | `fetch`, `watch` | Read buffered console logs or stream live stdout/stderr/developer logs. |
 | | `trigger_scroll_gesture` | *N/A* | Scroll the application viewport. |
 | **Widget Inspector** | `widget` | `inspect`, `toggle_selection`, `get_tree` | Find widget tree structure, get layout details, and toggle device inspector. |
 | | `get_navigation_stack` | *N/A* | Inspect active Flutter Router and Navigator route tree, current URL, and depth. |
@@ -96,7 +96,9 @@ To keep payloads light, these settings are supported:
   - `limit` in `profiling` (action: `get_cpu`): Sets max CPU hotspots returned (default: `15`).
   - `limit` in `diagnose_project` (action: `bundle_size`): Sets max components shown (default: `25`).
   - `limit` in `memory` (action: `audit_leak`, `get_referrers`, `stop_gc_stream`, `watch_gc_pressure`): Sets max instances, path depth, or returned GC events (default: `50`-`100`).
-  - `duration_seconds` in `memory` (action: `get_memory_timeline`, `watch_gc_pressure`): Sets sampling or monitoring duration in seconds (default: `5`-`10`, max: `60`).
+  - `duration_seconds` in `console_logs` (`watch`), `network` (`watch`), `memory` (`get_memory_timeline`, `watch_gc_pressure`): Sets sampling or monitoring duration in seconds (default: `5.0`, max: `30`).
+  - `slow_threshold_ms` in `network` (action: `watch`): Threshold in ms to flag slow requests (default: `500`).
+  - `filter` in `console_logs` (action: `watch`): Optional text filter substring for live logs.
   - `topN` in `memory` (action: `compare`): Sets max class differences returned (default: `10`).
   - `topN` in `memory` (action: `get_snapshot`): Sets max classes by size (default: `20`).
   - `topN` in `rebuild_tracking` (action: `stop` / `get_counts`): Sets max rebuild entries shown (default: `30`).
@@ -111,6 +113,7 @@ To keep payloads light, these settings are supported:
   - `platform` in `diagnose_project` (action: `deep_links`): Platform target (e.g. `android` or `ios`, required).
 
 - **Payload Settings**:
+  - `include_details` in `network` (`watch` / `stop` / `get_profile`): Includes full request & response headers, cookies, and bodies (default: `false`).
   - `includeRawResponse` in `memory` and `network`: Hides raw JSON payloads when false (default: `false`).
   - `includeExtensions` in `get_app_info`: Hides the full service extensions list when false (default: `false`).
   - `includeRawNode` in `widget` (action: `inspect`): Hides raw JSON layout nodes when false (default: `false`).
