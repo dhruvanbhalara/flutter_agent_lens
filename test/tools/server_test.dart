@@ -165,6 +165,10 @@ class FakeVmService extends VmService {
     return Isolate(
       id: 'isolate_1',
       name: 'main',
+      extensionRPCs: [
+        'ext.dart.io.getHttpProfile',
+        'ext.dart.io.getHttpProfileRequest',
+      ],
       libraries: [
         LibraryRef(
             id: 'lib_1', name: 'main_lib', uri: 'package:my_app/main.dart'),
@@ -1157,7 +1161,7 @@ void main() {
           contains('Invalid format'));
     });
 
-    test('fetch_console_logs with negative limit clamps limit and succeeds',
+    test('console_logs with negative limit clamps limit and succeeds',
         () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
@@ -1165,7 +1169,7 @@ void main() {
 
       final result = await server.callTool(
         CallToolRequest(
-          name: McpTool.fetchConsoleLogs.name,
+          name: McpTool.consoleLogs.name,
           arguments: const {
             'limit': -5,
           },
@@ -1174,6 +1178,51 @@ void main() {
       expect(result.isError, isNot(isTrue));
       expect((result.content.first as TextContent).text,
           contains('Console Log Cache'));
+    });
+
+    test('console_logs watch action captures log entries during window',
+        () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      // Simulate a log entry arriving during the watch window
+      Future.delayed(const Duration(milliseconds: 100), () {
+        server.addToLogBuffer('[STDOUT]', 'Test live watch log message');
+      });
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.consoleLogs.name,
+          arguments: const {
+            'action': 'watch',
+            'duration_seconds': 1,
+            'filter': 'Test live',
+          },
+        ),
+      );
+      expect(result.isError, isNot(isTrue));
+      expect((result.content.first as TextContent).text,
+          contains('Test live watch log message'));
+    });
+
+    test('network watch action with include_details: true succeeds', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.network.name,
+          arguments: const {
+            'action': 'watch',
+            'duration_seconds': 1,
+            'slow_threshold_ms': 500,
+            'include_details': true,
+          },
+        ),
+      );
+      expect(result.isError, isNot(isTrue));
     });
 
     test('getCallStack with invalid isolate returns error', () async {
