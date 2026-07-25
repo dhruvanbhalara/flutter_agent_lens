@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/flutter_agent_lens.dart';
@@ -123,7 +124,7 @@ class FakeVmService extends VmService {
   }
 
   @override
-  Future<InstanceRef> evaluate(
+  Future<Response> evaluate(
     String isolateId,
     String targetId,
     String expression, {
@@ -902,5 +903,344 @@ void main() {
       expect((restartRes.content.first as TextContent).text,
           contains('Not connected to a running application'));
     });
+
+    group('get_navigation_stack tests', () {
+      late NavigationFakeVmService navFakeVm;
+
+      setUp(() {
+        navFakeVm = NavigationFakeVmService();
+        server.vmService = navFakeVm;
+        server.isolateId = 'isolate_1';
+      });
+
+      test('get_navigation_stack returns formatted tree and current url',
+          () async {
+        final mockResponse = {
+          'currentUrl': '/profile',
+          'staticRouteTree':
+              'Full paths for routes:\n  ├─ /home (HomeScreen)\n  └─ /profile (ProfileScreen)',
+          'navigators': [
+            {
+              'id': 1,
+              'parentId': null,
+              'parentRouteHash': null,
+              'total': 2,
+              'routes': [
+                {
+                  'name': '/',
+                  'screenName': 'HomeScreen',
+                  'type': 'MaterialPageRoute',
+                  'settingsType': 'RouteSettings',
+                  'hash': 123,
+                  'isCurrent': false,
+                  'isFirst': true
+                },
+                {
+                  'name': '/profile',
+                  'screenName': 'ProfileScreen',
+                  'type': 'MaterialPageRoute',
+                  'settingsType': 'RouteSettings',
+                  'hash': 456,
+                  'isCurrent': true,
+                  'isFirst': false
+                }
+              ]
+            }
+          ]
+        };
+
+        navFakeVm.evaluateResult = jsonEncode(mockResponse);
+
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.getNavigationStack.name,
+            arguments: const {},
+          ),
+        );
+
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Current URL: /profile'));
+        expect(text, contains('Static Route Tree:'));
+        expect(text, contains('Full paths for routes:'));
+        expect(text, contains('  ├─ /home (HomeScreen)'));
+        expect(text, contains('Navigator [root] (2 routes)'));
+        expect(text, contains('├── / (HomeScreen) (MaterialPageRoute) [root]'));
+        expect(
+            text,
+            contains(
+                '└── /profile (ProfileScreen) (MaterialPageRoute) [current]'));
+      });
+
+      test('get_navigation_stack displays warning when stack depth exceeds 20',
+          () async {
+        final routesList = List.generate(
+          25,
+          (index) => {
+            'name': 'route_$index',
+            'screenName': 'Screen_$index',
+            'type': 'MaterialPageRoute',
+            'settingsType': 'RouteSettings',
+            'hash': index + 1,
+            'isCurrent': index == 24,
+            'isFirst': index == 0
+          },
+        );
+
+        final mockResponse = {
+          'currentUrl': '/route_24',
+          'navigators': [
+            {
+              'id': 1,
+              'parentId': null,
+              'parentRouteHash': null,
+              'total': 25,
+              'routes': routesList
+            }
+          ]
+        };
+
+        navFakeVm.evaluateResult = jsonEncode(mockResponse);
+
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.getNavigationStack.name,
+            arguments: const {},
+          ),
+        );
+
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text,
+            contains('WARNING: Navigator stack depth 25 exceeds limit of 20'));
+      });
+
+      test('get_navigation_stack handles empty stack gracefully', () async {
+        final mockResponse = {'currentUrl': null, 'navigators': <dynamic>[]};
+
+        navFakeVm.evaluateResult = jsonEncode(mockResponse);
+
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.getNavigationStack.name,
+            arguments: const {},
+          ),
+        );
+
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('No active navigators found.'));
+      });
+
+      test('get_navigation_stack returns error if evaluation fails', () async {
+        navFakeVm.throwEvaluateError = true;
+
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.getNavigationStack.name,
+            arguments: const {},
+          ),
+        );
+
+        expect(result.isError, isTrue);
+      });
+
+      test(
+          'get_navigation_stack handles evaluation results with truncated valueAsString',
+          () async {
+        final mockResponse = {
+          'currentUrl': '/home',
+          'navigators': [
+            {
+              'id': 1,
+              'parentId': null,
+              'parentRouteHash': null,
+              'total': 1,
+              'routes': [
+                {
+                  'name': '/',
+                  'screenName': 'HomeScreen',
+                  'type': 'MaterialPageRoute',
+                  'settingsType': 'RouteSettings',
+                  'hash': 123,
+                  'isCurrent': true,
+                  'isFirst': true
+                }
+              ]
+            }
+          ]
+        };
+
+        navFakeVm.evaluateResult = jsonEncode(mockResponse);
+        navFakeVm.isTruncated = true;
+
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.getNavigationStack.name,
+            arguments: const {},
+          ),
+        );
+
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Current URL: /home'));
+        expect(text, contains('Navigator [root] (1 routes)'));
+      });
+
+      test(
+          'get_navigation_stack returns error if evaluation result is not InstanceRef',
+          () async {
+        navFakeVm.returnInvalidEvalType = true;
+
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.getNavigationStack.name,
+            arguments: const {},
+          ),
+        );
+
+        expect(result.isError, isTrue);
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Evaluation failed. Unexpected result type:'));
+      });
+
+      test(
+          'get_navigation_stack handles nested navigators and formats properly',
+          () async {
+        final mockResponse = {
+          'currentUrl': '/sub',
+          'navigators': [
+            {
+              'id': 1,
+              'parentId': null,
+              'parentRouteHash': null,
+              'total': 1,
+              'routes': [
+                {
+                  'name': '/',
+                  'screenName': 'HomeScreen',
+                  'type': 'MaterialPageRoute',
+                  'settingsType': 'RouteSettings',
+                  'hash': 111,
+                  'isCurrent': false,
+                  'isFirst': true
+                }
+              ]
+            },
+            {
+              'id': 2,
+              'parentId': 1,
+              'parentRouteHash': 111,
+              'total': 1,
+              'routes': [
+                {
+                  'name': '/sub',
+                  'screenName': 'SubScreen',
+                  'type': 'MaterialPageRoute',
+                  'settingsType': 'RouteSettings',
+                  'hash': 222,
+                  'isCurrent': true,
+                  'isFirst': false
+                }
+              ]
+            }
+          ]
+        };
+
+        navFakeVm.evaluateResult = jsonEncode(mockResponse);
+
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.getNavigationStack.name,
+            arguments: const {},
+          ),
+        );
+
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Navigator [root] (1 routes)'));
+        expect(text, contains('Navigator (1 routes)'));
+        expect(text, contains('SubScreen'));
+      });
+    });
   });
+}
+
+class NavigationFakeVmService extends FakeVmService {
+  String? evaluateResult;
+  bool throwEvaluateError = false;
+  bool returnInvalidEvalType = false;
+  bool isTruncated = false;
+
+  @override
+  Future<Isolate> getIsolate(String isolateId) async {
+    return Isolate(
+      id: 'isolate_1',
+      name: 'main',
+      libraries: [
+        LibraryRef(
+          id: 'lib_app',
+          name: 'app',
+          uri: 'package:flutter/src/widgets/app.dart',
+        ),
+        LibraryRef(
+          id: 'lib_navigator',
+          name: 'navigator',
+          uri: 'package:flutter/src/widgets/navigator.dart',
+        ),
+        LibraryRef(
+          id: 'lib_inspector',
+          name: 'widget_inspector',
+          uri: 'package:flutter/src/widgets/widget_inspector.dart',
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<Response> evaluate(
+    String isolateId,
+    String targetId,
+    String expression, {
+    Map<String, String>? scope,
+    bool? disableBreakpoints,
+    String? idZoneId,
+  }) async {
+    if (expression == 'WidgetInspectorService.instance') {
+      return InstanceRef(
+        id: 'ref_inspector_service',
+        kind: InstanceKind.kPlainInstance,
+        valueAsString: 'WidgetInspectorService',
+      );
+    }
+    if (throwEvaluateError) {
+      throw RPCError('evaluate', -32603, 'Internal error');
+    }
+    if (returnInvalidEvalType) {
+      // Return a Sentinel to simulate an invalid eval result type (which is not InstanceRef)
+      return Sentinel(kind: SentinelKind.kFree, valueAsString: 'Free');
+    }
+    return InstanceRef(
+      id: 'ref_nav',
+      kind: InstanceKind.kString,
+      valueAsString: isTruncated ? 'truncated' : (evaluateResult ?? '{}'),
+      valueAsStringIsTruncated: isTruncated,
+    );
+  }
+
+  @override
+  Future<Obj> getObject(
+    String isolateId,
+    String objectId, {
+    int? offset,
+    int? count,
+    String? idZoneId,
+  }) async {
+    return Instance(
+      id: objectId,
+      kind: InstanceKind.kString,
+      valueAsString: evaluateResult ?? '{}',
+      valueAsStringIsTruncated: false,
+    );
+  }
 }

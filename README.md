@@ -76,6 +76,7 @@ This server groups functions into action-based tools to keep the schema footprin
 | | `fetch_console_logs` | *N/A* | Read stdout, stderr, and developer logs. |
 | | `trigger_scroll_gesture` | *N/A* | Scroll the application viewport. |
 | **Widget Inspector** | `widget` | `inspect`, `toggle_selection`, `get_tree` | Find widget tree structure, get layout details, and toggle device inspector. |
+| | `get_navigation_stack` | *N/A* | Inspect active Flutter Router and Navigator route tree, current URL, and depth. |
 | | `debug_flag` | `toggle`, `toggle_package_widgets` | Change debug settings (e.g. paint size) or toggle package widget visibility. |
 | **Screenshots** | `screenshot` | `take`, `capture_baseline`, `compare` | Take screen capture or run visual regression comparisons. |
 | **Hot Reload** | `hot_reload` / `hot_restart`| *N/A* | Trigger hot reload or hot restart. |
