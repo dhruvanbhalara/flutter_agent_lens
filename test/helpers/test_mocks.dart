@@ -6,6 +6,8 @@ class FakeVmService extends VmService {
   final Map<String, Map<String, dynamic>> serviceExtensionResponses = {};
   final StreamController<Event> _eventController =
       StreamController<Event>.broadcast();
+  final StreamController<Event> _gcEventController =
+      StreamController<Event>.broadcast();
 
   bool disposeCalled = false;
   int allocationProfileCalls = 0;
@@ -13,6 +15,7 @@ class FakeVmService extends VmService {
   bool timelineCleared = false;
   Map<String, dynamic>? lastArgs;
   String? lastExtensionCalled;
+  List<String> activeStreamSubscriptions = [];
 
   List<String> mockExtensionRPCs = [];
   Map<String, dynamic> mockTimelineResponse = {};
@@ -22,8 +25,19 @@ class FakeVmService extends VmService {
   @override
   Stream<Event> get onExtensionEvent => _eventController.stream;
 
+  @override
+  Stream<Event> get onGCEvent => _gcEventController.stream;
+
   void emitExtensionEvent(Event event) {
     _eventController.add(event);
+  }
+
+  void emitGcEvent({String gcType = 'Scavenge', int? timestamp}) {
+    _gcEventController.add(Event(
+      kind: 'GC',
+      timestamp: timestamp ?? DateTime.now().millisecondsSinceEpoch,
+      gcType: gcType,
+    ));
   }
 
   void emitRebuildEvent(Map<String, dynamic> data) {
@@ -33,6 +47,44 @@ class FakeVmService extends VmService {
       extensionKind: 'Flutter.RebuiltWidgets',
       extensionData: ExtensionData.parse(data),
     ));
+  }
+
+  @override
+  Future<Success> streamListen(String streamId) async {
+    if (activeStreamSubscriptions.contains(streamId)) {
+      throw RPCError('streamListen', 103, 'Stream already subscribed');
+    }
+    activeStreamSubscriptions.add(streamId);
+    return Success();
+  }
+
+  @override
+  Future<Success> streamCancel(String streamId) async {
+    activeStreamSubscriptions.remove(streamId);
+    return Success();
+  }
+
+  @override
+  Future<ProcessMemoryUsage> getProcessMemoryUsage() async {
+    return ProcessMemoryUsage(
+      root: ProcessMemoryItem(
+        name: 'Total',
+        description: 'Total process memory',
+        size: 50 * 1024 * 1024,
+        children: [
+          ProcessMemoryItem(
+            name: 'Dart',
+            description: 'Dart heap memory',
+            size: 20 * 1024 * 1024,
+          ),
+          ProcessMemoryItem(
+            name: 'Native',
+            description: 'Native memory',
+            size: 30 * 1024 * 1024,
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -210,6 +262,7 @@ class FakeVmService extends VmService {
   Future<Success> dispose() async {
     disposeCalled = true;
     await _eventController.close();
+    await _gcEventController.close();
     return Success();
   }
 }
