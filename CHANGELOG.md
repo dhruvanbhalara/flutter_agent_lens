@@ -1,3 +1,8 @@
+## 1.6.2
+
+### Added
+- Added `get_navigation_stack` MCP tool to inspect active routes, current URL, and nested navigator trees via the Dart VM Service.
+
 ## 1.6.1
 
 ### Added
