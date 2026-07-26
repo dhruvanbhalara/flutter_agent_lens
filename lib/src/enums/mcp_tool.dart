@@ -9,8 +9,8 @@ enum McpTool {
   /// Automatically discover running Flutter apps on this machine.
   discoverApps('discover_apps', requiresConnection: false),
 
-  /// Read recent console logs from stdout, stderr, and developer streams.
-  fetchConsoleLogs('fetch_console_logs'),
+  /// Manage console logs: fetch buffered logs or watch live logs over a duration window.
+  consoleLogs('console_logs'),
 
   /// Fetch the active call stack frames for the running application (when paused).
   getCallStack('get_call_stack'),

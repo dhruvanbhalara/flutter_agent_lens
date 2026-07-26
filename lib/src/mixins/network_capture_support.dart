@@ -27,12 +27,13 @@ base mixin NetworkCaptureSupport
         description: 'Manage HTTP network capture. '
             'Actions: start (begin capture), stop (end and get report), '
             'get_profile (read HTTP request history), '
+            'watch (capture and report HTTP traffic over a duration window), '
             'get_request_details (inspect full headers, cookies, timing, and body for a request).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
               description:
-                  'Action to perform: start, stop, get_profile, get_request_details.',
+                  'Action to perform: start, stop, get_profile, watch, get_request_details.',
             ),
             'requestId': StringSchema(
               description:
@@ -40,6 +41,15 @@ base mixin NetworkCaptureSupport
             ),
             'sortBy': StringSchema(
               description: 'Sort by: time, duration, size (for stop action).',
+            ),
+            'duration_seconds': durationSchema(defaultValue: 5.0),
+            'slow_threshold_ms': IntegerSchema(
+              description:
+                  'Threshold in milliseconds to flag slow requests for watch action (default: 500).',
+            ),
+            'include_details': BooleanSchema(
+              description:
+                  'Whether to include full request/response headers, cookies, and bodies for returned requests (default: false).',
             ),
             'includeRawResponse': BooleanSchema(
               description:
@@ -206,7 +216,7 @@ base mixin NetworkCaptureSupport
         md.writeln(
             '| `$id` | $method | `$displayUri` | `$statusCode` | $durationStr | $reqSize B | $resSize B | $startTimeStr |');
 
-        formattedRequests.add({
+        final reqEntry = <String, dynamic>{
           'id': id,
           'method': method,
           'uri': uri,
@@ -217,7 +227,19 @@ base mixin NetworkCaptureSupport
           'request_size_bytes': reqSize,
           'response_size_bytes': resSize,
           'start_time': startTimeStr,
-        });
+        };
+
+        final includeDetails = req.arg<bool>('include_details') ??
+            req.arg<bool>('includeDetails') ??
+            false;
+        if (includeDetails && id != 'N/A') {
+          final details = await _fetchRequestDetailsMap(id);
+          if (details != null) {
+            reqEntry['details'] = details;
+          }
+        }
+
+        formattedRequests.add(reqEntry);
       }
     }
 
@@ -454,7 +476,7 @@ base mixin NetworkCaptureSupport
       output.add(
           '$statusSymbol $method $durationStr | ${formatBytes(resSize)} | $displayUri');
 
-      formattedRequests.add({
+      final reqEntry = <String, dynamic>{
         'id': id,
         'method': method,
         'uri': uri,
@@ -462,7 +484,19 @@ base mixin NetworkCaptureSupport
         'duration_ms': durationVal,
         'request_size_bytes': reqSize,
         'response_size_bytes': resSize,
-      });
+      };
+
+      final includeDetails = req.arg<bool>('include_details') ??
+          req.arg<bool>('includeDetails') ??
+          false;
+      if (includeDetails && id != 'N/A') {
+        final details = await _fetchRequestDetailsMap(id);
+        if (details != null) {
+          reqEntry['details'] = details;
+        }
+      }
+
+      formattedRequests.add(reqEntry);
     }
 
     final slowRequests = completedRequests.where((r) {
@@ -515,6 +549,46 @@ base mixin NetworkCaptureSupport
         if (includeRawResponse) 'raw_response': allRequests,
       },
     );
+  }
+
+  /// Fetches detailed request and response headers, cookies, and bodies for a request ID.
+  Future<Map<String, dynamic>?> _fetchRequestDetailsMap(
+      String requestId) async {
+    final vm = vmService;
+    final isoId = isolateId;
+    if (vm == null || isoId == null) return null;
+    try {
+      final response = await vm.callServiceExtension(
+        'ext.dart.io.getHttpProfileRequest',
+        isolateId: isoId,
+        args: {'id': requestId},
+      );
+      final jsonMap = response.json ?? {};
+      final rawResult = jsonMap['result'];
+      Map<String, dynamic>? targetRequest;
+      if (rawResult is Map) {
+        targetRequest = _sanitizeRequest(rawResult);
+      } else if (jsonMap.containsKey('request')) {
+        targetRequest = _sanitizeRequest(jsonMap);
+      }
+      if (targetRequest == null) return null;
+
+      final rawReq = targetRequest['request'];
+      final reqData = rawReq is Map ? Map<String, dynamic>.from(rawReq) : null;
+      final rawRes = targetRequest['response'];
+      final resData = rawRes is Map ? Map<String, dynamic>.from(rawRes) : null;
+
+      return {
+        'request_headers': reqData?['headers'] ?? <String, dynamic>{},
+        'request_cookies': reqData?['cookies'] ?? <dynamic>[],
+        'request_body': reqData?['body'],
+        'response_headers': resData?['headers'] ?? <String, dynamic>{},
+        'response_cookies': resData?['cookies'] ?? <dynamic>[],
+        'response_body': resData?['body'],
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Handles the get_request_details tool request.
@@ -717,6 +791,228 @@ base mixin NetworkCaptureSupport
     );
   }
 
+  /// Handles watching live network traffic over a specified duration window.
+  Future<CallToolResult> _handleWatchNetwork(CallToolRequest req) async {
+    if (vmService == null) return notConnected();
+
+    if (!await _checkHttpProfileSupport()) {
+      return _getUnsupportedError();
+    }
+
+    if (isCapturingNetwork) {
+      return CallToolResult(
+        content: [
+          TextContent(
+            text:
+                'Already statefully capturing network traffic. Call network action `stop` first.',
+          )
+        ],
+        isError: true,
+      );
+    }
+
+    final rawDuration = req.arg<num>('duration_seconds') ?? 5;
+    final duration = rawDuration.toInt().clamp(1, 30);
+    final slowThresholdMs = (req.arg<num>('slow_threshold_ms'))?.toInt() ?? 500;
+
+    stderr.writeln(
+        '[mcp:watch_network] Watching network traffic for ${duration}s (slow threshold: ${slowThresholdMs}ms)...');
+
+    // Capture initial requests snapshot
+    final initialRequests = await _getHttpRequests();
+    final initialIds = <String>{
+      for (final r in initialRequests)
+        if (r['id'] != null) r['id'].toString()
+    };
+
+    try {
+      await vmService!.callServiceExtension(
+        'ext.dart.io.httpEnableTimelineLogging',
+        isolateId: isolateId!,
+        args: {'enabled': 'true'},
+      );
+    } catch (e) {
+      stderr.writeln(
+          '[mcp:watch_network] Error enabling HTTP timeline logging: $e');
+    }
+
+    await Future<void>.delayed(Duration(seconds: duration));
+
+    final currentRequests = await _getHttpRequests();
+    final newRequests = <Map<String, dynamic>>[];
+    for (final r in currentRequests) {
+      final id = r['id']?.toString();
+      if (id != null && !initialIds.contains(id)) {
+        newRequests.add(r);
+      }
+    }
+
+    try {
+      await vmService!.callServiceExtension(
+        'ext.dart.io.httpEnableTimelineLogging',
+        isolateId: isolateId!,
+        args: {'enabled': 'false'},
+      );
+    } catch (_) {}
+
+    final completedRequests = newRequests.where((r) {
+      final responseData = r['response'] as Map<String, dynamic>?;
+      return responseData != null && r['endTime'] != null;
+    }).toList();
+
+    final failedRequests = newRequests.where((r) {
+      final error = r['error']?.toString();
+      final responseData = r['response'] as Map<String, dynamic>?;
+      final statusCode = responseData?['statusCode'] as int?;
+      return error != null || (statusCode != null && statusCode >= 400);
+    }).toList();
+
+    final pendingRequests = newRequests.where((r) {
+      final responseData = r['response'] as Map<String, dynamic>?;
+      return r['endTime'] == null && r['error'] == null && responseData == null;
+    }).toList();
+
+    final totalSize = newRequests.fold<int>(0, (sum, r) {
+      final responseData = r['response'] as Map<String, dynamic>?;
+      return sum + ((responseData?['contentLength'] as int?) ?? 0);
+    });
+
+    final durations = completedRequests.map((r) {
+      final startUs = r['startTime'] as int? ?? 0;
+      final endUs = r['endTime'] as int? ?? 0;
+      return (endUs - startUs) / 1000.0;
+    }).toList();
+
+    final avgDuration = durations.isNotEmpty
+        ? durations.reduce((a, b) => a + b) / durations.length
+        : 0.0;
+    final maxDuration =
+        durations.isNotEmpty ? durations.reduce((a, b) => a > b ? a : b) : 0.0;
+
+    String formatDuration(double ms) {
+      if (ms < 1.0) return '<1ms';
+      if (ms < 1000.0) return '${ms.round()}ms';
+      return '${(ms / 1000.0).toStringAsFixed(2)}s';
+    }
+
+    final slowRequests = completedRequests.where((r) {
+      final startUs = r['startTime'] as int? ?? 0;
+      final endUs = r['endTime'] as int? ?? 0;
+      final durMs = (endUs - startUs) / 1000.0;
+      return durMs > slowThresholdMs;
+    }).toList();
+
+    final formattedRequests = <Map<String, dynamic>>[];
+    final output = <String>[
+      'LIVE NETWORK WATCH REPORT ($duration s window)',
+      '',
+      'SUMMARY',
+      'Captured for ${duration}s',
+      'Total requests: ${newRequests.length}',
+      'Completed: ${completedRequests.length} | Failed: ${failedRequests.length} | Pending: ${pendingRequests.length}',
+      'Total response size: ${formatBytes(totalSize)}',
+      'Average response time: ${formatDuration(avgDuration)}',
+      'Slowest request: ${formatDuration(maxDuration)}',
+      'Requests exceeding threshold (${slowThresholdMs}ms): ${slowRequests.length}',
+      '',
+      'REQUESTS',
+    ];
+
+    if (newRequests.isEmpty) {
+      output.add('No network requests detected during the $duration s window.');
+    } else {
+      for (final reqMap in newRequests) {
+        final id = reqMap['id']?.toString() ?? 'N/A';
+        final method = reqMap['method']?.toString() ?? 'GET';
+        final uri = reqMap['uri']?.toString() ?? 'unknown';
+        final requestData = reqMap['request'] as Map<String, dynamic>?;
+        final responseData = reqMap['response'] as Map<String, dynamic>?;
+
+        final startUs = reqMap['startTime'] as int?;
+        final endUs = reqMap['endTime'] as int?;
+        final durationVal = (startUs != null && endUs != null)
+            ? (endUs - startUs) / 1000.0
+            : null;
+        final durationStr =
+            durationVal != null ? formatDuration(durationVal) : 'pending...';
+
+        final isSlow = durationVal != null && durationVal > slowThresholdMs;
+        final statusSymbol = switch (reqMap) {
+          {'error': final err} when err != null => '[ERROR] $err',
+          {'response': {'statusCode': final int code}} => switch (code) {
+              >= 400 => '[ERROR] $code',
+              >= 300 => '[WARN]  $code',
+              _ => isSlow ? '[SLOW]  $code' : '[OK]    $code',
+            },
+          _ => '[PENDING]',
+        };
+
+        final reqSize = (requestData?['contentLength'] as int?) ?? 0;
+        final resSize = (responseData?['contentLength'] as int?) ?? 0;
+        final displayUri = uri.length > 50 ? '${uri.substring(0, 47)}...' : uri;
+
+        output.add(
+            '$statusSymbol $method $durationStr | ${formatBytes(resSize)} | $displayUri');
+
+        final reqEntry = <String, dynamic>{
+          'id': id,
+          'method': method,
+          'uri': uri,
+          'statusCode': responseData?['statusCode'] ?? 'Pending',
+          'duration_ms': durationVal,
+          'is_slow': isSlow,
+          'request_size_bytes': reqSize,
+          'response_size_bytes': resSize,
+        };
+
+        final includeDetails = req.arg<bool>('include_details') ??
+            req.arg<bool>('includeDetails') ??
+            false;
+        if (includeDetails && id != 'N/A') {
+          final details = await _fetchRequestDetailsMap(id);
+          if (details != null) {
+            reqEntry['details'] = details;
+          }
+        }
+
+        formattedRequests.add(reqEntry);
+      }
+    }
+
+    if (slowRequests.isNotEmpty || failedRequests.isNotEmpty) {
+      output.add('');
+      output.add('CONCERNS');
+      for (final r in slowRequests) {
+        final startUs = r['startTime'] as int? ?? 0;
+        final endUs = r['endTime'] as int? ?? 0;
+        final dur = (endUs - startUs) / 1000.0;
+        output.add(
+            '- SLOW: ${r['method']} ${r['uri']} took ${formatDuration(dur)} (exceeded threshold of ${slowThresholdMs}ms)');
+      }
+      for (final r in failedRequests) {
+        final error = r['error']?.toString();
+        final responseData = r['response'] as Map<String, dynamic>?;
+        final statusCode = responseData?['statusCode']?.toString();
+        output.add(
+            '- ERROR: ${r['method']} ${r['uri']} - ${error ?? "Status Code $statusCode"}');
+      }
+    }
+
+    final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
+    return serializeDualFormat(
+      title: 'Live Network Watch Report',
+      markdownBody: output.join('\n'),
+      structuredData: {
+        'duration_seconds': duration,
+        'slow_threshold_ms': slowThresholdMs,
+        'total_requests': newRequests.length,
+        'slow_requests_count': slowRequests.length,
+        'requests': formattedRequests,
+        if (includeRawResponse) 'raw_response': newRequests,
+      },
+    );
+  }
+
   /// Handles the network composite tool request.
   Future<CallToolResult> _handleNetwork(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
@@ -724,6 +1020,7 @@ base mixin NetworkCaptureSupport
       'start' => _handleStartNetworkCapture(req),
       'stop' => _handleStopNetworkCapture(req),
       'get_profile' => _handleGetNetworkProfile(req),
+      'watch' => _handleWatchNetwork(req),
       'get_request_details' => _handleGetHttpRequestDetails(req),
       _ => CallToolResult(
           content: [TextContent(text: 'Unknown network action: $action')],
