@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/dhruvanbhalara/flutter_agent_lens/discussions
+    about: Please ask questions or discuss ideas here instead of opening an issue.

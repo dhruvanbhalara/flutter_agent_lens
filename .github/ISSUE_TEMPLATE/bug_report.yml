@@ -1,0 +1,53 @@
+name: Bug Report
+description: Report a problem or unexpected behavior in flutter_agent_lens
+title: "[BUG]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for taking the time to report a bug! Please search existing issues first to avoid duplicates.
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: Provide a clear and concise description of what the bug is.
+      placeholder: Describe the problem...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Connect flutter_agent_lens to Flutter VM Service...
+        2. Run tool action '...'
+        3. See error...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear description of what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Details
+      description: OS version, Dart/Flutter version (`flutter doctor`), and IDE context.
+      placeholder: |
+        - OS: macOS 14.5
+        - Flutter Version: 3.22.0
+        - Dart SDK: 3.4.0
+        - Connection Mode: VM Service WebSocket
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Error Output
+      description: Copy and paste stderr diagnostic output or stack traces if available.
+      render: shell
