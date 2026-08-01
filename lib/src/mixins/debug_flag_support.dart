@@ -25,7 +25,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               description:
                   'The debug flag action: toggle, toggle_package_widgets.',
             ),
-            'flag_name': StringSchema(
+            'flagName': StringSchema(
               description:
                   'The name of the Flutter debug flag to change (required for toggle). Supported flags: debugPaintSizeEnabled, debugPaintBaselinesEnabled, repaintRainbow, invertOversizedImages, timeDilation.',
             ),
@@ -203,7 +203,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   }
 
   Future<CallToolResult> _handleToggleDebugFlag(CallToolRequest req) async {
-    final flagName = req.requireArg<String>('flag_name');
+    final flagName = req.requireArg<String>('flagName');
     final valStr = req.requireArg<String>('value');
     stderr.writeln('[mcp:toggle_flag] Flag: $flagName, Target value: $valStr');
 

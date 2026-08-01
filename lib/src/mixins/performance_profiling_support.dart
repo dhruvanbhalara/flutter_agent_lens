@@ -35,7 +35,7 @@ base mixin PerformanceProfilingSupport
             'action': StringSchema(
               description: 'Action: start, stop, get_cpu, diagnose_jank.',
             ),
-            'duration_seconds': durationSchema(),
+            'durationSeconds': durationSchema(),
             'limit': limitSchema(defaultValue: 15),
           },
           required: ['action'],
@@ -95,7 +95,7 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the diagnose_jank tool request.
   Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final duration = req.intArg('durationSeconds', defaultValue: 3)!;
     stderr.writeln(
         '[mcp:diagnose_jank] Starting jank diagnosis, duration=${duration}s');
 
@@ -146,7 +146,7 @@ base mixin PerformanceProfilingSupport
           '- Janky Frame Events (> 16.6ms): $jankyFrames ($jankPercentage%)')
       ..writeln();
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
+    final limit = req.intArg('limit', defaultValue: 15)!;
     if (jankyFrames > 0) {
       mdBuffer.writeln('| Event | Duration (ms) | Severity |');
       mdBuffer.writeln('| :--- | :--- | :--- |');
@@ -302,7 +302,7 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the get_cpu_profile tool request.
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final duration = req.intArg('durationSeconds', defaultValue: 3)!;
     stderr.writeln(
         '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
 
@@ -350,7 +350,7 @@ base mixin PerformanceProfilingSupport
     stderr.writeln(
         '[mcp:cpu_profile] Collected ${cpuSamples.sampleCount} samples, ${hotspots.length} active functions');
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
+    final limit = req.intArg('limit', defaultValue: 15)!;
     if (hotspots.isEmpty) {
       mdBuffer.writeln('No CPU sampling ticks recorded in the window.');
     } else {

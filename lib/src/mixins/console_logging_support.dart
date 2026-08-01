@@ -48,7 +48,7 @@ base mixin ConsoleLoggingSupport
               description: 'Action to perform: fetch, watch. Default: fetch.',
             ),
             'limit': limitSchema(defaultValue: 50),
-            'duration_seconds': durationSchema(defaultValue: 5.0),
+            'durationSeconds': durationSchema(defaultValue: 5.0),
             'filter': StringSchema(
               description: 'Optional text filter substring for watch action.',
             ),
@@ -195,7 +195,7 @@ base mixin ConsoleLoggingSupport
 
   /// Handles the fetch action for console_logs.
   Future<CallToolResult> _handleFetchConsoleLogs(CallToolRequest req) async {
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 50;
+    final limit = req.intArg('limit', defaultValue: 50)!;
     final maxLimit = limit.clamp(1, 200);
     stderr.writeln(
         '[mcp:console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$maxLimit');
@@ -224,8 +224,8 @@ base mixin ConsoleLoggingSupport
 
   /// Handles watching live console logs over a specified duration window.
   Future<CallToolResult> _handleWatchLogs(CallToolRequest req) async {
-    final rawDuration = req.arg<num>('duration_seconds') ?? 5;
-    final duration = rawDuration.toInt().clamp(1, 30);
+    final duration =
+        req.intArg('durationSeconds', defaultValue: 5)!.clamp(1, 30);
     final filter = req.arg<String>('filter');
 
     stderr.writeln(

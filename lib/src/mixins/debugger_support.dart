@@ -98,7 +98,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'expression': StringSchema(
               description: 'The Dart expression to evaluate.',
             ),
-            'frame_index': IntegerSchema(
+            'frameIndex': IntegerSchema(
               description:
                   'Optional frame index to evaluate the expression in (if the app is paused at a breakpoint).',
             ),
@@ -115,7 +115,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the get_call_stack tool request.
   Future<CallToolResult> _handleGetCallStack(CallToolRequest req) async {
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 20;
+    final limit = req.intArg('limit', defaultValue: 20)!;
     stderr.writeln('[mcp:get_call_stack] Fetching stack frames (limit=$limit)');
 
     final stack = await vmService!.getStack(isolateId!, limit: limit);
@@ -184,7 +184,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   Future<CallToolResult> _handleAddBreakpoint(CallToolRequest req) async {
     final filePath = req.requireArg<String>('file_path');
     final line = (req.requireArg<num>('line')).toInt();
-    final column = (req.arg<num>('column'))?.toInt();
+    final column = req.intArg('column');
     stderr
         .writeln('[mcp:add_breakpoint] Setting breakpoint on: $filePath:$line');
 
@@ -249,7 +249,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Handles the evaluate_expression tool request.
   Future<CallToolResult> _handleEvalExpression(CallToolRequest req) async {
     final expression = req.requireArg<String>('expression');
-    final frameIndex = (req.arg<num>('frame_index'))?.toInt();
+    final frameIndex = req.intArg('frameIndex');
 
     if (frameIndex != null) {
       stderr.writeln(

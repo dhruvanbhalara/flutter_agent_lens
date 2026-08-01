@@ -84,7 +84,7 @@ void main() {
           name: 'profiling',
           arguments: const {
             'action': 'diagnose_jank',
-            'duration_seconds': 0,
+            'durationSeconds': 0,
           },
         ),
       );
