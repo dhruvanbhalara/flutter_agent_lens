@@ -7,6 +7,8 @@ import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
+import 'package:flutter_agent_lens/src/strategies/memory_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:vm_service/vm_service.dart';
 
@@ -14,6 +16,23 @@ import 'package:vm_service/vm_service.dart';
 /// and capturing and comparing memory snapshots.
 base mixin MemoryDebuggingSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Action strategy registry for dispatching memory action tools.
+  late final ToolActionRegistry _memoryRegistry = ToolActionRegistry([
+    GetSnapshotStrategy(this),
+    SaveSnapshotStrategy(this),
+    CompareSnapshotsStrategy(this),
+    ListSnapshotsStrategy(this),
+    AuditLeakStrategy(this),
+    DiffAllocationsStrategy(this),
+    GetReferrersStrategy(this),
+    ForceGcStrategy(this),
+    StartGcStreamStrategy(this),
+    StopGcStreamStrategy(this),
+    GetMemoryTimelineStrategy(this),
+    WatchGcPressureStrategy(this),
+    ExplainMemoryBreakdownStrategy(this),
+  ]);
+
   /// Named cache of taken memory snapshots.
   final Map<String, MemorySnapshot> memorySnapshots = {};
 
@@ -177,8 +196,8 @@ base mixin MemoryDebuggingSupport
     }
   }
 
-  Future<CallToolResult> _handleAuditClassMemoryLeak(
-      CallToolRequest req) async {
+  /// Handles the audit_leak memory action.
+  Future<CallToolResult> handleAuditClassMemoryLeak(CallToolRequest req) async {
     final className = req.requireArg<String>('class_name');
     final limit = req.intArg('limit', defaultValue: 100)!;
     stderr.writeln(
@@ -378,7 +397,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the diff_heap_allocations tool request.
-  Future<CallToolResult> _handleDiffHeapAllocations(CallToolRequest req) async {
+  Future<CallToolResult> handleDiffHeapAllocations(CallToolRequest req) async {
     final duration = req.intArg('durationSeconds', defaultValue: 3)!;
     final expression = req.arg<String>('expression');
     final forceGc = req.arg<bool>('forceGC') ?? true;
@@ -493,7 +512,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the get_object_referrers tool request.
-  Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
+  Future<CallToolResult> handleGetObjectReferrers(CallToolRequest req) async {
     final objectId = req.requireArg<String>('object_id');
     final limit = req.intArg('limit', defaultValue: 15)!;
     final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
@@ -540,7 +559,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the save_snapshot tool request.
-  Future<CallToolResult> _handleSaveSnapshot(CallToolRequest req) async {
+  Future<CallToolResult> handleSaveSnapshot(CallToolRequest req) async {
     final name = req.requireArg<String>('name');
     final forceGc = req.arg<bool>('forceGC') ?? true;
     final maxSnapshots = req.intArg('limit', defaultValue: 10)!;
@@ -569,7 +588,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the compare_snapshots tool request.
-  Future<CallToolResult> _handleCompareSnapshots(CallToolRequest req) async {
+  Future<CallToolResult> handleCompareSnapshots(CallToolRequest req) async {
     final before = req.requireArg<String>('before');
     final after = req.requireArg<String>('after');
 
@@ -705,7 +724,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the list_snapshots tool request.
-  Future<CallToolResult> _handleListSnapshots(CallToolRequest req) async {
+  Future<CallToolResult> handleListSnapshots(CallToolRequest req) async {
     if (memorySnapshots.isEmpty) {
       return CallToolResult(
         content: [
@@ -776,7 +795,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the get_memory_snapshot tool request.
-  Future<CallToolResult> _handleGetMemorySnapshot(CallToolRequest req) async {
+  Future<CallToolResult> handleGetMemorySnapshot(CallToolRequest req) async {
     final forceGc = req.arg<bool>('forceGC') ?? false;
     final topN = req.intArg('topN', defaultValue: 20)!;
 
@@ -962,7 +981,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the force_gc tool request.
-  Future<CallToolResult> _handleForceGc(CallToolRequest req) async {
+  Future<CallToolResult> handleForceGc(CallToolRequest req) async {
     final before = await _getHeapStats();
     final after = await _getHeapStats(gc: true);
 
@@ -1001,7 +1020,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the start_gc_stream tool request.
-  Future<CallToolResult> _handleStartGcStream(CallToolRequest req) async {
+  Future<CallToolResult> handleStartGcStream(CallToolRequest req) async {
     await _ensureGcStream();
     return serializeDualFormat(
       title: '### GC Stream Monitoring Started',
@@ -1016,7 +1035,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the stop_gc_stream tool request.
-  Future<CallToolResult> _handleStopGcStream(CallToolRequest req) async {
+  Future<CallToolResult> handleStopGcStream(CallToolRequest req) async {
     final limit = req.intArg('limit', defaultValue: 50)!;
     final count = _gcEventBuffer.length;
     final durationMs = _gcStreamStartTime != null
@@ -1057,7 +1076,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the get_memory_timeline tool request.
-  Future<CallToolResult> _handleGetMemoryTimeline(CallToolRequest req) async {
+  Future<CallToolResult> handleGetMemoryTimeline(CallToolRequest req) async {
     final duration =
         req.intArg('durationSeconds', defaultValue: 5)!.clamp(1, 60);
 
@@ -1155,7 +1174,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the watch_gc_pressure tool request.
-  Future<CallToolResult> _handleWatchGcPressure(CallToolRequest req) async {
+  Future<CallToolResult> handleWatchGcPressure(CallToolRequest req) async {
     final duration =
         req.intArg('durationSeconds', defaultValue: 10)!.clamp(1, 60);
     final limit = req.intArg('limit', defaultValue: 50)!;
@@ -1254,7 +1273,7 @@ base mixin MemoryDebuggingSupport
   }
 
   /// Handles the explain_memory_breakdown tool request.
-  Future<CallToolResult> _handleExplainMemoryBreakdown(
+  Future<CallToolResult> handleExplainMemoryBreakdown(
       CallToolRequest req) async {
     final rss = await _getRssBytes();
     final heap = await _getHeapStats();
@@ -1322,25 +1341,7 @@ base mixin MemoryDebuggingSupport
     if (action != 'list' && (vmService == null || isolateId == null)) {
       return notConnected();
     }
-    return switch (action) {
-      'get_snapshot' => _handleGetMemorySnapshot(req),
-      'save' => _handleSaveSnapshot(req),
-      'compare' => _handleCompareSnapshots(req),
-      'list' => _handleListSnapshots(req),
-      'audit_leak' => _handleAuditClassMemoryLeak(req),
-      'diff_allocations' => _handleDiffHeapAllocations(req),
-      'get_referrers' => _handleGetObjectReferrers(req),
-      'force_gc' => _handleForceGc(req),
-      'start_gc_stream' => _handleStartGcStream(req),
-      'stop_gc_stream' => _handleStopGcStream(req),
-      'get_memory_timeline' => _handleGetMemoryTimeline(req),
-      'watch_gc_pressure' => _handleWatchGcPressure(req),
-      'explain_memory_breakdown' => _handleExplainMemoryBreakdown(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown memory action: $action')],
-          isError: true,
-        ),
-    };
+    return _memoryRegistry.dispatch(action, req, this);
   }
 
   /// Helper to process a list of items asynchronously in fixed-size batches.

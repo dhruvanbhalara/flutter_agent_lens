@@ -7,12 +7,21 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
+import 'package:flutter_agent_lens/src/strategies/widget_strategies.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for widget inspection, layout diagnostics, and widget tree retrieval.
 base mixin WidgetInspectionSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Action strategy registry for dispatching widget action tools.
+  late final ToolActionRegistry _widgetRegistry = ToolActionRegistry([
+    InspectLayoutStrategy(this),
+    ToggleWidgetSelectionStrategy(this),
+    GetWidgetTreeStrategy(this),
+  ]);
+
   /// Registers layout constraints and widget tree inspection tools.
   void registerWidgetTools() {
     registerTool(
@@ -77,23 +86,14 @@ base mixin WidgetInspectionSupport
   /// Delegates widget actions to respective handlers.
   Future<CallToolResult> _handleWidget(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    return switch (action) {
-      'inspect' => _handleInspectLayoutConstraints(req),
-      'toggle_selection' => _handleToggleWidgetSelection(req),
-      'get_tree' => _handleGetWidgetTree(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown widget action: $action')],
-          isError: true,
-        ),
-    };
+    return _widgetRegistry.dispatch(action, req, this);
   }
 
-  /// Clears active inspection cache.
+  /// Clears active widget inspection resources.
   Future<void> cleanupWidgetInspection() async {}
 
-  /// Handles the inspect_widget tool request.
-  Future<CallToolResult> _handleInspectLayoutConstraints(
-      CallToolRequest req) async {
+  /// Handles the inspect widget action.
+  Future<CallToolResult> handleInspectWidgetDetails(CallToolRequest req) async {
     final widgetId = req.requireArg<String>('widgetId');
     stderr.writeln('[mcp:inspect_layout] Inspecting widget: $widgetId');
 
@@ -182,8 +182,8 @@ base mixin WidgetInspectionSupport
     );
   }
 
-  /// Handles the toggle_widget_selection tool request.
-  Future<CallToolResult> _handleToggleWidgetSelection(
+  /// Handles the toggle_selection widget action.
+  Future<CallToolResult> handleToggleWidgetSelectionMode(
       CallToolRequest req) async {
     final enabled = req.requireArg<bool>('enabled');
     stderr.writeln('[mcp:toggle_widget_selection] Setting enabled = $enabled');
@@ -202,8 +202,8 @@ base mixin WidgetInspectionSupport
     );
   }
 
-  /// Handles the get_widget_tree tool request.
-  Future<CallToolResult> _handleGetWidgetTree(CallToolRequest req) async {
+  /// Handles the get_tree widget action.
+  Future<CallToolResult> handleGetWidgetTree(CallToolRequest req) async {
     final maxDepth = (req.arg<num>('maxDepth'))?.toInt() ?? 8;
     final projectOnly = req.arg<bool>('projectOnly') ?? true;
 

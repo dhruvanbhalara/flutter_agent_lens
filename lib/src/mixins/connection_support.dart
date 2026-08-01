@@ -10,6 +10,8 @@ import 'package:flutter_agent_lens/src/mixins/console_logging_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/path_resolver.dart';
 import 'package:flutter_agent_lens/src/port_discovery.dart';
+import 'package:flutter_agent_lens/src/strategies/connection_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:vm_service/vm_service.dart' hide Event;
 import 'package:vm_service/vm_service_io.dart';
 
@@ -22,6 +24,12 @@ base mixin ConnectionSupport
         VmConnectionSupport,
         ConsoleLoggingSupport,
         RootsTrackingSupport {
+  /// Action strategy registry for dispatching connection action tools.
+  late final ToolActionRegistry _connectionRegistry = ToolActionRegistry([
+    ConnectStrategy(this),
+    ConnectDtdStrategy(this),
+    DisconnectStrategy(this),
+  ]);
   static const _validSchemes = {'ws', 'wss', 'http', 'https'};
 
   /// The active connection to the Dart Tooling Daemon.
@@ -155,19 +163,11 @@ base mixin ConnectionSupport
   /// Consolidated connection handler.
   Future<CallToolResult> _handleConnection(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    return switch (action) {
-      'connect' => _handleConnect(req),
-      'connect_dtd' => _handleConnectDtd(req),
-      'disconnect' => _handleDisconnect(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown action: $action')],
-          isError: true,
-        ),
-    };
+    return _connectionRegistry.dispatch(action, req, this);
   }
 
   /// Handles the connect tool request.
-  Future<CallToolResult> _handleConnect(CallToolRequest req) async {
+  Future<CallToolResult> handleConnect(CallToolRequest req) async {
     if (vmService != null) {
       try {
         unregisterConnectedTools();
@@ -414,7 +414,7 @@ base mixin ConnectionSupport
   }
 
   /// Handles the DTD connection request.
-  Future<CallToolResult> _handleConnectDtd(CallToolRequest req) async {
+  Future<CallToolResult> handleConnectDtd(CallToolRequest req) async {
     final uriStr = switch (req.arguments) {
       {'uri': final String uri} => uri,
       {'vmServiceUri': final String uri} => uri,
@@ -539,7 +539,7 @@ base mixin ConnectionSupport
   }
 
   /// Handles the disconnect tool request.
-  Future<CallToolResult> _handleDisconnect(CallToolRequest req) async {
+  Future<CallToolResult> handleDisconnect(CallToolRequest req) async {
     try {
       await dtdClient?.close();
     } catch (_) {}
@@ -712,7 +712,7 @@ base mixin ConnectionSupport
         arguments: arguments,
       );
 
-      final connectResult = await _handleConnect(connectReq);
+      final connectResult = await handleConnect(connectReq);
       if (connectResult.isError ?? false) {
         return CallToolResult(
           content: [

@@ -6,11 +6,22 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/strategies/network_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 
 /// Support mixin providing tools for capturing and analyzing HTTP traffic details.
 base mixin NetworkCaptureSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Action strategy registry for dispatching network action tools.
+  late final ToolActionRegistry _networkRegistry = ToolActionRegistry([
+    StartNetworkCaptureStrategy(this),
+    StopNetworkCaptureStrategy(this),
+    GetNetworkProfileStrategy(this),
+    WatchNetworkStrategy(this),
+    GetRequestDetailsStrategy(this),
+  ]);
+
   /// Whether the network capture session is statefully active.
   bool isCapturingNetwork = false;
 
@@ -160,8 +171,8 @@ base mixin NetworkCaptureSupport
     );
   }
 
-  /// Handles the get_network_profile tool request.
-  Future<CallToolResult> _handleGetNetworkProfile(CallToolRequest req) async {
+  /// Handles the get_profile network action.
+  Future<CallToolResult> handleGetNetworkProfile(CallToolRequest req) async {
     stderr.writeln('[mcp:network_profile] Fetching HTTP profile...');
     if (vmService == null) return notConnected();
 
@@ -254,8 +265,8 @@ base mixin NetworkCaptureSupport
     );
   }
 
-  /// Handles the start_network_capture tool request.
-  Future<CallToolResult> _handleStartNetworkCapture(CallToolRequest req) async {
+  /// Handles the start network action.
+  Future<CallToolResult> handleStartNetworkCapture(CallToolRequest req) async {
     if (isCapturingNetwork) {
       return CallToolResult(
         content: [
@@ -305,8 +316,8 @@ base mixin NetworkCaptureSupport
     );
   }
 
-  /// Handles the stop_network_capture tool request.
-  Future<CallToolResult> _handleStopNetworkCapture(CallToolRequest req) async {
+  /// Handles the stop network action.
+  Future<CallToolResult> handleStopNetworkCapture(CallToolRequest req) async {
     if (!isCapturingNetwork) {
       return CallToolResult(
         content: [
@@ -588,8 +599,8 @@ base mixin NetworkCaptureSupport
     }
   }
 
-  /// Handles the get_request_details tool request.
-  Future<CallToolResult> _handleGetHttpRequestDetails(
+  /// Handles the get_request_details network action.
+  Future<CallToolResult> handleGetNetworkRequestDetails(
       CallToolRequest req) async {
     final requestId = req.arg<String>('requestId');
 
@@ -787,8 +798,8 @@ base mixin NetworkCaptureSupport
     );
   }
 
-  /// Handles watching live network traffic over a specified duration window.
-  Future<CallToolResult> _handleWatchNetwork(CallToolRequest req) async {
+  /// Handles the watch network action.
+  Future<CallToolResult> handleWatchNetworkRequests(CallToolRequest req) async {
     if (vmService == null) return notConnected();
 
     if (!await _checkHttpProfileSupport()) {
@@ -1043,16 +1054,6 @@ base mixin NetworkCaptureSupport
   /// Handles the network composite tool request.
   Future<CallToolResult> _handleNetwork(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    return switch (action) {
-      'start' => _handleStartNetworkCapture(req),
-      'stop' => _handleStopNetworkCapture(req),
-      'get_profile' => _handleGetNetworkProfile(req),
-      'watch' => _handleWatchNetwork(req),
-      'get_request_details' => _handleGetHttpRequestDetails(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown network action: $action')],
-          isError: true,
-        ),
-    };
+    return _networkRegistry.dispatch(action, req, this);
   }
 }
