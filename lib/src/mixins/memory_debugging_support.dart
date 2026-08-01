@@ -239,8 +239,9 @@ base mixin MemoryDebuggingSupport
         .toList();
 
     if (unmountedInstances.isNotEmpty) {
-      final retainingPathResults = await Future.wait(
-        unmountedInstances.map((instanceId) async {
+      final retainingPathResults = await _batchAsync(
+        unmountedInstances,
+        (instanceId) async {
           try {
             final retainingPath =
                 await vmService!.getRetainingPath(isolateId!, instanceId, 15);
@@ -266,7 +267,7 @@ base mixin MemoryDebuggingSupport
               'retaining_path': ['Error retrieving retaining path: $e'],
             };
           }
-        }),
+        },
       );
       reports.addAll(retainingPathResults);
     }
@@ -542,9 +543,11 @@ base mixin MemoryDebuggingSupport
   Future<CallToolResult> _handleSaveSnapshot(CallToolRequest req) async {
     final name = req.requireArg<String>('name');
     final forceGc = req.arg<bool>('forceGC') ?? true;
+    final maxSnapshots = req.intArg('limit', defaultValue: 10)!;
 
     final snapshot = await _takeSnapshot(name, forceGc);
-    if (memorySnapshots.length >= 10) {
+    while (
+        memorySnapshots.length >= maxSnapshots && memorySnapshots.isNotEmpty) {
       final oldestKey = memorySnapshots.keys.first;
       memorySnapshots.remove(oldestKey);
     }
@@ -1338,5 +1341,21 @@ base mixin MemoryDebuggingSupport
           isError: true,
         ),
     };
+  }
+
+  /// Helper to process a list of items asynchronously in fixed-size batches.
+  Future<List<R>> _batchAsync<T, R>(
+    List<T> items,
+    Future<R> Function(T item) mapper, {
+    int chunkSize = 5,
+  }) async {
+    final results = <R>[];
+    for (var i = 0; i < items.length; i += chunkSize) {
+      final end = (i + chunkSize < items.length) ? i + chunkSize : items.length;
+      final chunk = items.sublist(i, end);
+      final chunkResults = await Future.wait(chunk.map(mapper));
+      results.addAll(chunkResults);
+    }
+    return results;
   }
 }
