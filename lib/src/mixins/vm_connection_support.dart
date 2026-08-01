@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/path_resolver.dart';
+import 'package:flutter_agent_lens/src/utils/byte_formatter.dart' as byte_fmt;
 import 'package:flutter_agent_lens/src/utils/workspace_package_resolver.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
@@ -428,18 +429,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   }
 
   /// Format byte counts to human readable strings.
-  String formatBytes(int bytes) {
-    if (bytes == 0) return '0 B';
-    final sign = bytes < 0 ? '-' : '';
-    var absVal = bytes.abs().toDouble();
-    final units = ['B', 'KB', 'MB', 'GB'];
-    var i = 0;
-    while (absVal >= 1024.0 && i < units.length - 1) {
-      absVal /= 1024.0;
-      i++;
-    }
-    return '$sign${absVal.toStringAsFixed(2)} ${units[i]}';
-  }
+  String formatBytes(int bytes) => byte_fmt.formatBytes(bytes);
 
   /// Load local and external packages using WorkspacePackageResolver.
   Future<void> loadWorkspacePackages() async {
