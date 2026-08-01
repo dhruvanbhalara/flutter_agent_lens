@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/interfaces/vm_service_client.dart';
 import 'package:flutter_agent_lens/src/path_resolver.dart';
 import 'package:flutter_agent_lens/src/utils/byte_formatter.dart' as byte_fmt;
 import 'package:flutter_agent_lens/src/utils/workspace_package_resolver.dart';
@@ -12,20 +13,26 @@ import 'package:vm_service/vm_service.dart';
 
 /// Base support mixin providing VM connection management, isolate management,
 /// and common schema definitions for Flutter Agent Lens MCP tools.
-base mixin VmConnectionSupport on MCPServer, ToolsSupport {
+base mixin VmConnectionSupport
+    on MCPServer, ToolsSupport
+    implements IVmServiceClient {
   static final _lineNumberSuffix = RegExp(r':(\d+)$');
   static final _pubspecNamePattern = RegExp(r'(?:^|\n)name:\s*([A-Za-z0-9_]+)');
 
   /// The active connection to the Dart VM Service.
+  @override
   VmService? vmService;
 
   /// The active VM Service URI.
+  @override
   String? vmServiceUri;
 
   /// The active main isolate ID.
+  @override
   String? isolateId;
 
   /// The absolute path to the local Flutter project workspace root.
+  @override
   String? workspaceRoot;
 
   /// Resolves VM-reported file URIs to local absolute paths in the workspace.
@@ -60,6 +67,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   set responseFormat(String value) => _responseFormat = value;
 
   /// Performs cleanup operations on active streams and daemon clients.
+  @override
   FutureOr<void> cleanupStreams() {}
 
   /// Registers all tools requiring active VM connection.
@@ -180,6 +188,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   /// Refreshes the active main isolate ID from the running Dart VM.
   ///
   /// Returns `true` if a new isolate ID was found and updated, `false` otherwise.
+  @override
   Future<bool> refreshIsolateId() async {
     if (vmService == null) return false;
     try {
@@ -339,6 +348,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   }
 
   /// Locates the library ID corresponding to the main application package to run expression evaluations.
+  @override
   Future<String> getEvaluationLibraryId() async {
     if (vmService == null || isolateId == null) {
       throw StateError('Not connected to a running application.');
