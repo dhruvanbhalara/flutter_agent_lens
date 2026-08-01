@@ -6,6 +6,8 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/strategies/performance_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:vm_service/vm_service.dart';
 
@@ -22,6 +24,14 @@ base mixin PerformanceProfilingSupport
 
   /// The target display refresh rate (FPS) of the connected device.
   double? targetFps;
+
+  /// Action strategy registry for dispatching profiling action tools.
+  late final ToolActionRegistry _profilingRegistry = ToolActionRegistry([
+    StartProfilingStrategy(this),
+    StopProfilingStrategy(this),
+    GetCpuProfileStrategy(this),
+    DiagnoseJankStrategy(this),
+  ]);
 
   /// Registers performance profiling and reload/restart tools.
   void registerPerformanceTools() {
@@ -95,7 +105,7 @@ base mixin PerformanceProfilingSupport
   }
 
   /// Handles the diagnose_jank tool request.
-  Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
+  Future<CallToolResult> handleDiagnoseJank(CallToolRequest req) async {
     final duration = req.intArg('durationSeconds', defaultValue: 3)!;
     stderr.writeln(
         '[mcp:diagnose_jank] Starting jank diagnosis, duration=${duration}s');
@@ -327,7 +337,7 @@ base mixin PerformanceProfilingSupport
   }
 
   /// Handles the get_cpu_profile tool request.
-  Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
+  Future<CallToolResult> handleGetCpuProfile(CallToolRequest req) async {
     final duration = req.intArg('durationSeconds', defaultValue: 3)!;
     stderr.writeln(
         '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
@@ -426,7 +436,7 @@ base mixin PerformanceProfilingSupport
   }
 
   /// Handles the start_profiling tool request.
-  Future<CallToolResult> _handleStartProfiling(CallToolRequest req) async {
+  Future<CallToolResult> handleStartProfiling(CallToolRequest req) async {
     if (isProfiling) {
       return CallToolResult(
         content: [
@@ -469,7 +479,7 @@ base mixin PerformanceProfilingSupport
   }
 
   /// Handles the stop_profiling tool request.
-  Future<CallToolResult> _handleStopProfiling(CallToolRequest req) async {
+  Future<CallToolResult> handleStopProfiling(CallToolRequest req) async {
     if (!isProfiling) {
       return CallToolResult(
         content: [
@@ -739,15 +749,6 @@ base mixin PerformanceProfilingSupport
   /// Handles the profiling composite tool request.
   Future<CallToolResult> _handleProfiling(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    return switch (action) {
-      'start' => _handleStartProfiling(req),
-      'stop' => _handleStopProfiling(req),
-      'get_cpu' => _handleGetCpuProfile(req),
-      'diagnose_jank' => _handleDiagnoseJank(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown profiling action: $action')],
-          isError: true,
-        ),
-    };
+    return _profilingRegistry.dispatch(action, req, this);
   }
 }

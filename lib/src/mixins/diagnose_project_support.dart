@@ -7,6 +7,8 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/enums/target_platform.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/strategies/diagnose_project_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:flutter_agent_lens/src/utils/process_runner.dart';
 import 'package:path/path.dart' as p;
 
@@ -15,6 +17,12 @@ base mixin DiagnoseProjectSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   /// The process runner helper, allowing test mocks.
   ProcessRunner processRunner = const DefaultProcessRunner();
+
+  /// Action strategy registry for dispatching diagnose project action tools.
+  late final ToolActionRegistry _diagnoseProjectRegistry = ToolActionRegistry([
+    BundleSizeStrategy(this),
+    DeepLinksStrategy(this),
+  ]);
 
   /// Registers the consolidated project diagnostics tool.
   void registerDiagnoseProjectTools() {
@@ -68,18 +76,11 @@ base mixin DiagnoseProjectSupport
   /// Consolidated project diagnostics handler.
   Future<CallToolResult> _handleDiagnoseProject(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    return switch (action) {
-      'bundle_size' => _handleAnalyzeBundleSize(req),
-      'deep_links' => _handleValidateDeepLinks(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown action: $action')],
-          isError: true,
-        ),
-    };
+    return _diagnoseProjectRegistry.dispatch(action, req, this);
   }
 
   /// Handles the analyze_bundle_size tool request.
-  Future<CallToolResult> _handleAnalyzeBundleSize(CallToolRequest req) async {
+  Future<CallToolResult> handleAnalyzeBundleSize(CallToolRequest req) async {
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
@@ -344,7 +345,7 @@ base mixin DiagnoseProjectSupport
   }
 
   /// Handles the validate_deep_links tool request.
-  Future<CallToolResult> _handleValidateDeepLinks(CallToolRequest req) async {
+  Future<CallToolResult> handleValidateDeepLinks(CallToolRequest req) async {
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(

@@ -6,12 +6,20 @@ import 'package:flutter_agent_lens/src/enums/exception_pause_mode.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/strategies/debugger_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:vm_service/vm_service.dart' hide ExceptionPauseMode;
 
 /// Support mixin providing debugger capabilities including call stack retrieval,
 /// breakpoint management, pause configuration, and expression evaluation.
 base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Action strategy registry for dispatching breakpoint action tools.
+  late final ToolActionRegistry _breakpointRegistry = ToolActionRegistry([
+    AddBreakpointStrategy(this),
+    RemoveBreakpointStrategy(this),
+  ]);
+
   /// Registers all debugger-related tools.
   void registerDebuggerTools() {
     registerTool(
@@ -181,7 +189,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   }
 
   /// Handles the add_breakpoint tool request.
-  Future<CallToolResult> _handleAddBreakpoint(CallToolRequest req) async {
+  Future<CallToolResult> handleAddBreakpoint(CallToolRequest req) async {
     final filePath = req.requireArg<String>('file_path');
     final line = (req.requireArg<num>('line')).toInt();
     final column = req.intArg('column');
@@ -225,7 +233,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   }
 
   /// Handles the remove_breakpoint tool request.
-  Future<CallToolResult> _handleRemoveBreakpoint(CallToolRequest req) async {
+  Future<CallToolResult> handleRemoveBreakpoint(CallToolRequest req) async {
     final breakpointId = req.requireArg<String>('breakpoint_id');
     stderr
         .writeln('[mcp:remove_breakpoint] Removing breakpoint: $breakpointId');
@@ -284,13 +292,6 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Handles the breakpoint composite tool request.
   Future<CallToolResult> _handleBreakpoint(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    return switch (action) {
-      'add' => _handleAddBreakpoint(req),
-      'remove' => _handleRemoveBreakpoint(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown breakpoint action: $action')],
-          isError: true,
-        ),
-    };
+    return _breakpointRegistry.dispatch(action, req, this);
   }
 }

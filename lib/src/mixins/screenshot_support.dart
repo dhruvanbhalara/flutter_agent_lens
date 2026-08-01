@@ -7,11 +7,20 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/enums/screenshot_types.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/strategies/screenshot_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 /// Support mixin providing tools for taking and visually comparing screenshots.
 base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Action strategy registry for dispatching screenshot action tools.
+  late final ToolActionRegistry _screenshotRegistry = ToolActionRegistry([
+    TakeScreenshotStrategy(this),
+    CaptureBaselineStrategy(this),
+    CompareScreenshotStrategy(this),
+  ]);
+
   /// Registers screenshot-related tools.
   void registerScreenshotTools() {
     registerTool(
@@ -61,18 +70,11 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Delegates screenshot actions to respective handlers.
   Future<CallToolResult> _handleScreenshot(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    return switch (action) {
-      'take' => _handleTakeScreenshot(req),
-      'capture_baseline' || 'compare' => _handleCompareLayoutScreenshots(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown screenshot action: $action')],
-          isError: true,
-        ),
-    };
+    return _screenshotRegistry.dispatch(action, req, this);
   }
 
   /// Handles the compare_layout_screenshots tool request.
-  Future<CallToolResult> _handleCompareLayoutScreenshots(
+  Future<CallToolResult> handleCompareLayoutScreenshots(
       CallToolRequest req) async {
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
@@ -275,7 +277,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   }
 
   /// Handles the take_screenshot tool request.
-  Future<CallToolResult> _handleTakeScreenshot(CallToolRequest req) async {
+  Future<CallToolResult> handleTakeScreenshot(CallToolRequest req) async {
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
