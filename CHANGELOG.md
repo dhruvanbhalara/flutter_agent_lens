@@ -1,5 +1,12 @@
 ## Unreleased
 
+## 1.8.0
+
+### Added
+- Added `safeSamplingWindow` utility for crash-aware duration sampling that monitors VM Service `onDone` event.
+- Added graceful crash recovery and partial data flushing across Category A (snapshot-bracket) and Category B (incremental buffer) tools (`console_logs watch`, `network watch`, `rebuild_tracking`, `memory get_memory_timeline`, `memory watch_gc_pressure`, `diagnose_jank`, `get_cpu_profile`, `diff_heap_allocations`).
+- Added GitHub alert warning headers (`> [!WARNING]`) in tool outputs when sampling is interrupted by application crash or disconnect.
+
 ### Refactored
 - Standardized tool schema parameter property names to camelCase (`durationSeconds`, `forceGC`, `includeDetails`, `slowThresholdMs`, `flagName`, `frameIndex`, `excludeFlutterWidgets`).
 - Added `intArg` and `doubleArg` helpers to `CallToolRequestX` extension to eliminate verbose numeric casting across mixin tool handlers.

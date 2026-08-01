@@ -19,6 +19,7 @@ import 'package:stream_channel/stream_channel.dart';
 
 export 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 export 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
+export 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 
 /// Flutter Agent Lens MCP Server class.
 ///
@@ -48,7 +49,7 @@ final class FlutterAgentLensServer extends MCPServer
           channel,
           implementation: Implementation(
             name: 'flutter_agent_lens',
-            version: '1.7.0',
+            version: '1.8.0',
           ),
           instructions: 'A tool server to interact with running Flutter apps. '
               'Connect using the connect tool, or discover running apps with discover_apps.',
