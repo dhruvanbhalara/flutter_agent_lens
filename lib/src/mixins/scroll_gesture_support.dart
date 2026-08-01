@@ -36,7 +36,7 @@ base mixin ScrollGestureSupport
   /// Handles the trigger_scroll_gesture tool request.
   Future<CallToolResult> _handleScrollGesture(CallToolRequest req) async {
     final controller = req.requireArg<String>('scroll_controller_expression');
-    final offset = (req.arg<num>('offset'))?.toDouble() ?? 500.0;
+    final offset = req.doubleArg('offset', defaultValue: 500.0)!;
     stderr.writeln(
         '[mcp:scroll_gesture] Controller: $controller, offset: $offset');
 

@@ -42,12 +42,12 @@ base mixin NetworkCaptureSupport
             'sortBy': StringSchema(
               description: 'Sort by: time, duration, size (for stop action).',
             ),
-            'duration_seconds': durationSchema(defaultValue: 5.0),
-            'slow_threshold_ms': IntegerSchema(
+            'durationSeconds': durationSchema(defaultValue: 5.0),
+            'slowThresholdMs': IntegerSchema(
               description:
                   'Threshold in milliseconds to flag slow requests for watch action (default: 500).',
             ),
-            'include_details': BooleanSchema(
+            'includeDetails': BooleanSchema(
               description:
                   'Whether to include full request/response headers, cookies, and bodies for returned requests (default: false).',
             ),
@@ -168,7 +168,7 @@ base mixin NetworkCaptureSupport
       return _getUnsupportedError();
     }
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 30;
+    final limit = req.intArg('limit', defaultValue: 30)!;
     var allFetched = await _getHttpRequests();
     // Return only the most recent `limit` requests
     if (allFetched.length > limit) {
@@ -229,9 +229,7 @@ base mixin NetworkCaptureSupport
           'start_time': startTimeStr,
         };
 
-        final includeDetails = req.arg<bool>('include_details') ??
-            req.arg<bool>('includeDetails') ??
-            false;
+        final includeDetails = req.arg<bool>('includeDetails') ?? false;
         if (includeDetails && id != 'N/A') {
           final details = await _fetchRequestDetailsMap(id);
           if (details != null) {
@@ -486,9 +484,7 @@ base mixin NetworkCaptureSupport
         'response_size_bytes': resSize,
       };
 
-      final includeDetails = req.arg<bool>('include_details') ??
-          req.arg<bool>('includeDetails') ??
-          false;
+      final includeDetails = req.arg<bool>('includeDetails') ?? false;
       if (includeDetails && id != 'N/A') {
         final details = await _fetchRequestDetailsMap(id);
         if (details != null) {
@@ -594,8 +590,7 @@ base mixin NetworkCaptureSupport
   /// Handles the get_request_details tool request.
   Future<CallToolResult> _handleGetHttpRequestDetails(
       CallToolRequest req) async {
-    final requestId =
-        req.arg<String>('requestId') ?? req.arg<String>('request_id');
+    final requestId = req.arg<String>('requestId');
 
     if (vmService == null) return notConnected();
 
@@ -811,9 +806,9 @@ base mixin NetworkCaptureSupport
       );
     }
 
-    final rawDuration = req.arg<num>('duration_seconds') ?? 5;
-    final duration = rawDuration.toInt().clamp(1, 30);
-    final slowThresholdMs = (req.arg<num>('slow_threshold_ms'))?.toInt() ?? 500;
+    final duration =
+        req.intArg('durationSeconds', defaultValue: 5)!.clamp(1, 30);
+    final slowThresholdMs = req.intArg('slowThresholdMs', defaultValue: 500)!;
 
     stderr.writeln(
         '[mcp:watch_network] Watching network traffic for ${duration}s (slow threshold: ${slowThresholdMs}ms)...');
@@ -968,9 +963,7 @@ base mixin NetworkCaptureSupport
         formattedRequests.add(reqEntry);
       }
 
-      final includeDetails = req.arg<bool>('include_details') ??
-          req.arg<bool>('includeDetails') ??
-          false;
+      final includeDetails = req.arg<bool>('includeDetails') ?? false;
       if (includeDetails) {
         final detailFutures = formattedRequests.map((entry) async {
           final id = entry['id']?.toString();

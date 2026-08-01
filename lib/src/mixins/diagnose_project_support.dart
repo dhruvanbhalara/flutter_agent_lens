@@ -318,7 +318,7 @@ base mixin DiagnoseProjectSupport
     md.writeln('| Component | Size | Percentage |');
     md.writeln('| :--- | :--- | :--- |');
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 25;
+    final limit = req.intArg('limit', defaultValue: 25)!;
     for (final item in leafComponents.take(limit)) {
       final bytes = item['size_bytes'] as int;
       final sizeStr = formatBytes(bytes);

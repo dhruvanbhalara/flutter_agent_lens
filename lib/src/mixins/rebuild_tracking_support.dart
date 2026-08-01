@@ -43,12 +43,12 @@ base mixin RebuildTrackingSupport
             'action': StringSchema(
               description: 'Action to perform: start, stop, get_counts.',
             ),
-            'duration_seconds': durationSchema(),
+            'durationSeconds': durationSchema(),
             'topN': IntegerSchema(
               description:
                   'Number of top rebuilding widgets to list (default: 30).',
             ),
-            'exclude_flutter_widgets': BooleanSchema(
+            'excludeFlutterWidgets': BooleanSchema(
               description:
                   'Whether to exclude built-in Flutter/SDK widgets (default: true).',
             ),
@@ -112,9 +112,9 @@ base mixin RebuildTrackingSupport
   }
 
   Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
-    final topN = (req.arg<num>('topN'))?.toInt() ?? 30;
-    final excludeBuiltIn = req.arg<bool>('exclude_flutter_widgets') ?? true;
+    final duration = req.intArg('durationSeconds', defaultValue: 3)!;
+    final topN = req.intArg('topN', defaultValue: 30)!;
+    final excludeBuiltIn = req.arg<bool>('excludeFlutterWidgets') ?? true;
     final projectName = excludeBuiltIn ? await getProjectPackageName() : null;
 
     stderr.writeln(
@@ -305,8 +305,8 @@ base mixin RebuildTrackingSupport
       );
     }
 
-    final topN = (req.arg<num>('topN'))?.toInt() ?? 30;
-    final excludeBuiltIn = req.arg<bool>('exclude_flutter_widgets') ?? true;
+    final topN = req.intArg('topN', defaultValue: 30)!;
+    final excludeBuiltIn = req.arg<bool>('excludeFlutterWidgets') ?? true;
     final projectName = excludeBuiltIn ? await getProjectPackageName() : null;
 
     stderr.writeln(

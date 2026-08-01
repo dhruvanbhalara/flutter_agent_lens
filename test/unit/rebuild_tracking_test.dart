@@ -136,7 +136,7 @@ void main() {
           name: 'rebuild_tracking',
           arguments: const {
             'action': 'get_counts',
-            'duration_seconds': 1,
+            'durationSeconds': 1,
           },
         ),
       );
@@ -165,8 +165,8 @@ void main() {
           name: 'rebuild_tracking',
           arguments: const {
             'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': true,
+            'durationSeconds': 1,
+            'excludeFlutterWidgets': true,
           },
         ),
       );
@@ -191,8 +191,8 @@ void main() {
           name: 'rebuild_tracking',
           arguments: const {
             'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': false,
+            'durationSeconds': 1,
+            'excludeFlutterWidgets': false,
           },
         ),
       );
@@ -220,8 +220,8 @@ void main() {
           name: 'rebuild_tracking',
           arguments: const {
             'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': true,
+            'durationSeconds': 1,
+            'excludeFlutterWidgets': true,
           },
         ),
       );
@@ -247,8 +247,8 @@ void main() {
           name: 'rebuild_tracking',
           arguments: const {
             'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': true,
+            'durationSeconds': 1,
+            'excludeFlutterWidgets': true,
           },
         ),
       );
@@ -291,7 +291,7 @@ void main() {
           name: 'rebuild_tracking',
           arguments: const {
             'action': 'stop',
-            'exclude_flutter_widgets': true,
+            'excludeFlutterWidgets': true,
           },
         ),
       );
@@ -329,7 +329,7 @@ void main() {
           name: 'rebuild_tracking',
           arguments: const {
             'action': 'stop',
-            'exclude_flutter_widgets': false,
+            'excludeFlutterWidgets': false,
           },
         ),
       );
