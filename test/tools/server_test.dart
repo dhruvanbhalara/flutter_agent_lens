@@ -367,7 +367,7 @@ void main() {
           name: McpTool.debugFlag.name,
           arguments: const {
             'action': 'toggle',
-            'flag_name': 'debugPaintSizeEnabled',
+            'flagName': 'debugPaintSizeEnabled',
             'value': 'true',
           },
         ),
@@ -416,7 +416,7 @@ void main() {
           name: McpTool.memory.name,
           arguments: const {
             'action': 'diff_allocations',
-            'duration_seconds': 0, // 0 for instantaneous test
+            'durationSeconds': 0, // 0 for instantaneous test
             'expression': '1 + 1',
           },
         ),
@@ -491,7 +491,7 @@ void main() {
           name: McpTool.memory.name,
           arguments: const {
             'action': 'get_memory_timeline',
-            'duration_seconds': 1,
+            'durationSeconds': 1,
           },
         ),
       );
@@ -512,7 +512,7 @@ void main() {
           name: McpTool.memory.name,
           arguments: const {
             'action': 'watch_gc_pressure',
-            'duration_seconds': 1,
+            'durationSeconds': 1,
           },
         ),
       );
@@ -641,7 +641,7 @@ void main() {
           name: McpTool.memory.name,
           arguments: const {
             'action': 'get_memory_timeline',
-            'duration_seconds': -10, // Clamped to 1s
+            'durationSeconds': -10, // Clamped to 1s
           },
         ),
       );
@@ -662,7 +662,7 @@ void main() {
           name: McpTool.memory.name,
           arguments: const {
             'action': 'watch_gc_pressure',
-            'duration_seconds': 1,
+            'durationSeconds': 1,
             'limit': 10,
           },
         ),
@@ -713,7 +713,7 @@ void main() {
           name: McpTool.profiling.name,
           arguments: const {
             'action': 'get_cpu',
-            'duration_seconds': 0, // Instant
+            'durationSeconds': 0, // Instant
           },
         ),
       );
@@ -1196,7 +1196,7 @@ void main() {
           name: McpTool.consoleLogs.name,
           arguments: const {
             'action': 'watch',
-            'duration_seconds': 1,
+            'durationSeconds': 1,
             'filter': 'Test live',
           },
         ),
@@ -1216,9 +1216,9 @@ void main() {
           name: McpTool.network.name,
           arguments: const {
             'action': 'watch',
-            'duration_seconds': 1,
-            'slow_threshold_ms': 500,
-            'include_details': true,
+            'durationSeconds': 1,
+            'slowThresholdMs': 500,
+            'includeDetails': true,
           },
         ),
       );

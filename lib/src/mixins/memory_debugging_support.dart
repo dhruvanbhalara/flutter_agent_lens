@@ -62,7 +62,7 @@ base mixin MemoryDebuggingSupport
                   'Name of the class to inspect (required for audit_leak, e.g. _MyHomePageState).',
             ),
             'limit': limitSchema(defaultValue: 100),
-            'duration_seconds': durationSchema(),
+            'durationSeconds': durationSchema(),
             'expression': StringSchema(
               description:
                   'Optional expression to execute during diff_allocations.',
@@ -175,11 +175,10 @@ base mixin MemoryDebuggingSupport
     }
   }
 
-  /// Handles the audit_class_memory_leak tool request.
   Future<CallToolResult> _handleAuditClassMemoryLeak(
       CallToolRequest req) async {
     final className = req.requireArg<String>('class_name');
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 100;
+    final limit = req.intArg('limit', defaultValue: 100)!;
     stderr.writeln(
         '[mcp:audit_memory] Auditing class: $className (limit=$limit)');
 
@@ -377,10 +376,9 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the diff_heap_allocations tool request.
   Future<CallToolResult> _handleDiffHeapAllocations(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final duration = req.intArg('durationSeconds', defaultValue: 3)!;
     final expression = req.arg<String>('expression');
-    final forceGc =
-        req.arg<bool>('force_gc') ?? req.arg<bool>('forceGC') ?? true;
+    final forceGc = req.arg<bool>('forceGC') ?? true;
 
     stderr.writeln(
         '[mcp:diff_heap] Starting heap profiling (duration=${duration}s, forceGc=$forceGc)');
@@ -450,7 +448,7 @@ base mixin MemoryDebuggingSupport
       }
     }
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 20;
+    final limit = req.intArg('limit', defaultValue: 20)!;
     _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
     final md = StringBuffer('Memory Allocations Delta\n\n')
@@ -471,7 +469,7 @@ base mixin MemoryDebuggingSupport
   /// Handles the get_object_referrers tool request.
   Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
     final objectId = req.requireArg<String>('object_id');
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
+    final limit = req.intArg('limit', defaultValue: 15)!;
     final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     stderr.writeln(
         '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit');
@@ -628,7 +626,7 @@ base mixin MemoryDebuggingSupport
         'Capacity: ${formatBytes(snap1.heapCapacity)} -> ${formatBytes(snap2.heapCapacity)} (${capacityDiff <= 0 ? "" : "+"}${formatBytes(capacityDiff)})');
     md.writeln('Time between snapshots: ${timeDiffS}s');
 
-    final topN = (req.arg<num>('topN'))?.toInt() ?? 10;
+    final topN = req.intArg('topN', defaultValue: 10)!;
 
     if (grew.isNotEmpty) {
       md.writeln();
@@ -752,7 +750,7 @@ base mixin MemoryDebuggingSupport
   /// Handles the get_memory_snapshot tool request.
   Future<CallToolResult> _handleGetMemorySnapshot(CallToolRequest req) async {
     final forceGc = req.arg<bool>('forceGC') ?? false;
-    final topN = (req.arg<num>('topN'))?.toInt() ?? 20;
+    final topN = req.intArg('topN', defaultValue: 20)!;
 
     stderr.writeln(
         '[mcp:memory_snapshot] Fetching memory snapshot (forceGc=$forceGc, topN=$topN)');
@@ -991,7 +989,7 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the stop_gc_stream tool request.
   Future<CallToolResult> _handleStopGcStream(CallToolRequest req) async {
-    final limit = req.arg<num>('limit')?.toInt() ?? 50;
+    final limit = req.intArg('limit', defaultValue: 50)!;
     final count = _gcEventBuffer.length;
     final durationMs = _gcStreamStartTime != null
         ? DateTime.now().millisecondsSinceEpoch - _gcStreamStartTime!
@@ -1032,8 +1030,8 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the get_memory_timeline tool request.
   Future<CallToolResult> _handleGetMemoryTimeline(CallToolRequest req) async {
-    final rawDuration = req.arg<num>('duration_seconds')?.toInt() ?? 5;
-    final duration = rawDuration.clamp(1, 60);
+    final duration =
+        req.intArg('durationSeconds', defaultValue: 5)!.clamp(1, 60);
 
     final wasActive = _gcStreamActive;
     if (!wasActive) {
@@ -1101,9 +1099,9 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the watch_gc_pressure tool request.
   Future<CallToolResult> _handleWatchGcPressure(CallToolRequest req) async {
-    final rawDuration = req.arg<num>('duration_seconds')?.toInt() ?? 10;
-    final duration = rawDuration.clamp(1, 60);
-    final limit = req.arg<num>('limit')?.toInt() ?? 50;
+    final duration =
+        req.intArg('durationSeconds', defaultValue: 10)!.clamp(1, 60);
+    final limit = req.intArg('limit', defaultValue: 50)!;
 
     final wasActive = _gcStreamActive;
     if (!wasActive) {
