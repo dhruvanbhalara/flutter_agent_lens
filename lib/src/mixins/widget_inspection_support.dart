@@ -250,7 +250,20 @@ base mixin WidgetInspectionSupport
       );
     }
 
-    await _expandWidgetChildren(rootMap, objectGroup, 0, maxDepth);
+    try {
+      await _expandWidgetChildren(rootMap, objectGroup, 0, maxDepth);
+    } finally {
+      try {
+        await vmService?.callServiceExtension(
+          'ext.flutter.inspector.disposeGroup',
+          isolateId: isolateId,
+          args: {'objectGroup': objectGroup},
+        );
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:widget] Error disposing inspector object group $objectGroup: $e');
+      }
+    }
 
     final flattened = _flattenWidgetTree(rootMap, 0, maxDepth, projectOnly);
     final text = _formatTreeAsText(flattened);
