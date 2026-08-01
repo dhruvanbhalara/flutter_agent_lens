@@ -17,6 +17,9 @@ import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/widget_inspection_support.dart';
 import 'package:stream_channel/stream_channel.dart';
 
+export 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+export 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
+
 /// Flutter Agent Lens MCP Server class.
 ///
 /// This server exposes a suite of tools that allow AI agents to debug,
