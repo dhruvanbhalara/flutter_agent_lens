@@ -1,5 +1,6 @@
 ## Unreleased
 
+## 1.7.0
 
 ### Added
 - Refactored `fetch_console_logs` into `console_logs` composite tool supporting `fetch` and live `watch` stream actions with filter support.
