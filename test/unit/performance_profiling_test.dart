@@ -96,5 +96,25 @@ void main() {
       final jankRows = lines.where((l) => l.contains('20.00')).toList();
       expect(jankRows.length, equals(15));
     });
+
+    test('hot_reload triggers reload action', () async {
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'hot_reload',
+          arguments: const {},
+        ),
+      );
+      expect(result, isNotNull);
+    });
+
+    test('hot_restart triggers restart action', () async {
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'hot_restart',
+          arguments: const {},
+        ),
+      );
+      expect(result, isNotNull);
+    });
   });
 }
