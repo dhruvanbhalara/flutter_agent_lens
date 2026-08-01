@@ -33,4 +33,20 @@ extension CallToolRequestX on CallToolRequest {
     }
     return val;
   }
+
+  /// Safely extracts a numeric argument by [key] and converts it to an [int].
+  ///
+  /// Returns [defaultValue] if the argument is missing or not a [num].
+  int? intArg(String key, {int? defaultValue}) {
+    final value = arg<num>(key);
+    return value?.toInt() ?? defaultValue;
+  }
+
+  /// Safely extracts a numeric argument by [key] and converts it to a [double].
+  ///
+  /// Returns [defaultValue] if the argument is missing or not a [num].
+  double? doubleArg(String key, {double? defaultValue}) {
+    final value = arg<num>(key);
+    return value?.toDouble() ?? defaultValue;
+  }
 }
