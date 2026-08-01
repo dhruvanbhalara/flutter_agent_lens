@@ -20,6 +20,17 @@ class FakeVmService extends VmService {
   List<String> mockExtensionRPCs = [];
   Map<String, dynamic> mockTimelineResponse = {};
 
+  final Completer<void> _onDoneCompleter = Completer<void>();
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
+
+  void triggerDisconnect() {
+    if (!_onDoneCompleter.isCompleted) {
+      _onDoneCompleter.complete();
+    }
+  }
+
   FakeVmService() : super(const Stream<dynamic>.empty(), (msg) {});
 
   @override

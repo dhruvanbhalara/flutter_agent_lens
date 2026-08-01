@@ -7,6 +7,7 @@ import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for analyzing heap usage, tracking class instances,
@@ -1038,32 +1039,61 @@ base mixin MemoryDebuggingSupport
     final samples = <MemoryTimelineSample>[];
     final startEventCount = _gcEventBuffer.length;
     var lastCheckEventCount = startEventCount;
+    SamplingResult? sampleResult;
 
     for (var i = 0; i <= duration; i++) {
       if (i > 0) {
-        await Future<void>.delayed(const Duration(seconds: 1));
+        if (vmService != null) {
+          final res = await safeSamplingWindow(
+            vmService: vmService!,
+            duration: const Duration(seconds: 1),
+          );
+          if (!res.completed) {
+            sampleResult = res;
+            break;
+          }
+        } else {
+          await Future<void>.delayed(const Duration(seconds: 1));
+        }
       }
-      final heap = await _getHeapStats();
-      final rss = await _getRssBytes();
-      final currentEventCount = _gcEventBuffer.length;
-      final gcInInterval = currentEventCount - lastCheckEventCount;
-      lastCheckEventCount = currentEventCount;
+      try {
+        final heap = await _getHeapStats();
+        final rss = await _getRssBytes();
+        final currentEventCount = _gcEventBuffer.length;
+        final gcInInterval = currentEventCount - lastCheckEventCount;
+        lastCheckEventCount = currentEventCount;
 
-      samples.add(MemoryTimelineSample(
-        timestamp: DateTime.now().millisecondsSinceEpoch,
-        heapUsed: heap.heapUsage,
-        heapCapacity: heap.heapCapacity,
-        externalUsage: heap.externalUsage,
-        rss: rss,
-        gcEventsInInterval: gcInInterval,
-      ));
+        samples.add(MemoryTimelineSample(
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          heapUsed: heap.heapUsage,
+          heapCapacity: heap.heapCapacity,
+          externalUsage: heap.externalUsage,
+          rss: rss,
+          gcEventsInInterval: gcInInterval,
+        ));
+      } catch (_) {
+        sampleResult = SamplingResult(
+          completed: false,
+          elapsed: Duration(seconds: i),
+          interruptReason: 'vm_service_disconnected',
+        );
+        break;
+      }
     }
 
     if (!wasActive) {
       await _stopGcStreamInternal();
     }
 
-    final text = StringBuffer()
+    final text = StringBuffer();
+    if (sampleResult != null && !sampleResult.completed) {
+      final elapsedSec = samples.length;
+      final reason = sampleResult.interruptReason ?? 'disconnected';
+      text.writeln('> [!WARNING]');
+      text.writeln(
+          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial timeline follows.\n');
+    }
+    text
       ..writeln(
           '| Timestamp | Heap Used | Heap Capacity | External | RSS | GC Events |')
       ..writeln('| :--- | :--- | :--- | :--- | :--- | :--- |');
@@ -1106,7 +1136,15 @@ base mixin MemoryDebuggingSupport
     }
 
     final startIndex = _gcEventBuffer.length;
-    await Future<void>.delayed(Duration(seconds: duration));
+    SamplingResult? sampleResult;
+    if (vmService != null) {
+      sampleResult = await safeSamplingWindow(
+        vmService: vmService!,
+        duration: Duration(seconds: duration),
+      );
+    } else {
+      await Future<void>.delayed(Duration(seconds: duration));
+    }
 
     final newEvents = _gcEventBuffer.skip(startIndex).toList();
     if (!wasActive) {
@@ -1144,7 +1182,15 @@ base mixin MemoryDebuggingSupport
       typeCounts[type] = (typeCounts[type] ?? 0) + 1;
     }
 
-    final text = StringBuffer()
+    final text = StringBuffer();
+    if (sampleResult != null && !sampleResult.completed) {
+      final elapsedSec = sampleResult.elapsed.inSeconds;
+      final reason = sampleResult.interruptReason ?? 'disconnected';
+      text.writeln('> [!WARNING]');
+      text.writeln(
+          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial GC events follow.\n');
+    }
+    text
       ..writeln('- **Pressure Level**: `${pressureLevel.toUpperCase()}`')
       ..writeln('- **GC Event Count**: $gcCount')
       ..writeln('- **GC Frequency**: ${gcPerSec.toStringAsFixed(2)} GC/sec')
