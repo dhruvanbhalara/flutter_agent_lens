@@ -965,17 +965,23 @@ base mixin NetworkCaptureSupport
           'response_size_bytes': resSize,
         };
 
-        final includeDetails = req.arg<bool>('include_details') ??
-            req.arg<bool>('includeDetails') ??
-            false;
-        if (includeDetails && id != 'N/A') {
-          final details = await _fetchRequestDetailsMap(id);
-          if (details != null) {
-            reqEntry['details'] = details;
-          }
-        }
-
         formattedRequests.add(reqEntry);
+      }
+
+      final includeDetails = req.arg<bool>('include_details') ??
+          req.arg<bool>('includeDetails') ??
+          false;
+      if (includeDetails) {
+        final detailFutures = formattedRequests.map((entry) async {
+          final id = entry['id']?.toString();
+          if (id != null && id != 'N/A') {
+            final details = await _fetchRequestDetailsMap(id);
+            if (details != null) {
+              entry['details'] = details;
+            }
+          }
+        });
+        await Future.wait(detailFutures);
       }
     }
 
