@@ -1,5 +1,10 @@
 ## Unreleased
 
+### Refactored
+- Standardized tool schema parameter property names to camelCase (`durationSeconds`, `forceGC`, `includeDetails`, `slowThresholdMs`, `flagName`, `frameIndex`, `excludeFlutterWidgets`).
+- Added `intArg` and `doubleArg` helpers to `CallToolRequestX` extension to eliminate verbose numeric casting across mixin tool handlers.
+- Introduced `VmServiceX` extension with `toggleFlutterExtension` and `evalSafe` for standardized DevTools extension toggles and safe evaluation with sentinel handling.
+
 ## 1.7.0
 
 ### Added
