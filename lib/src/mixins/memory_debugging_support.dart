@@ -95,6 +95,7 @@ base mixin MemoryDebuggingSupport
     _gcEventBuffer.clear();
     _gcStreamActive = false;
     _gcStreamStartTime = null;
+    _gcStreamRefCount = 0;
   }
 
   /// Helper to fetch heap usage stats from [AllocationProfile].
@@ -119,14 +120,19 @@ base mixin MemoryDebuggingSupport
     }
   }
 
-  /// Ensures subscription to EventStreams.kGC is active.
+  /// Reference counter for active GC stream observers.
+  int _gcStreamRefCount = 0;
+
+  /// Ensures GC stream subscription is active with reference counting.
   Future<void> _ensureGcStream() async {
+    _gcStreamRefCount++;
     if (_gcStreamActive) return;
-    try {
-      await vmService!.streamListen(EventStreams.kGC);
-    } catch (e) {
-      if (e is! RPCError || e.code != 103) {
-        rethrow;
+
+    if (vmService != null) {
+      try {
+        await vmService!.streamListen(EventStreams.kGC);
+      } on RPCError catch (e) {
+        if (e.code != 103) rethrow;
       }
     }
     await _gcStreamSub?.cancel();
@@ -150,15 +156,22 @@ base mixin MemoryDebuggingSupport
     _gcStreamStartTime = DateTime.now().millisecondsSinceEpoch;
   }
 
-  /// Internal cleanup for GC event stream.
-  Future<void> _stopGcStreamInternal() async {
+  /// Internal cleanup for GC event stream with reference counting.
+  Future<void> _stopGcStreamInternal({bool force = false}) async {
+    if (!force && _gcStreamRefCount > 1) {
+      _gcStreamRefCount--;
+      return;
+    }
+    _gcStreamRefCount = 0;
     await _gcStreamSub?.cancel();
     _gcStreamSub = null;
     _gcStreamActive = false;
     if (vmService != null) {
       try {
         await vmService!.streamCancel(EventStreams.kGC);
-      } catch (_) {}
+      } catch (e) {
+        stderr.writeln('[mcp:memory] Error cancelling GC stream: $e');
+      }
     }
   }
 
@@ -985,7 +998,7 @@ base mixin MemoryDebuggingSupport
         : 0;
     final returnedEvents = _gcEventBuffer.take(limit).toList();
 
-    await _stopGcStreamInternal();
+    await _stopGcStreamInternal(force: true);
 
     final text = StringBuffer()
       ..writeln('- **Duration**: ${(durationMs / 1000).toStringAsFixed(1)}s')
@@ -1185,8 +1198,9 @@ base mixin MemoryDebuggingSupport
       if (json != null && json.containsKey('result')) {
         rasterBytes = json['result'] as int?;
       }
-    } catch (_) {
-      // Extension unavailable
+    } catch (e) {
+      stderr.writeln(
+          '[mcp:memory] Raster cache memory extension unavailable: $e');
     }
 
     final text = StringBuffer()
