@@ -1,5 +1,15 @@
 ## Unreleased
 
+### Fixed
+- Fixed target application memory leak by automatically disposing DevTools `WidgetInspectorService` object groups (`disposeGroup`) after widget tree retrieval.
+
+### Performance
+- Added chunked worker batching (`_batchAsync`) for parallel `getRetainingPath` RPC calls in `memory audit_leak` to protect target isolate from CPU/GC pressure.
+- Added LRU capacity eviction and snapshot limit overrides (`limit` parameter) for server-side memory snapshot storage.
+
+### Testing
+- Added unit tests covering DevTools inspector object group disposal and memory snapshot capacity limits.
+
 ## 1.8.0
 
 ### Added
