@@ -190,7 +190,7 @@ void main() {
 
       expect(result.isError, isTrue);
       final text = (result.content.first as TextContent).text;
-      expect(text, contains('Unknown debug flag action'));
+      expect(text, contains('Unknown action'));
     });
   });
 }

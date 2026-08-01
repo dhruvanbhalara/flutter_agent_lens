@@ -7,11 +7,19 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/strategies/debug_flag_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for toggling Flutter debug paint, overlays, and package widget visibility flags.
 base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
+  /// Action strategy registry for dispatching debug flag action tools.
+  late final ToolActionRegistry _debugFlagRegistry = ToolActionRegistry([
+    ToggleDebugFlagStrategy(this),
+    TogglePackageWidgetsStrategy(this),
+  ]);
+
   /// Registers all debug flags and overlays tools.
   void registerDebugFlagTools() {
     registerTool(
@@ -48,18 +56,11 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Delegates debug flag actions to respective handlers.
   Future<CallToolResult> _handleDebugFlag(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    return switch (action) {
-      'toggle' => _handleToggleDebugFlag(req),
-      'toggle_package_widgets' => _handleTogglePackageWidgets(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown debug flag action: $action')],
-          isError: true,
-        ),
-    };
+    return _debugFlagRegistry.dispatch(action, req, this);
   }
 
-  Future<CallToolResult> _handleTogglePackageWidgets(
-      CallToolRequest req) async {
+  /// Handles the toggle_package_widgets action, showing or hiding package widgets in the inspector.
+  Future<CallToolResult> handleTogglePackageWidgets(CallToolRequest req) async {
     final enabled = req.requireArg<bool>('enabled');
     stderr.writeln('[mcp:toggle_package_widgets] Setting enabled = $enabled');
 
@@ -203,7 +204,8 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     return directories;
   }
 
-  Future<CallToolResult> _handleToggleDebugFlag(CallToolRequest req) async {
+  /// Handles the toggle action, setting a named Flutter debug flag to a given value.
+  Future<CallToolResult> handleToggleDebugFlag(CallToolRequest req) async {
     final flagName = req.requireArg<String>('flagName');
     final valStr = req.requireArg<String>('value');
     stderr.writeln('[mcp:toggle_flag] Flag: $flagName, Target value: $valStr');

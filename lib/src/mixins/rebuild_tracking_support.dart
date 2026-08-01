@@ -6,6 +6,8 @@ import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/strategies/rebuild_tracking_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
@@ -30,6 +32,13 @@ base mixin RebuildTrackingSupport
 
   /// Subscription to the VM Service's extension event stream for rebuilt widgets.
   StreamSubscription<Event>? rebuildSub;
+
+  /// Action strategy registry for dispatching rebuild tracking action tools.
+  late final ToolActionRegistry _rebuildRegistry = ToolActionRegistry([
+    StartRebuildTrackingStrategy(this),
+    StopRebuildTrackingStrategy(this),
+    GetRebuildCountsStrategy(this),
+  ]);
 
   /// Registers rebuild tracking tools.
   void registerRebuildTrackingTools() {
@@ -112,7 +121,8 @@ base mixin RebuildTrackingSupport
     return widgets;
   }
 
-  Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
+  /// Handles the get_counts action, collecting a one-shot widget rebuild count snapshot.
+  Future<CallToolResult> handleWidgetRebuildCounts(CallToolRequest req) async {
     final duration = req.intArg('durationSeconds', defaultValue: 3)!;
     final topN = req.intArg('topN', defaultValue: 30)!;
     final excludeBuiltIn = req.arg<bool>('excludeFlutterWidgets') ?? true;
@@ -243,7 +253,8 @@ base mixin RebuildTrackingSupport
     );
   }
 
-  Future<CallToolResult> _handleStartTrackingRebuilds(
+  /// Handles the start action, beginning a rebuild tracking session.
+  Future<CallToolResult> handleStartTrackingRebuilds(
       CallToolRequest req) async {
     if (isTrackingRebuilds) {
       return CallToolResult(
@@ -309,8 +320,8 @@ base mixin RebuildTrackingSupport
     );
   }
 
-  Future<CallToolResult> _handleStopTrackingRebuilds(
-      CallToolRequest req) async {
+  /// Handles the stop action, ending a rebuild tracking session and returning the report.
+  Future<CallToolResult> handleStopTrackingRebuilds(CallToolRequest req) async {
     if (!isTrackingRebuilds) {
       return CallToolResult(
         content: [
@@ -548,16 +559,6 @@ base mixin RebuildTrackingSupport
   /// Handles the rebuild_tracking composite tool request.
   Future<CallToolResult> _handleRebuildTracking(CallToolRequest req) async {
     final action = req.requireArg<String>('action');
-    return switch (action) {
-      'start' => _handleStartTrackingRebuilds(req),
-      'stop' => _handleStopTrackingRebuilds(req),
-      'get_counts' => _handleWidgetRebuildCounts(req),
-      _ => CallToolResult(
-          content: [
-            TextContent(text: 'Unknown rebuild tracking action: $action')
-          ],
-          isError: true,
-        ),
-    };
+    return _rebuildRegistry.dispatch(action, req, this);
   }
 }

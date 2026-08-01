@@ -7,6 +7,8 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/services/log_stream_broadcaster.dart';
+import 'package:flutter_agent_lens/src/strategies/console_logging_strategies.dart';
+import 'package:flutter_agent_lens/src/strategies/tool_action_strategy.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:vm_service/vm_service.dart';
 
@@ -34,6 +36,12 @@ base mixin ConsoleLoggingSupport
 
   /// Subscription to the VM Service's logging/developer stream.
   StreamSubscription<Event>? loggingSub;
+
+  /// Action strategy registry for dispatching console log action tools.
+  late final ToolActionRegistry _loggingRegistry = ToolActionRegistry([
+    FetchConsoleLogsStrategy(this),
+    WatchLogsStrategy(this),
+  ]);
 
   /// Registers the console log tools.
   void registerLoggingTools() {
@@ -184,18 +192,11 @@ base mixin ConsoleLoggingSupport
   /// Handles the console_logs composite tool request.
   Future<CallToolResult> _handleConsoleLogs(CallToolRequest req) async {
     final action = req.arg<String>('action') ?? 'fetch';
-    return switch (action) {
-      'fetch' => _handleFetchConsoleLogs(req),
-      'watch' => _handleWatchLogs(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown console_logs action: $action')],
-          isError: true,
-        ),
-    };
+    return _loggingRegistry.dispatch(action, req, this);
   }
 
   /// Handles the fetch action for console_logs.
-  Future<CallToolResult> _handleFetchConsoleLogs(CallToolRequest req) async {
+  Future<CallToolResult> handleFetchConsoleLogs(CallToolRequest req) async {
     final limit = req.intArg('limit', defaultValue: 50)!;
     final maxLimit = limit.clamp(1, 200);
     stderr.writeln(
@@ -224,7 +225,7 @@ base mixin ConsoleLoggingSupport
   }
 
   /// Handles watching live console logs over a specified duration window.
-  Future<CallToolResult> _handleWatchLogs(CallToolRequest req) async {
+  Future<CallToolResult> handleWatchLogs(CallToolRequest req) async {
     final duration =
         req.intArg('durationSeconds', defaultValue: 5)!.clamp(1, 30);
     final filter = req.arg<String>('filter');
