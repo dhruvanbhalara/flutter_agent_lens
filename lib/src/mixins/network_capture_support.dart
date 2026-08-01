@@ -6,6 +6,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 
 /// Support mixin providing tools for capturing and analyzing HTTP traffic details.
 base mixin NetworkCaptureSupport
@@ -820,8 +821,9 @@ base mixin NetworkCaptureSupport
         if (r['id'] != null) r['id'].toString()
     };
 
+    SamplingResult? sampleResult;
     try {
-      await vmService!.callServiceExtension(
+      await vmService?.callServiceExtension(
         'ext.dart.io.httpEnableTimelineLogging',
         isolateId: isolateId!,
         args: {'enabled': 'true'},
@@ -831,9 +833,35 @@ base mixin NetworkCaptureSupport
           '[mcp:watch_network] Error enabling HTTP timeline logging: $e');
     }
 
-    await Future<void>.delayed(Duration(seconds: duration));
+    try {
+      if (vmService != null) {
+        sampleResult = await safeSamplingWindow(
+          vmService: vmService!,
+          duration: Duration(seconds: duration),
+        );
+      } else {
+        await Future<void>.delayed(Duration(seconds: duration));
+      }
+    } finally {
+      try {
+        await vmService?.callServiceExtension(
+          'ext.dart.io.httpEnableTimelineLogging',
+          isolateId: isolateId!,
+          args: {'enabled': 'false'},
+        );
+      } catch (_) {}
+    }
 
-    final currentRequests = await _getHttpRequests();
+    List<Map<String, dynamic>> currentRequests = [];
+    try {
+      currentRequests = await _getHttpRequests().timeout(
+        const Duration(seconds: 1),
+      );
+    } catch (e) {
+      stderr.writeln(
+          '[mcp:watch_network] Error fetching HTTP requests after sampling: $e');
+    }
+
     final newRequests = <Map<String, dynamic>>[];
     for (final r in currentRequests) {
       final id = r['id']?.toString();
@@ -841,14 +869,6 @@ base mixin NetworkCaptureSupport
         newRequests.add(r);
       }
     }
-
-    try {
-      await vmService!.callServiceExtension(
-        'ext.dart.io.httpEnableTimelineLogging',
-        isolateId: isolateId!,
-        args: {'enabled': 'false'},
-      );
-    } catch (_) {}
 
     final completedRequests = newRequests.where((r) {
       final responseData = r['response'] as Map<String, dynamic>?;
@@ -898,7 +918,15 @@ base mixin NetworkCaptureSupport
     }).toList();
 
     final formattedRequests = <Map<String, dynamic>>[];
-    final output = <String>[
+    final output = <String>[];
+    if (sampleResult != null && !sampleResult.completed) {
+      final elapsedSec = sampleResult.elapsed.inSeconds;
+      final reason = sampleResult.interruptReason ?? 'disconnected';
+      output.add('> [!WARNING]');
+      output.add(
+          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial network requests follow.\n');
+    }
+    output.addAll([
       'LIVE NETWORK WATCH REPORT ($duration s window)',
       '',
       'SUMMARY',
@@ -911,7 +939,7 @@ base mixin NetworkCaptureSupport
       'Requests exceeding threshold (${slowThresholdMs}ms): ${slowRequests.length}',
       '',
       'REQUESTS',
-    ];
+    ]);
 
     if (newRequests.isEmpty) {
       output.add('No network requests detected during the $duration s window.');

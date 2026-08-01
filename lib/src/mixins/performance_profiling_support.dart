@@ -6,6 +6,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
@@ -103,19 +104,35 @@ base mixin PerformanceProfilingSupport
     await vmService!.setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API']);
     await vmService!.clearVMTimeline();
 
-    Timeline timeline;
+    Timeline? timeline;
+    SamplingResult? sampleResult;
     try {
-      await Future<void>.delayed(Duration(seconds: duration));
-      timeline = await vmService!.getVMTimeline();
+      if (vmService != null) {
+        sampleResult = await safeSamplingWindow(
+          vmService: vmService!,
+          duration: Duration(seconds: duration),
+        );
+        try {
+          timeline = await vmService!.getVMTimeline().timeout(
+                const Duration(seconds: 1),
+              );
+        } catch (e) {
+          stderr.writeln(
+              '[mcp:diagnose_jank] Error retrieving VM timeline after sampling: $e');
+        }
+      } else {
+        await Future<void>.delayed(Duration(seconds: duration));
+      }
     } finally {
       try {
-        await vmService!.setVMTimelineFlags([]);
+        await vmService?.setVMTimelineFlags([]);
       } catch (e) {
         stderr
             .writeln('[mcp:diagnose_jank] Error resetting timeline flags: $e');
       }
     }
-    final events = timeline.traceEvents ?? [];
+
+    final events = timeline?.traceEvents ?? [];
     var jankyFrames = 0;
     var totalFrames = 0;
 
@@ -140,7 +157,16 @@ base mixin PerformanceProfilingSupport
         totalFrames > 0 ? (jankyFrames / totalFrames) * 100 : 0.0;
     stderr.writeln(
         '[mcp:diagnose_jank] Collected ${events.length} timeline events, $jankyFrames janky frames');
-    final mdBuffer = StringBuffer('Jank Diagnostic Report\n\n')
+    final mdBuffer = StringBuffer();
+    if (sampleResult != null && !sampleResult.completed) {
+      final elapsedSec = sampleResult.elapsed.inSeconds;
+      final reason = sampleResult.interruptReason ?? 'disconnected';
+      mdBuffer.writeln('> [!WARNING]');
+      mdBuffer.writeln(
+          '> Jank sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial trace follows.\n');
+    }
+    mdBuffer
+      ..writeln('Jank Diagnostic Report\n')
       ..writeln('- Total Frame Events Sampled: $totalFrames')
       ..writeln(
           '- Janky Frame Events (> 16.6ms): $jankyFrames ($jankPercentage%)')
@@ -306,16 +332,41 @@ base mixin PerformanceProfilingSupport
     stderr.writeln(
         '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
 
-    await vmService!.clearCpuSamples(isolateId!);
-    await Future<void>.delayed(Duration(seconds: duration));
+    try {
+      await vmService!.clearCpuSamples(isolateId!);
+    } catch (_) {}
+
+    SamplingResult? sampleResult;
+    if (vmService != null) {
+      sampleResult = await safeSamplingWindow(
+        vmService: vmService!,
+        duration: Duration(seconds: duration),
+      );
+    } else {
+      await Future<void>.delayed(Duration(seconds: duration));
+    }
 
     final endTime = DateTime.now().microsecondsSinceEpoch;
-    final cpuSamples = await vmService!.getCpuSamples(isolateId!, 0, endTime);
-    final functions = cpuSamples.functions ?? [];
+    CpuSamples? cpuSamples;
+    try {
+      cpuSamples = await vmService
+          ?.getCpuSamples(isolateId!, 0, endTime)
+          .timeout(const Duration(seconds: 1));
+    } catch (e) {
+      stderr.writeln('[mcp:cpu_profile] Error fetching CPU samples: $e');
+    }
+    final functions = cpuSamples?.functions ?? [];
 
     final hotspots = <Map<String, dynamic>>[];
-    final mdBuffer =
-        StringBuffer('CPU Execution Hotspots (Exclusive Ticks)\n\n');
+    final mdBuffer = StringBuffer();
+    if (sampleResult != null && !sampleResult.completed) {
+      final elapsedSec = sampleResult.elapsed.inSeconds;
+      final reason = sampleResult.interruptReason ?? 'disconnected';
+      mdBuffer.writeln('> [!WARNING]');
+      mdBuffer.writeln(
+          '> CPU profiling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial hotspots follow.\n');
+    }
+    mdBuffer.writeln('CPU Execution Hotspots (Exclusive Ticks)\n');
 
     for (final dynamic f in functions) {
       if (f is ProfileFunction) {
@@ -348,7 +399,7 @@ base mixin PerformanceProfilingSupport
     hotspots.sort((a, b) =>
         (b['exclusive_ticks'] as int).compareTo(a['exclusive_ticks'] as int));
     stderr.writeln(
-        '[mcp:cpu_profile] Collected ${cpuSamples.sampleCount} samples, ${hotspots.length} active functions');
+        '[mcp:cpu_profile] Collected ${cpuSamples?.sampleCount ?? 0} samples, ${hotspots.length} active functions');
 
     final limit = req.intArg('limit', defaultValue: 15)!;
     if (hotspots.isEmpty) {
@@ -368,7 +419,7 @@ base mixin PerformanceProfilingSupport
       markdownBody: mdBuffer.toString(),
       structuredData: {
         'duration_seconds': duration,
-        'total_samples': cpuSamples.sampleCount ?? 0,
+        'total_samples': cpuSamples?.sampleCount ?? 0,
         'hotspots': hotspots.take(limit).toList(),
       },
     );
