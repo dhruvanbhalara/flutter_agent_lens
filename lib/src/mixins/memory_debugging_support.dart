@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
 import 'package:vm_service/vm_service.dart';
@@ -398,12 +399,8 @@ base mixin MemoryDebuggingSupport
     if (expression != null && expression.isNotEmpty) {
       stderr
           .writeln('[mcp:diff_heap] Evaluating action expression: $expression');
-      try {
-        final libraryId = await getEvaluationLibraryId();
-        await vmService!.evaluate(isolateId!, libraryId, expression);
-      } catch (e) {
-        stderr.writeln('[mcp:diff_heap] Action evaluation failed: $e');
-      }
+      final libraryId = await getEvaluationLibraryId();
+      await vmService!.evalSafe(isolateId!, libraryId, expression);
     }
 
     stderr.writeln('[mcp:diff_heap] Sampling memory for ${duration}s...');

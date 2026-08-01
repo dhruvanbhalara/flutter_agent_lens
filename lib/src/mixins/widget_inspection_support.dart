@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
@@ -508,16 +509,14 @@ base mixin WidgetInspectionSupport
       if (inspectorLib.id != null &&
           inspectorLib.uri ==
               'package:flutter/src/widgets/widget_inspector.dart') {
-        try {
-          final inspectorServiceEval = await vmService!.evaluate(
-            isolateId!,
-            inspectorLib.id!,
-            'WidgetInspectorService.instance',
-          );
-          if (inspectorServiceEval is InstanceRef) {
-            inspectorServiceId = inspectorServiceEval.id;
-          }
-        } catch (_) {}
+        final inspectorServiceEval = await vmService!.evalSafe(
+          isolateId!,
+          inspectorLib.id!,
+          'WidgetInspectorService.instance',
+        );
+        if (inspectorServiceEval is InstanceRef) {
+          inspectorServiceId = inspectorServiceEval.id;
+        }
       }
 
       final libId = navigatorLib.id;

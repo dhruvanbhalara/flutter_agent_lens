@@ -5,6 +5,7 @@ import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/flutter_debug_flag.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
@@ -215,20 +216,21 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     }
 
-    final extensionName = 'ext.flutter.${flag.extensionSuffix}';
-    final args = switch (flag) {
-      FlutterDebugFlag.timeDilation => {
-          'timeDilation': (double.tryParse(valStr) ?? 1.0).toString(),
-        },
-      _ => {'enabled': valStr == 'true' ? 'true' : 'false'},
-    };
-
     try {
-      final response = await vmService!.callServiceExtension(
-        extensionName,
-        isolateId: isolateId,
-        args: args,
-      );
+      final Response response;
+      if (flag == FlutterDebugFlag.timeDilation) {
+        response = await vmService!.callServiceExtension(
+          'ext.flutter.${flag.extensionSuffix}',
+          isolateId: isolateId,
+          args: {'timeDilation': (double.tryParse(valStr) ?? 1.0).toString()},
+        );
+      } else {
+        response = await vmService!.toggleFlutterExtension(
+          flag.extensionSuffix,
+          enabled: valStr == 'true',
+          isolateId: isolateId,
+        );
+      }
 
       final resultText = response.json?['result']?.toString() ??
           response.json?.toString() ??
