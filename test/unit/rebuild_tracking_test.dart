@@ -27,6 +27,11 @@ class FakeVmServiceForRebuilds extends vm_service.VmService {
   final StreamController<vm_service.Event> _eventController =
       StreamController<vm_service.Event>.broadcast();
 
+  final Completer<void> _onDoneCompleter = Completer<void>();
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
+
   FakeVmServiceForRebuilds() : super(const Stream<dynamic>.empty(), (msg) {});
 
   @override

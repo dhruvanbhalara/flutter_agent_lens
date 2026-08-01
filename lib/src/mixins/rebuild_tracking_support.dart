@@ -6,6 +6,7 @@ import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 
@@ -151,19 +152,27 @@ base mixin RebuildTrackingSupport
       }
     });
 
+    SamplingResult? sampleResult;
     try {
       stderr.writeln(
           '[mcp:widget_rebuild_counts] Collecting rebuild events for ${duration}s...');
-      await Future<void>.delayed(Duration(seconds: duration));
+      if (vmService != null) {
+        sampleResult = await safeSamplingWindow(
+          vmService: vmService!,
+          duration: Duration(seconds: duration),
+        );
+      } else {
+        await Future<void>.delayed(Duration(seconds: duration));
+      }
     } finally {
       await extSub.cancel();
       try {
-        await vmService!.callServiceExtension(
+        await vmService?.callServiceExtension(
           'ext.flutter.inspector.trackRebuildDirtyWidgets',
           isolateId: isolateId,
           args: {'enabled': 'false'},
         );
-      } on Exception catch (e) {
+      } catch (e) {
         stderr.writeln(
             '[mcp:widget_rebuild_counts] Error disabling trackRebuildDirtyWidgets: $e');
       }
@@ -198,7 +207,15 @@ base mixin RebuildTrackingSupport
       projectName: projectName,
     );
 
-    final mdBuffer = StringBuffer('Top Rebuilding Widgets\n\n');
+    final mdBuffer = StringBuffer();
+    if (sampleResult != null && !sampleResult.completed) {
+      final elapsedSec = sampleResult.elapsed.inSeconds;
+      final reason = sampleResult.interruptReason ?? 'disconnected';
+      mdBuffer.writeln('> [!WARNING]');
+      mdBuffer.writeln(
+          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial rebuild counts follow.\n');
+    }
+    mdBuffer.writeln('Top Rebuilding Widgets\n');
     if (excludeBuiltIn) {
       mdBuffer.writeln(
           '_Note: Built-in Flutter/SDK widgets excluded. Pass `exclude_flutter_widgets: false` to include them._\n');

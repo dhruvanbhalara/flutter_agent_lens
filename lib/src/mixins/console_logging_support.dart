@@ -7,6 +7,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/services/log_stream_broadcaster.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for fetching and statefully buffering console
@@ -234,8 +235,16 @@ base mixin ConsoleLoggingSupport
     final watchBuffer = <String>[];
     final unsubscribe = logBroadcaster.addListener(watchBuffer.add);
 
+    SamplingResult? sampleResult;
     try {
-      await Future<void>.delayed(Duration(seconds: duration));
+      if (vmService != null) {
+        sampleResult = await safeSamplingWindow(
+          vmService: vmService!,
+          duration: Duration(seconds: duration),
+        );
+      } else {
+        await Future<void>.delayed(Duration(seconds: duration));
+      }
     } finally {
       unsubscribe();
     }
@@ -250,8 +259,15 @@ base mixin ConsoleLoggingSupport
       matchingLogs = watchBuffer;
     }
 
-    final mdBuffer =
-        StringBuffer('Live Console Logs ($duration s duration window)\n\n');
+    final mdBuffer = StringBuffer();
+    if (sampleResult != null && !sampleResult.completed) {
+      final elapsedSec = sampleResult.elapsed.inSeconds;
+      final reason = sampleResult.interruptReason ?? 'disconnected';
+      mdBuffer.writeln('> [!WARNING]');
+      mdBuffer.writeln(
+          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial logs follow.\n');
+    }
+    mdBuffer.writeln('Live Console Logs ($duration s duration window)\n');
     if (matchingLogs.isEmpty) {
       mdBuffer.writeln('No matching logs received during watch window.');
     } else {
