@@ -405,13 +405,31 @@ base mixin MemoryDebuggingSupport
     }
 
     stderr.writeln('[mcp:diff_heap] Sampling memory for ${duration}s...');
-    await Future<void>.delayed(Duration(seconds: duration));
+    SamplingResult? sampleResult;
+    if (vmService != null) {
+      sampleResult = await safeSamplingWindow(
+        vmService: vmService!,
+        duration: Duration(seconds: duration),
+      );
+    } else {
+      await Future<void>.delayed(Duration(seconds: duration));
+    }
 
-    final currentProfile =
-        await vmService!.getAllocationProfile(isolateId!, gc: false);
+    AllocationProfile? currentProfile;
+    if (sampleResult == null || sampleResult.completed) {
+      try {
+        currentProfile = await vmService
+            ?.getAllocationProfile(isolateId!, gc: false)
+            .timeout(const Duration(seconds: 1));
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:diff_heap] Error fetching second allocation profile: $e');
+      }
+    }
+
     final deltas = <Map<String, dynamic>>[];
     final currentMembers =
-        (currentProfile.members ?? const []).cast<ClassHeapStats>();
+        (currentProfile?.members ?? const []).cast<ClassHeapStats>();
 
     for (final ClassHeapStats member in currentMembers) {
       final className = member.classRef?.name;
@@ -449,7 +467,16 @@ base mixin MemoryDebuggingSupport
     final limit = req.intArg('limit', defaultValue: 20)!;
     _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
-    final md = StringBuffer('Memory Allocations Delta\n\n')
+    final md = StringBuffer();
+    if (sampleResult != null && !sampleResult.completed) {
+      final elapsedSec = sampleResult.elapsed.inSeconds;
+      final reason = sampleResult.interruptReason ?? 'disconnected';
+      md.writeln('> [!WARNING]');
+      md.writeln(
+          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Baseline snapshot captured before disconnect.\n');
+    }
+    md
+      ..writeln('Memory Allocations Delta\n')
       ..write(_formatAllocationDiffTable(deltas));
 
     return serializeDualFormat(
