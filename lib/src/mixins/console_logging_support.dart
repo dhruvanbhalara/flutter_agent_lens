@@ -6,6 +6,7 @@ import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/services/log_stream_broadcaster.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for fetching and statefully buffering console
@@ -14,6 +15,9 @@ base mixin ConsoleLoggingSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Local buffer of the most recent console logs.
   final List<String> logBuffer = [];
+
+  /// Broadcaster managing real-time log subscribers.
+  final LogStreamBroadcaster logBroadcaster = LogStreamBroadcaster();
 
   /// Last log line received, used for deduplication.
   String? lastLogLine;
@@ -29,9 +33,6 @@ base mixin ConsoleLoggingSupport
 
   /// Subscription to the VM Service's logging/developer stream.
   StreamSubscription<Event>? loggingSub;
-
-  /// Optional callback invoked when new log entries are formatted and added.
-  void Function(String line)? _watchLogCallback;
 
   /// Registers the console log tools.
   void registerLoggingTools() {
@@ -125,7 +126,7 @@ base mixin ConsoleLoggingSupport
         duplicateLogCount = 0;
         logBuffer.add(formatted);
       }
-      _watchLogCallback?.call(formatted);
+      logBroadcaster.dispatch(formatted);
     }
     if (logBuffer.length > 200) {
       logBuffer.removeRange(0, logBuffer.length - 200);
@@ -231,12 +232,12 @@ base mixin ConsoleLoggingSupport
         '[mcp:watch_logs] Watching logs for ${duration}s, filter="$filter"');
 
     final watchBuffer = <String>[];
-    _watchLogCallback = watchBuffer.add;
+    final unsubscribe = logBroadcaster.addListener(watchBuffer.add);
 
     try {
       await Future<void>.delayed(Duration(seconds: duration));
     } finally {
-      _watchLogCallback = null;
+      unsubscribe();
     }
 
     final List<String> matchingLogs;
