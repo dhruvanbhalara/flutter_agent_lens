@@ -235,19 +235,11 @@ base mixin ConsoleLoggingSupport
     final watchBuffer = <String>[];
     final unsubscribe = logBroadcaster.addListener(watchBuffer.add);
 
-    SamplingResult? sampleResult;
-    try {
-      if (vmService != null) {
-        sampleResult = await safeSamplingWindow(
-          vmService: vmService!,
-          duration: Duration(seconds: duration),
-        );
-      } else {
-        await Future<void>.delayed(Duration(seconds: duration));
-      }
-    } finally {
-      unsubscribe();
-    }
+    final sampleResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
+    unsubscribe();
 
     final List<String> matchingLogs;
     if (filter != null && filter.isNotEmpty) {
@@ -260,13 +252,11 @@ base mixin ConsoleLoggingSupport
     }
 
     final mdBuffer = StringBuffer();
-    if (sampleResult != null && !sampleResult.completed) {
-      final elapsedSec = sampleResult.elapsed.inSeconds;
-      final reason = sampleResult.interruptReason ?? 'disconnected';
-      mdBuffer.writeln('> [!WARNING]');
-      mdBuffer.writeln(
-          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial logs follow.\n');
-    }
+    sampleResult.writeWarningIfInterrupted(
+      mdBuffer,
+      requestedSeconds: duration,
+      dataName: 'logs',
+    );
     mdBuffer.writeln('Live Console Logs ($duration s duration window)\n');
     if (matchingLogs.isEmpty) {
       mdBuffer.writeln('No matching logs received during watch window.');

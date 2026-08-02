@@ -21,13 +21,41 @@ final class SamplingResult {
   });
 }
 
+/// Extension on [SamplingResult] for standardized output warning formatting.
+extension SamplingResultX on SamplingResult {
+  /// Appends a standardized GitHub alert warning to [buffer] if sampling was interrupted.
+  void writeWarningIfInterrupted(
+    StringSink buffer, {
+    required int requestedSeconds,
+    required String dataName,
+  }) {
+    if (!completed) {
+      final elapsedSec = elapsed.inSeconds;
+      final reason = interruptReason ?? 'disconnected';
+      buffer.writeln('> [!WARNING]');
+      buffer.writeln(
+        '> Sampling interrupted after ${elapsedSec}s (requested ${requestedSeconds}s). Reason: $reason. Partial $dataName follow.\n',
+      );
+    }
+  }
+}
+
 /// Waits for [duration] but terminates early if [vmService] closes or disconnects.
 ///
+/// If [vmService] is `null`, waits for [duration] and returns a completed [SamplingResult].
 /// Returns a [SamplingResult] containing completion status and actual elapsed time.
 Future<SamplingResult> safeSamplingWindow({
-  required VmService vmService,
+  required VmService? vmService,
   required Duration duration,
 }) async {
+  if (vmService == null) {
+    await Future<void>.delayed(duration);
+    return SamplingResult(
+      completed: true,
+      elapsed: duration,
+    );
+  }
+
   final stopwatch = Stopwatch()..start();
   final completer = Completer<SamplingResult>();
 

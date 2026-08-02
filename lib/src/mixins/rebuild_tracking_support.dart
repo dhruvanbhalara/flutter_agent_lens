@@ -152,20 +152,15 @@ base mixin RebuildTrackingSupport
       }
     });
 
-    SamplingResult? sampleResult;
-    try {
-      stderr.writeln(
-          '[mcp:widget_rebuild_counts] Collecting rebuild events for ${duration}s...');
-      if (vmService != null) {
-        sampleResult = await safeSamplingWindow(
-          vmService: vmService!,
-          duration: Duration(seconds: duration),
-        );
-      } else {
-        await Future<void>.delayed(Duration(seconds: duration));
-      }
-    } finally {
-      await extSub.cancel();
+    stderr.writeln(
+        '[mcp:widget_rebuild_counts] Collecting rebuild events for ${duration}s...');
+    final sampleResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
+
+    await extSub.cancel();
+    if (sampleResult.completed) {
       try {
         await vmService?.callServiceExtension(
           'ext.flutter.inspector.trackRebuildDirtyWidgets',
@@ -208,13 +203,11 @@ base mixin RebuildTrackingSupport
     );
 
     final mdBuffer = StringBuffer();
-    if (sampleResult != null && !sampleResult.completed) {
-      final elapsedSec = sampleResult.elapsed.inSeconds;
-      final reason = sampleResult.interruptReason ?? 'disconnected';
-      mdBuffer.writeln('> [!WARNING]');
-      mdBuffer.writeln(
-          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial rebuild counts follow.\n');
-    }
+    sampleResult.writeWarningIfInterrupted(
+      mdBuffer,
+      requestedSeconds: duration,
+      dataName: 'rebuild counts',
+    );
     mdBuffer.writeln('Top Rebuilding Widgets\n');
     if (excludeBuiltIn) {
       mdBuffer.writeln(

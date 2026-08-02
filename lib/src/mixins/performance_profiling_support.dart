@@ -105,31 +105,26 @@ base mixin PerformanceProfilingSupport
     await vmService!.clearVMTimeline();
 
     Timeline? timeline;
-    SamplingResult? sampleResult;
-    try {
-      if (vmService != null) {
-        sampleResult = await safeSamplingWindow(
-          vmService: vmService!,
-          duration: Duration(seconds: duration),
-        );
-        try {
-          timeline = await vmService!.getVMTimeline().timeout(
-                const Duration(seconds: 1),
-              );
-        } catch (e) {
-          stderr.writeln(
-              '[mcp:diagnose_jank] Error retrieving VM timeline after sampling: $e');
-        }
-      } else {
-        await Future<void>.delayed(Duration(seconds: duration));
-      }
-    } finally {
+    final sampleResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
+
+    if (sampleResult.completed) {
       try {
-        await vmService?.setVMTimelineFlags([]);
+        timeline = await vmService?.getVMTimeline().timeout(
+              const Duration(seconds: 1),
+            );
       } catch (e) {
-        stderr
-            .writeln('[mcp:diagnose_jank] Error resetting timeline flags: $e');
+        stderr.writeln(
+            '[mcp:diagnose_jank] Error retrieving VM timeline after sampling: $e');
       }
+    }
+
+    try {
+      await vmService?.setVMTimelineFlags([]);
+    } catch (e) {
+      stderr.writeln('[mcp:diagnose_jank] Error resetting timeline flags: $e');
     }
 
     final events = timeline?.traceEvents ?? [];
@@ -158,13 +153,11 @@ base mixin PerformanceProfilingSupport
     stderr.writeln(
         '[mcp:diagnose_jank] Collected ${events.length} timeline events, $jankyFrames janky frames');
     final mdBuffer = StringBuffer();
-    if (sampleResult != null && !sampleResult.completed) {
-      final elapsedSec = sampleResult.elapsed.inSeconds;
-      final reason = sampleResult.interruptReason ?? 'disconnected';
-      mdBuffer.writeln('> [!WARNING]');
-      mdBuffer.writeln(
-          '> Jank sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial trace follows.\n');
-    }
+    sampleResult.writeWarningIfInterrupted(
+      mdBuffer,
+      requestedSeconds: duration,
+      dataName: 'trace',
+    );
     mdBuffer
       ..writeln('Jank Diagnostic Report\n')
       ..writeln('- Total Frame Events Sampled: $totalFrames')
@@ -336,36 +329,31 @@ base mixin PerformanceProfilingSupport
       await vmService!.clearCpuSamples(isolateId!);
     } catch (_) {}
 
-    SamplingResult? sampleResult;
-    if (vmService != null) {
-      sampleResult = await safeSamplingWindow(
-        vmService: vmService!,
-        duration: Duration(seconds: duration),
-      );
-    } else {
-      await Future<void>.delayed(Duration(seconds: duration));
-    }
+    final sampleResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
 
     final endTime = DateTime.now().microsecondsSinceEpoch;
     CpuSamples? cpuSamples;
-    try {
-      cpuSamples = await vmService
-          ?.getCpuSamples(isolateId!, 0, endTime)
-          .timeout(const Duration(seconds: 1));
-    } catch (e) {
-      stderr.writeln('[mcp:cpu_profile] Error fetching CPU samples: $e');
+    if (sampleResult.completed) {
+      try {
+        cpuSamples = await vmService
+            ?.getCpuSamples(isolateId!, 0, endTime)
+            .timeout(const Duration(seconds: 1));
+      } catch (e) {
+        stderr.writeln('[mcp:cpu_profile] Error fetching CPU samples: $e');
+      }
     }
     final functions = cpuSamples?.functions ?? [];
 
     final hotspots = <Map<String, dynamic>>[];
     final mdBuffer = StringBuffer();
-    if (sampleResult != null && !sampleResult.completed) {
-      final elapsedSec = sampleResult.elapsed.inSeconds;
-      final reason = sampleResult.interruptReason ?? 'disconnected';
-      mdBuffer.writeln('> [!WARNING]');
-      mdBuffer.writeln(
-          '> CPU profiling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial hotspots follow.\n');
-    }
+    sampleResult.writeWarningIfInterrupted(
+      mdBuffer,
+      requestedSeconds: duration,
+      dataName: 'hotspots',
+    );
     mdBuffer.writeln('CPU Execution Hotspots (Exclusive Ticks)\n');
 
     for (final dynamic f in functions) {

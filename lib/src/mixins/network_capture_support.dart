@@ -821,7 +821,6 @@ base mixin NetworkCaptureSupport
         if (r['id'] != null) r['id'].toString()
     };
 
-    SamplingResult? sampleResult;
     try {
       await vmService?.callServiceExtension(
         'ext.dart.io.httpEnableTimelineLogging',
@@ -833,16 +832,12 @@ base mixin NetworkCaptureSupport
           '[mcp:watch_network] Error enabling HTTP timeline logging: $e');
     }
 
-    try {
-      if (vmService != null) {
-        sampleResult = await safeSamplingWindow(
-          vmService: vmService!,
-          duration: Duration(seconds: duration),
-        );
-      } else {
-        await Future<void>.delayed(Duration(seconds: duration));
-      }
-    } finally {
+    final sampleResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
+
+    if (sampleResult.completed) {
       try {
         await vmService?.callServiceExtension(
           'ext.dart.io.httpEnableTimelineLogging',
@@ -853,13 +848,15 @@ base mixin NetworkCaptureSupport
     }
 
     List<Map<String, dynamic>> currentRequests = [];
-    try {
-      currentRequests = await _getHttpRequests().timeout(
-        const Duration(seconds: 1),
-      );
-    } catch (e) {
-      stderr.writeln(
-          '[mcp:watch_network] Error fetching HTTP requests after sampling: $e');
+    if (sampleResult.completed) {
+      try {
+        currentRequests = await _getHttpRequests().timeout(
+          const Duration(seconds: 1),
+        );
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:watch_network] Error fetching HTTP requests after sampling: $e');
+      }
     }
 
     final newRequests = <Map<String, dynamic>>[];
@@ -918,13 +915,16 @@ base mixin NetworkCaptureSupport
     }).toList();
 
     final formattedRequests = <Map<String, dynamic>>[];
+    final headerBuffer = StringBuffer();
+    sampleResult.writeWarningIfInterrupted(
+      headerBuffer,
+      requestedSeconds: duration,
+      dataName: 'network requests',
+    );
+
     final output = <String>[];
-    if (sampleResult != null && !sampleResult.completed) {
-      final elapsedSec = sampleResult.elapsed.inSeconds;
-      final reason = sampleResult.interruptReason ?? 'disconnected';
-      output.add('> [!WARNING]');
-      output.add(
-          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial network requests follow.\n');
+    if (headerBuffer.isNotEmpty) {
+      output.add(headerBuffer.toString().trimRight());
     }
     output.addAll([
       'LIVE NETWORK WATCH REPORT ($duration s window)',

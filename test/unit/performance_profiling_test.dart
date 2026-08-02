@@ -23,6 +23,11 @@ base class PerformanceProfilingMock extends MCPServer
 
 class FakeVmServiceForProfiling extends vm_service.VmService {
   final Map<String, dynamic> responseMap;
+  final Completer<void> _onDoneCompleter = Completer<void>();
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
+
   FakeVmServiceForProfiling(this.responseMap)
       : super(const Stream<dynamic>.empty(), (msg) {});
 

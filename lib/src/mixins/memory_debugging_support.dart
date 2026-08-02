@@ -406,18 +406,13 @@ base mixin MemoryDebuggingSupport
     }
 
     stderr.writeln('[mcp:diff_heap] Sampling memory for ${duration}s...');
-    SamplingResult? sampleResult;
-    if (vmService != null) {
-      sampleResult = await safeSamplingWindow(
-        vmService: vmService!,
-        duration: Duration(seconds: duration),
-      );
-    } else {
-      await Future<void>.delayed(Duration(seconds: duration));
-    }
+    final sampleResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
 
     AllocationProfile? currentProfile;
-    if (sampleResult == null || sampleResult.completed) {
+    if (sampleResult.completed) {
       try {
         currentProfile = await vmService
             ?.getAllocationProfile(isolateId!, gc: false)
@@ -469,13 +464,11 @@ base mixin MemoryDebuggingSupport
     _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
     final md = StringBuffer();
-    if (sampleResult != null && !sampleResult.completed) {
-      final elapsedSec = sampleResult.elapsed.inSeconds;
-      final reason = sampleResult.interruptReason ?? 'disconnected';
-      md.writeln('> [!WARNING]');
-      md.writeln(
-          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Baseline snapshot captured before disconnect.\n');
-    }
+    sampleResult.writeWarningIfInterrupted(
+      md,
+      requestedSeconds: duration,
+      dataName: 'baseline snapshot captured before disconnect',
+    );
     md
       ..writeln('Memory Allocations Delta\n')
       ..write(_formatAllocationDiffTable(deltas));
@@ -1073,17 +1066,13 @@ base mixin MemoryDebuggingSupport
 
     for (var i = 0; i <= duration; i++) {
       if (i > 0) {
-        if (vmService != null) {
-          final res = await safeSamplingWindow(
-            vmService: vmService!,
-            duration: const Duration(seconds: 1),
-          );
-          if (!res.completed) {
-            sampleResult = res;
-            break;
-          }
-        } else {
-          await Future<void>.delayed(const Duration(seconds: 1));
+        final res = await safeSamplingWindow(
+          vmService: vmService,
+          duration: const Duration(seconds: 1),
+        );
+        if (!res.completed) {
+          sampleResult = res;
+          break;
         }
       }
       try {
@@ -1115,14 +1104,17 @@ base mixin MemoryDebuggingSupport
       await _stopGcStreamInternal();
     }
 
+    sampleResult ??= SamplingResult(
+      completed: true,
+      elapsed: Duration(seconds: samples.length),
+    );
+
     final text = StringBuffer();
-    if (sampleResult != null && !sampleResult.completed) {
-      final elapsedSec = samples.length;
-      final reason = sampleResult.interruptReason ?? 'disconnected';
-      text.writeln('> [!WARNING]');
-      text.writeln(
-          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial timeline follows.\n');
-    }
+    sampleResult.writeWarningIfInterrupted(
+      text,
+      requestedSeconds: duration,
+      dataName: 'timeline',
+    );
     text
       ..writeln(
           '| Timestamp | Heap Used | Heap Capacity | External | RSS | GC Events |')
@@ -1166,15 +1158,10 @@ base mixin MemoryDebuggingSupport
     }
 
     final startIndex = _gcEventBuffer.length;
-    SamplingResult? sampleResult;
-    if (vmService != null) {
-      sampleResult = await safeSamplingWindow(
-        vmService: vmService!,
-        duration: Duration(seconds: duration),
-      );
-    } else {
-      await Future<void>.delayed(Duration(seconds: duration));
-    }
+    final sampleResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
 
     final newEvents = _gcEventBuffer.skip(startIndex).toList();
     if (!wasActive) {
@@ -1213,13 +1200,11 @@ base mixin MemoryDebuggingSupport
     }
 
     final text = StringBuffer();
-    if (sampleResult != null && !sampleResult.completed) {
-      final elapsedSec = sampleResult.elapsed.inSeconds;
-      final reason = sampleResult.interruptReason ?? 'disconnected';
-      text.writeln('> [!WARNING]');
-      text.writeln(
-          '> Sampling interrupted after ${elapsedSec}s (requested ${duration}s). Reason: $reason. Partial GC events follow.\n');
-    }
+    sampleResult.writeWarningIfInterrupted(
+      text,
+      requestedSeconds: duration,
+      dataName: 'GC events',
+    );
     text
       ..writeln('- **Pressure Level**: `${pressureLevel.toUpperCase()}`')
       ..writeln('- **GC Event Count**: $gcCount')

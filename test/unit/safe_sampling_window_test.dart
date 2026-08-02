@@ -53,5 +53,51 @@ void main() {
       expect(result.interruptReason, equals('vm_service_disconnected'));
       expect(result.elapsed.inSeconds, lessThan(5));
     });
+
+    test('completes normally when vmService is null', () async {
+      final result = await safeSamplingWindow(
+        vmService: null,
+        duration: const Duration(milliseconds: 20),
+      );
+
+      expect(result.completed, isTrue);
+      expect(result.interruptReason, isNull);
+      expect(result.elapsed.inMilliseconds, greaterThanOrEqualTo(15));
+    });
+
+    test(
+        'SamplingResultX.writeWarningIfInterrupted writes warning on disconnect',
+        () {
+      const interruptedResult = SamplingResult(
+        completed: false,
+        elapsed: Duration(seconds: 2),
+        interruptReason: 'vm_service_disconnected',
+      );
+
+      final buffer = StringBuffer();
+      interruptedResult.writeWarningIfInterrupted(
+        buffer,
+        requestedSeconds: 5,
+        dataName: 'logs',
+      );
+
+      final text = buffer.toString();
+      expect(text, contains('> [!WARNING]'));
+      expect(text, contains('Sampling interrupted after 2s (requested 5s)'));
+      expect(text, contains('Partial logs follow'));
+
+      const completedResult = SamplingResult(
+        completed: true,
+        elapsed: Duration(seconds: 5),
+      );
+
+      final cleanBuffer = StringBuffer();
+      completedResult.writeWarningIfInterrupted(
+        cleanBuffer,
+        requestedSeconds: 5,
+        dataName: 'logs',
+      );
+      expect(cleanBuffer.toString(), isEmpty);
+    });
   });
 }
