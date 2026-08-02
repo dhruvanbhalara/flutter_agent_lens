@@ -1,14 +1,18 @@
 ## Unreleased
 
 ### Fixed
-- Fixed target application memory leak by automatically disposing DevTools `WidgetInspectorService` object groups (`disposeGroup`) after widget tree retrieval.
+- Fixed target application memory leak by automatically disposing DevTools `WidgetInspectorService` object groups (`disposeGroup`) on all execution paths (including early returns and errors).
+
+### Refactored
+- Unified telemetry sampling architecture by allowing `safeSamplingWindow` to accept nullable `VmService?` and introduced `SamplingResultX.writeWarningIfInterrupted` for centralized output warning formatting.
+- Enhanced `VmServiceX` extension with `safeToggleFlutterExtension` to handle RPC errors gracefully during setup/teardown.
 
 ### Performance
 - Added chunked worker batching (`_batchAsync`) for parallel `getRetainingPath` RPC calls in `memory audit_leak` to protect target isolate from CPU/GC pressure.
 - Added LRU capacity eviction and snapshot limit overrides (`limit` parameter) for server-side memory snapshot storage.
 
 ### Testing
-- Added unit tests covering DevTools inspector object group disposal and memory snapshot capacity limits.
+- Added unit tests covering DevTools inspector object group disposal, safe extension toggling, null VmService sampling, and memory snapshot capacity limits.
 
 ## 1.8.0
 
