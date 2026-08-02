@@ -259,10 +259,41 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           '[mcp:evaluate_expression] Evaluating in library: $expression');
     }
 
-    final Object res = frameIndex != null
-        ? await vmService!.evaluateInFrame(isolateId!, frameIndex, expression)
-        : await vmService!
-            .evaluate(isolateId!, await getEvaluationLibraryId(), expression);
+    Object res;
+    if (frameIndex != null) {
+      res =
+          await vmService!.evaluateInFrame(isolateId!, frameIndex, expression);
+    } else {
+      final mainLibId = await getEvaluationLibraryId();
+      try {
+        res = await vmService!.evaluate(isolateId!, mainLibId, expression);
+      } on RPCError catch (e) {
+        if (e.code == 113 || e.message.contains('Method not found')) {
+          final isolate = await vmService!.getIsolate(isolateId!);
+          final projectLibs = (isolate.libraries ?? [])
+              .where((l) =>
+                  (l.uri ?? '').startsWith('package:') &&
+                  !(l.uri ?? '').startsWith('package:flutter/'))
+              .toList();
+          Object? fallbackRes;
+          for (final lib in projectLibs) {
+            if (lib.id == mainLibId || lib.id == null) continue;
+            try {
+              fallbackRes =
+                  await vmService!.evaluate(isolateId!, lib.id!, expression);
+              break;
+            } catch (_) {}
+          }
+          if (fallbackRes != null) {
+            res = fallbackRes;
+          } else {
+            rethrow;
+          }
+        } else {
+          rethrow;
+        }
+      }
+    }
 
     final rawValStr = res is InstanceRef
         ? (res.valueAsString ?? res.toString())
