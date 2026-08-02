@@ -18,7 +18,7 @@ base mixin ScrollGestureSupport
         description: 'Simulate scroll gesture.',
         inputSchema: ObjectSchema(
           properties: {
-            'scroll_controller_expression': StringSchema(
+            'scrollControllerExpression': StringSchema(
               description:
                   'Dart expression that evaluates to the ScrollController (e.g., PrimaryScrollController.of(primaryFocus!.context)).',
             ),
@@ -26,7 +26,7 @@ base mixin ScrollGestureSupport
               description: 'Pixel offset to scroll to (default: 500.0).',
             ),
           },
-          required: ['scroll_controller_expression'],
+          required: ['scrollControllerExpression'],
         ),
       ),
       _handleScrollGesture,
@@ -35,7 +35,8 @@ base mixin ScrollGestureSupport
 
   /// Handles the trigger_scroll_gesture tool request.
   Future<CallToolResult> _handleScrollGesture(CallToolRequest req) async {
-    final controller = req.requireArg<String>('scroll_controller_expression');
+    final controller = req.arg<String>('scrollControllerExpression') ??
+        req.requireArg<String>('scroll_controller_expression');
     final offset = req.doubleArg('offset', defaultValue: 500.0)!;
     stderr.writeln(
         '[mcp:scroll_gesture] Controller: $controller, offset: $offset');
