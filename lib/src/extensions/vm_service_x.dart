@@ -59,11 +59,7 @@ extension VmServiceX on VmService {
       return await evaluate(isolateId, libraryId, expression);
     } catch (e, st) {
       if (!silent) {
-        if (e is SentinelException ||
-            (e is RPCError &&
-                (e.code == 106 ||
-                    e.message.contains('collected') ||
-                    e.message.toLowerCase().contains('sentinel')))) {
+        if (e is SentinelException || e is RPCError) {
           stderr.writeln(
             '[VmServiceX.evalSafe] Caught sentinel/collected error during evaluate("$expression"): $e',
           );

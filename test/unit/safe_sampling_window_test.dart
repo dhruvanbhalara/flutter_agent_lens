@@ -65,17 +65,16 @@ void main() {
       expect(result.elapsed.inMilliseconds, greaterThanOrEqualTo(15));
     });
 
-    test(
-        'SamplingResultX.writeWarningIfInterrupted writes warning on disconnect',
-        () {
-      const interruptedResult = SamplingResult(
+    test('writeSamplingWarningIfInterrupted writes warning on disconnect', () {
+      const interruptedResult = (
         completed: false,
         elapsed: Duration(seconds: 2),
         interruptReason: 'vm_service_disconnected',
       );
 
       final buffer = StringBuffer();
-      interruptedResult.writeWarningIfInterrupted(
+      writeSamplingWarningIfInterrupted(
+        interruptedResult,
         buffer,
         requestedSeconds: 5,
         dataName: 'logs',
@@ -86,13 +85,15 @@ void main() {
       expect(text, contains('Sampling interrupted after 2s (requested 5s)'));
       expect(text, contains('Partial logs follow'));
 
-      const completedResult = SamplingResult(
+      const completedResult = (
         completed: true,
         elapsed: Duration(seconds: 5),
+        interruptReason: null,
       );
 
       final cleanBuffer = StringBuffer();
-      completedResult.writeWarningIfInterrupted(
+      writeSamplingWarningIfInterrupted(
+        completedResult,
         cleanBuffer,
         requestedSeconds: 5,
         dataName: 'logs',

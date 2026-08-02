@@ -916,7 +916,8 @@ base mixin NetworkCaptureSupport
 
     final formattedRequests = <Map<String, dynamic>>[];
     final headerBuffer = StringBuffer();
-    sampleResult.writeWarningIfInterrupted(
+    writeSamplingWarningIfInterrupted(
+      sampleResult,
       headerBuffer,
       requestedSeconds: duration,
       dataName: 'network requests',

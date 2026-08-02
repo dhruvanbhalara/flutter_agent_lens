@@ -270,22 +270,19 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       } on RPCError catch (e) {
         if (e.code == 113 || e.message.contains('Method not found')) {
           final isolate = await vmService!.getIsolate(isolateId!);
-          final projectLibs = (isolate.libraries ?? [])
+          final fallbackLib = (isolate.libraries ?? [])
               .where((l) =>
                   (l.uri ?? '').startsWith('package:') &&
-                  !(l.uri ?? '').startsWith('package:flutter/'))
-              .toList();
-          Object? fallbackRes;
-          for (final lib in projectLibs) {
-            if (lib.id == mainLibId || lib.id == null) continue;
-            try {
-              fallbackRes =
-                  await vmService!.evaluate(isolateId!, lib.id!, expression);
-              break;
-            } catch (_) {}
-          }
-          if (fallbackRes != null) {
-            res = fallbackRes;
+                  !(l.uri ?? '').startsWith('package:flutter/') &&
+                  l.id != null &&
+                  l.id != mainLibId)
+              .firstOrNull;
+          if (fallbackLib != null) {
+            res = await vmService!.evaluate(
+              isolateId!,
+              fallbackLib.id!,
+              expression,
+            );
           } else {
             rethrow;
           }

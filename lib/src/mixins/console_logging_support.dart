@@ -252,7 +252,8 @@ base mixin ConsoleLoggingSupport
     }
 
     final mdBuffer = StringBuffer();
-    sampleResult.writeWarningIfInterrupted(
+    writeSamplingWarningIfInterrupted(
+      sampleResult,
       mdBuffer,
       requestedSeconds: duration,
       dataName: 'logs',

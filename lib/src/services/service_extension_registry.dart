@@ -3,12 +3,7 @@ import 'dart:io';
 
 import 'package:vm_service/vm_service.dart';
 
-/// Centralized registry and strategy manager for Flutter & Dart VM Service extensions.
-///
-/// Implements:
-/// - **Observer Pattern**: Subscribes to VM Service isolate stream for `EventKind.kServiceExtensionAdded` events.
-/// - **Registry Pattern**: Maintains `Set<String>` of active extension RPC strings.
-/// - **Strategy Pattern**: Encapsulates platform/engine fallbacks (Impeller vs Skia, headless vs view FPS).
+/// Tracks active VM Service extension RPCs and provides safe, capability-checked helpers.
 class ServiceExtensionRegistry {
   final Set<String> _activeRPCs = {};
   StreamSubscription<Event>? _streamSub;

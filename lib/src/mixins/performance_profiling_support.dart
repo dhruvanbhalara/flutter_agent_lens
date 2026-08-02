@@ -153,7 +153,8 @@ base mixin PerformanceProfilingSupport
     stderr.writeln(
         '[mcp:diagnose_jank] Collected ${events.length} timeline events, $jankyFrames janky frames');
     final mdBuffer = StringBuffer();
-    sampleResult.writeWarningIfInterrupted(
+    writeSamplingWarningIfInterrupted(
+      sampleResult,
       mdBuffer,
       requestedSeconds: duration,
       dataName: 'trace',
@@ -349,7 +350,8 @@ base mixin PerformanceProfilingSupport
 
     final hotspots = <Map<String, dynamic>>[];
     final mdBuffer = StringBuffer();
-    sampleResult.writeWarningIfInterrupted(
+    writeSamplingWarningIfInterrupted(
+      sampleResult,
       mdBuffer,
       requestedSeconds: duration,
       dataName: 'hotspots',

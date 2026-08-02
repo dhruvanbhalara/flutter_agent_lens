@@ -199,7 +199,8 @@ base mixin RebuildTrackingSupport
     );
 
     final mdBuffer = StringBuffer();
-    sampleResult.writeWarningIfInterrupted(
+    writeSamplingWarningIfInterrupted(
+      sampleResult,
       mdBuffer,
       requestedSeconds: duration,
       dataName: 'rebuild counts',

@@ -464,7 +464,8 @@ base mixin MemoryDebuggingSupport
     _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
     final md = StringBuffer();
-    sampleResult.writeWarningIfInterrupted(
+    writeSamplingWarningIfInterrupted(
+      sampleResult,
       md,
       requestedSeconds: duration,
       dataName: 'baseline snapshot captured before disconnect',
@@ -1091,7 +1092,7 @@ base mixin MemoryDebuggingSupport
           gcEventsInInterval: gcInInterval,
         ));
       } catch (_) {
-        sampleResult = SamplingResult(
+        sampleResult = (
           completed: false,
           elapsed: Duration(seconds: i),
           interruptReason: 'vm_service_disconnected',
@@ -1104,13 +1105,15 @@ base mixin MemoryDebuggingSupport
       await _stopGcStreamInternal();
     }
 
-    sampleResult ??= SamplingResult(
+    sampleResult ??= (
       completed: true,
       elapsed: Duration(seconds: samples.length),
+      interruptReason: null,
     );
 
     final text = StringBuffer();
-    sampleResult.writeWarningIfInterrupted(
+    writeSamplingWarningIfInterrupted(
+      sampleResult,
       text,
       requestedSeconds: duration,
       dataName: 'timeline',
@@ -1200,7 +1203,8 @@ base mixin MemoryDebuggingSupport
     }
 
     final text = StringBuffer();
-    sampleResult.writeWarningIfInterrupted(
+    writeSamplingWarningIfInterrupted(
+      sampleResult,
       text,
       requestedSeconds: duration,
       dataName: 'GC events',
