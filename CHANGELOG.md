@@ -1,5 +1,8 @@
 ## Unreleased
 
+### Added
+- Added `ServiceExtensionRegistry` implementing Observer, Registry, and Strategy design patterns to track registered extension RPCs reactively and provide typed fallbacks for optional platform extensions (such as **Impeller** vs Skia raster memory and view display refresh rate).
+
 ### Fixed
 - Fixed target application memory leak by automatically disposing DevTools `WidgetInspectorService` object groups (`disposeGroup`) on all execution paths (including early returns and errors).
 
