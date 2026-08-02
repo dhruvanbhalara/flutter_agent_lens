@@ -10,7 +10,7 @@ if ! dart format --output=none --set-exit-if-changed .; then
 fi
 
 echo "Running dart analyze..."
-if ! dart analyze .; then
+if ! dart analyze --fatal-infos --fatal-warnings .; then
   echo "Error: dart analyze found issues."
   exit 1
 fi
