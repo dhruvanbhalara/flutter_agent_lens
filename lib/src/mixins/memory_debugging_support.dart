@@ -8,6 +8,7 @@ import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
+import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for analyzing heap usage, tracking class instances,

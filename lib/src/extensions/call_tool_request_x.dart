@@ -49,4 +49,14 @@ extension CallToolRequestX on CallToolRequest {
     final value = arg<num>(key);
     return value?.toDouble() ?? defaultValue;
   }
+
+  /// Safely extracts a [String] argument by [key].
+  ///
+  /// Returns `null` if the argument is missing or not a [String].
+  String? strArg(String key) => arg<String>(key);
+
+  /// Extracts a required [String] argument by [key].
+  ///
+  /// Throws an [ArgumentError] if the key is missing or the value is not a [String].
+  String requireStrArg(String key) => requireArg<String>(key);
 }

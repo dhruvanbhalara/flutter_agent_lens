@@ -99,7 +99,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     }
     final actionStr = req.requireArg<String>('action');
-    final threshold = (req.arg<num>('threshold'))?.toDouble() ?? 0.98;
+    final threshold = req.doubleArg('threshold', defaultValue: 0.98)!;
     final screenshotTypeStr = req.arg<String>('screenshot_type');
     final deviceId = req.arg<String>('device_id');
 

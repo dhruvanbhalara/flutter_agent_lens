@@ -14,6 +14,15 @@ void main() {
       );
       expect(truncateString('', maxLength: 5), equals(''));
     });
+
+    test('formatBytes handles zero, byte, KB, MB ranges and negatives', () {
+      expect(formatBytes(0), equals('0 B'));
+      expect(formatBytes(512), equals('512.00 B'));
+      expect(formatBytes(1024), equals('1.00 KB'));
+      expect(formatBytes(1536), equals('1.50 KB'));
+      expect(formatBytes(1024 * 1024), equals('1.00 MB'));
+      expect(formatBytes(-1024), equals('-1.00 KB'));
+    });
   });
 
   group('CallToolRequestX Extension Tests', () {

@@ -59,6 +59,7 @@ final class FlutterAgentLensServer extends MCPServer
   @override
   Future<void> cleanupStreams() async {
     await Future.wait([
+      Future<void>.value(super.cleanupStreams()),
       cleanupLogging(),
       cleanupWidgetInspection(),
       cleanupRebuildTracking(),

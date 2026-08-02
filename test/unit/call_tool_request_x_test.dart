@@ -27,5 +27,29 @@ void main() {
       expect(req.doubleArg('missing', defaultValue: 1.5), equals(1.5));
       expect(req.doubleArg('missing'), isNull);
     });
+    test('strArg extracts string values', () {
+      final req = CallToolRequest(
+        name: 'test_tool',
+        arguments: {'name': 'flutter', 'count': 42},
+      );
+
+      expect(req.strArg('name'), equals('flutter'));
+      expect(req.strArg('missing'), isNull);
+      // non-string type returns null
+      expect(req.strArg('count'), isNull);
+    });
+
+    test('requireStrArg returns value or throws', () {
+      final req = CallToolRequest(
+        name: 'test_tool',
+        arguments: {'key': 'value'},
+      );
+
+      expect(req.requireStrArg('key'), equals('value'));
+      expect(
+        () => req.requireStrArg('missing'),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
   });
 }

@@ -3,6 +3,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/mixins/connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/console_logging_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:test/test.dart';
 
@@ -52,12 +53,12 @@ void main() {
     });
 
     test('formatBytes formatting sizes', () {
-      expect(mock.formatBytes(0), equals('0 B'));
-      expect(mock.formatBytes(1023), equals('1023.00 B'));
-      expect(mock.formatBytes(1024), equals('1.00 KB'));
-      expect(mock.formatBytes(1024 * 1024), equals('1.00 MB'));
-      expect(mock.formatBytes(1024 * 1024 * 1024), equals('1.00 GB'));
-      expect(mock.formatBytes(-512), equals('-512.00 B'));
+      expect(formatBytes(0), equals('0 B'));
+      expect(formatBytes(1023), equals('1023.00 B'));
+      expect(formatBytes(1024), equals('1.00 KB'));
+      expect(formatBytes(1024 * 1024), equals('1.00 MB'));
+      expect(formatBytes(1024 * 1024 * 1024), equals('1.00 GB'));
+      expect(formatBytes(-512), equals('-512.00 B'));
     });
 
     test('serializeDualFormat formats as json when preferred', () {
