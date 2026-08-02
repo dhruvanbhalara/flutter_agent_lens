@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/path_resolver.dart';
+import 'package:flutter_agent_lens/src/services/service_extension_registry.dart';
 import 'package:flutter_agent_lens/src/utils/workspace_package_resolver.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
@@ -17,6 +18,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
 
   /// The active connection to the Dart VM Service.
   VmService? vmService;
+
+  /// Centralized registry and strategy manager for VM service extensions.
+  final ServiceExtensionRegistry extensionRegistry = ServiceExtensionRegistry();
 
   /// The active VM Service URI.
   String? vmServiceUri;
@@ -59,7 +63,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   set responseFormat(String value) => _responseFormat = value;
 
   /// Performs cleanup operations on active streams and daemon clients.
-  FutureOr<void> cleanupStreams() {}
+  FutureOr<void> cleanupStreams() {
+    unawaited(extensionRegistry.dispose());
+  }
 
   /// Registers all tools requiring active VM connection.
   void registerConnectedTools();
@@ -352,36 +358,23 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       throw StateError('No libraries found in target isolate.');
     }
 
-    // Prioritize the entry point library ending with main.dart (e.g. package:test_app/main.dart)
-    for (final lib in libraries) {
-      final uri = lib.uri ?? '';
-      if (uri.startsWith('package:') && uri.endsWith('main.dart')) {
-        final libId = lib.id;
-        if (libId != null) {
-          cachedLibraryId = libId;
-          return libId;
-        }
-      }
-    }
+    final match = libraries.where((LibraryRef l) {
+          final uri = l.uri ?? '';
+          return uri.startsWith('package:') && uri.endsWith('main.dart');
+        }).firstOrNull ??
+        libraries.where((LibraryRef l) {
+          final uri = l.uri ?? '';
+          return uri.startsWith('package:') &&
+              !uri.contains('package:flutter/');
+        }).firstOrNull ??
+        libraries.first;
 
-    // Return the main application library ID if found, otherwise the first library.
-    for (final lib in libraries) {
-      final uri = lib.uri ?? '';
-      if (uri.startsWith('package:') && !uri.contains('package:flutter/')) {
-        final libId = lib.id;
-        if (libId != null) {
-          cachedLibraryId = libId;
-          return libId;
-        }
-      }
-    }
-
-    final firstId = libraries.first.id;
-    if (firstId == null) {
+    final libId = match.id;
+    if (libId == null) {
       throw StateError('Library has no ID');
     }
-    cachedLibraryId = firstId;
-    return firstId;
+    cachedLibraryId = libId;
+    return libId;
   }
 
   /// Get the project's package name.
@@ -425,20 +418,6 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       }
     } catch (_) {}
     return null;
-  }
-
-  /// Format byte counts to human readable strings.
-  String formatBytes(int bytes) {
-    if (bytes == 0) return '0 B';
-    final sign = bytes < 0 ? '-' : '';
-    var absVal = bytes.abs().toDouble();
-    final units = ['B', 'KB', 'MB', 'GB'];
-    var i = 0;
-    while (absVal >= 1024.0 && i < units.length - 1) {
-      absVal /= 1024.0;
-      i++;
-    }
-    return '$sign${absVal.toStringAsFixed(2)} ${units[i]}';
   }
 
   /// Load local and external packages using WorkspacePackageResolver.
