@@ -348,7 +348,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     required String screenshotType,
     required String? deviceId,
   }) async {
-    if (vmService != null) {
+    if (vmService != null &&
+        extensionRegistry.isSupported('ext.flutter.screenshot')) {
       // 1. Try direct VM Service extension screenshot first (highly efficient, zero process overhead)
       try {
         final response = await vmService!.callServiceExtension(

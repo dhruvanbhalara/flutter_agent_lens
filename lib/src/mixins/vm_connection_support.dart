@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/path_resolver.dart';
+import 'package:flutter_agent_lens/src/services/service_extension_registry.dart';
 import 'package:flutter_agent_lens/src/utils/workspace_package_resolver.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
@@ -17,6 +18,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
 
   /// The active connection to the Dart VM Service.
   VmService? vmService;
+
+  /// Centralized registry and strategy manager for VM service extensions.
+  final ServiceExtensionRegistry extensionRegistry = ServiceExtensionRegistry();
 
   /// The active VM Service URI.
   String? vmServiceUri;
@@ -59,7 +63,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   set responseFormat(String value) => _responseFormat = value;
 
   /// Performs cleanup operations on active streams and daemon clients.
-  FutureOr<void> cleanupStreams() {}
+  FutureOr<void> cleanupStreams() {
+    unawaited(extensionRegistry.dispose());
+  }
 
   /// Registers all tools requiring active VM connection.
   void registerConnectedTools();

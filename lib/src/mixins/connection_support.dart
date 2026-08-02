@@ -271,6 +271,13 @@ base mixin ConnectionSupport
         }
         isolateId = id;
       }
+      try {
+        final mainIsolate = await vmService!.getIsolate(isolateId!);
+        await extensionRegistry.initialize(mainIsolate, vmService!);
+      } catch (e) {
+        stderr
+            .writeln('[mcp:connect] Error initializing extension registry: $e');
+      }
       final ver = await vmService!.getVersion();
 
       try {
@@ -588,16 +595,10 @@ base mixin ConnectionSupport
     final vm = await vmService!.getVM();
     final isolate = await vmService!.getIsolate(isolateId!);
 
-    double fpsVal = 60.0;
-    try {
-      final fpsResponse = await vmService!.callServiceExtension(
-        'ext.flutter.getDisplayRefreshRate',
-        isolateId: isolateId,
-      );
-      fpsVal = (fpsResponse.json?['fps'] as num?)?.toDouble() ?? 60.0;
-    } catch (e) {
-      stderr.writeln('[mcp:connect] Error getting display refresh rate: $e');
-    }
+    final fpsVal = await extensionRegistry.getDisplayRefreshRate(
+      vmService: vmService,
+      isolateId: isolateId,
+    );
 
     final extensionRPCs = isolate.extensionRPCs ?? [];
     final flutterExtensions =

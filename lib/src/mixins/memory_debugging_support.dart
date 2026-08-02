@@ -1244,20 +1244,10 @@ base mixin MemoryDebuggingSupport
     final rss = await _getRssBytes();
     final heap = await _getHeapStats();
 
-    int? rasterBytes;
-    try {
-      final rasterRes = await vmService!.callServiceExtension(
-        'ext.ui.window.getSkiaEstimateRasterCacheMemory',
-        isolateId: isolateId!,
-      );
-      final json = rasterRes.json;
-      if (json != null && json.containsKey('result')) {
-        rasterBytes = json['result'] as int?;
-      }
-    } catch (e) {
-      stderr.writeln(
-          '[mcp:memory] Raster cache memory extension unavailable: $e');
-    }
+    final rasterBytes = await extensionRegistry.getRasterCacheMemory(
+      vmService: vmService,
+      isolateId: isolateId,
+    );
 
     final text = StringBuffer()
       ..writeln('- **Resident Set Size (RSS)**: ${formatBytes(rss)}')

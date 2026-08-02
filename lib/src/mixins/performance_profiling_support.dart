@@ -431,16 +431,10 @@ base mixin PerformanceProfilingSupport
     await vmService!
         .setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API', 'Compiler']);
 
-    double fpsVal = 60.0;
-    try {
-      final fpsResponse = await vmService!.callServiceExtension(
-        'ext.flutter.getDisplayRefreshRate',
-        isolateId: isolateId,
-      );
-      fpsVal = (fpsResponse.json?['fps'] as num?)?.toDouble() ?? 60.0;
-    } catch (e) {
-      stderr.writeln('[mcp:profile] Error getting display refresh rate: $e');
-    }
+    final fpsVal = await extensionRegistry.getDisplayRefreshRate(
+      vmService: vmService,
+      isolateId: isolateId,
+    );
 
     isProfiling = true;
     profilingStartTime = DateTime.now().millisecondsSinceEpoch;
