@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/mixins/memory_debugging_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
@@ -79,6 +81,63 @@ void main() {
           equals('ext.flutter.inspector.disposeGroup'));
       expect(fakeVmService.lastArgs,
           containsPair('objectGroup', startsWith('mcp_inspector_')));
+    });
+
+    test('get_widget_tree disposes object group even when root node is null',
+        () async {
+      final mock = WidgetInspectionSupportMock(controller.local);
+      mock.vmService = fakeVmService;
+      mock.isolateId = 'isolate_1';
+
+      fakeVmService.serviceExtensionResponses[
+          'ext.flutter.inspector.getRootWidgetSummaryTree'] = {'result': null};
+
+      fakeVmService
+          .serviceExtensionResponses['ext.flutter.inspector.disposeGroup'] = {
+        'result': 'success'
+      };
+
+      final req = CallToolRequest(
+        name: 'widget',
+        arguments: {'action': 'get_tree'},
+      );
+
+      final result = await mock.callTool(req);
+      expect(result.isError, isTrue);
+      expect(fakeVmService.lastExtensionCalled,
+          equals('ext.flutter.inspector.disposeGroup'));
+    });
+
+    test('inspect_widget disposes object group after layout inspection',
+        () async {
+      final mock = WidgetInspectionSupportMock(controller.local);
+      mock.vmService = fakeVmService;
+      mock.isolateId = 'isolate_1';
+
+      fakeVmService.serviceExtensionResponses[
+          'ext.flutter.inspector.getDetailsSubtree'] = {
+        'result': jsonEncode({
+          'description': 'ContainerWidget',
+          'properties': [
+            {'name': 'size', 'description': 'Size(100, 100)'}
+          ]
+        })
+      };
+
+      fakeVmService
+          .serviceExtensionResponses['ext.flutter.inspector.disposeGroup'] = {
+        'result': 'success'
+      };
+
+      final req = CallToolRequest(
+        name: 'widget',
+        arguments: {'action': 'inspect', 'widgetId': 'w_123'},
+      );
+
+      final result = await mock.callTool(req);
+      expect(result.isError, isNot(isTrue));
+      expect(fakeVmService.lastExtensionCalled,
+          equals('ext.flutter.inspector.disposeGroup'));
     });
   });
 

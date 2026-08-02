@@ -91,95 +91,109 @@ base mixin WidgetInspectionSupport
   /// Clears active inspection cache.
   Future<void> cleanupWidgetInspection() async {}
 
+  /// Helper that executes [body] with a uniquely named inspector object group
+  /// and guarantees that the object group is disposed via `ext.flutter.inspector.disposeGroup`
+  /// when [body] completes or throws.
+  Future<T> _withInspectorGroup<T>(
+    Future<T> Function(String objectGroup) body,
+  ) async {
+    final objectGroup =
+        'mcp_inspector_${DateTime.now().millisecondsSinceEpoch}';
+    try {
+      return await body(objectGroup);
+    } finally {
+      try {
+        await vmService?.callServiceExtension(
+          'ext.flutter.inspector.disposeGroup',
+          isolateId: isolateId,
+          args: {'objectGroup': objectGroup},
+        );
+      } catch (e) {
+        stderr.writeln(
+            '[mcp:widget] Error disposing inspector object group $objectGroup: $e');
+      }
+    }
+  }
+
   /// Handles the inspect_widget tool request.
   Future<CallToolResult> _handleInspectLayoutConstraints(
       CallToolRequest req) async {
     final widgetId = req.requireArg<String>('widgetId');
     stderr.writeln('[mcp:inspect_layout] Inspecting widget: $widgetId');
 
-    final response = await vmService!.callServiceExtension(
-      'ext.flutter.inspector.getDetailsSubtree',
-      isolateId: isolateId,
-      args: {
-        'id': widgetId,
-        'arg': widgetId,
-        'objectGroup': 'widget_inspector_group',
-        'subtreeDepth': '2',
-      },
-    );
+    return _withInspectorGroup((objectGroup) async {
+      final response = await vmService!.callServiceExtension(
+        'ext.flutter.inspector.getDetailsSubtree',
+        isolateId: isolateId,
+        args: {
+          'id': widgetId,
+          'arg': widgetId,
+          'objectGroup': objectGroup,
+          'subtreeDepth': '2',
+        },
+      );
 
-    final rawResult = response.json?['result'];
-    Map<String, dynamic> result;
-    if (rawResult is String) {
-      result = jsonDecode(rawResult) as Map<String, dynamic>;
-    } else if (rawResult is Map) {
-      result = Map<String, dynamic>.from(rawResult);
-    } else {
-      result = {};
-    }
+      final rawResult = response.json?['result'];
+      Map<String, dynamic> result;
+      if (rawResult is String) {
+        result = jsonDecode(rawResult) as Map<String, dynamic>;
+      } else if (rawResult is Map) {
+        result = Map<String, dynamic>.from(rawResult);
+      } else {
+        result = {};
+      }
 
-    String? constraints;
-    String? size;
-    final properties = <String, String>{};
+      String? constraints;
+      String? size;
+      final properties = <String, String>{};
 
-    void extract(Map<String, dynamic> node) {
-      final props = node['properties'] as List<dynamic>?;
-      if (props != null) {
-        for (final prop in props) {
-          if (prop is Map<String, dynamic>) {
-            final name = prop['name']?.toString();
-            final desc = prop['description']?.toString();
-            if (name != null && desc != null) {
-              properties[name] = desc;
-              if (name == 'constraints') {
-                constraints = desc;
-              } else if (name == 'size') {
-                size = desc;
+      void extract(Map<String, dynamic> node) {
+        final props = node['properties'] as List<dynamic>?;
+        if (props != null) {
+          for (final prop in props) {
+            if (prop is Map<String, dynamic>) {
+              final name = prop['name']?.toString();
+              final description = prop['description']?.toString();
+              if (name != null && description != null) {
+                properties[name] = description;
+                if (name == 'constraints') constraints = description;
+                if (name == 'size') size = description;
               }
             }
           }
         }
       }
-      final children = node['children'] as List<dynamic>?;
-      if (children != null) {
-        for (final child in children) {
-          if (child is Map<String, dynamic>) {
-            extract(child);
-          }
-        }
+
+      extract(result);
+
+      final widgetDescription =
+          result['description']?.toString() ?? 'Widget $widgetId';
+
+      final sb = StringBuffer();
+      sb.writeln('### Layout Constraints for $widgetDescription\n');
+      if (size != null) sb.writeln('- **Rendered Size**: `$size`');
+      if (constraints != null) sb.writeln('- **Constraints**: `$constraints`');
+      sb.writeln('\n#### All Inspector Properties:');
+      if (properties.isEmpty) {
+        sb.writeln('_No properties returned by DevTools inspector._');
+      } else {
+        properties.forEach((k, v) {
+          sb.writeln('- **$k**: `$v`');
+        });
       }
-    }
 
-    extract(result);
-
-    final md = StringBuffer('Layout Constraints for Widget: $widgetId\n\n');
-    md.writeln('- Widget Type: ${result['description'] ?? 'Unknown'}');
-    md.writeln('- Constraints: ${constraints ?? 'Not found'}');
-    md.writeln('- Size: ${size ?? 'Not found'}');
-    md.writeln('\nDiagnostic Properties');
-    if (properties.isEmpty) {
-      md.writeln('No properties found.');
-    } else {
-      md.writeln('| Property | Value |');
-      md.writeln('| :--- | :--- |');
-      properties.forEach((k, v) {
-        md.writeln('| $k | `$v` |');
-      });
-    }
-
-    final includeRawNode = req.arg<bool>('includeRawNode') ?? false;
-    return serializeDualFormat(
-      title: 'Layout Diagnostics Report',
-      markdownBody: md.toString(),
-      structuredData: {
-        'widget_id': widgetId,
-        'description': result['description'] ?? 'Unknown',
-        'constraints': constraints,
-        'size': size,
-        'all_properties': properties,
-        if (includeRawNode) 'raw_node': result,
-      },
-    );
+      return serializeDualFormat(
+        title: 'Widget Layout Constraints',
+        markdownBody: sb.toString(),
+        structuredData: {
+          'widget_id': widgetId,
+          'description': widgetDescription,
+          'size': size,
+          'constraints': constraints,
+          'properties': properties,
+        },
+      );
+    });
   }
 
   /// Handles the toggle_widget_selection tool request.
@@ -207,84 +221,71 @@ base mixin WidgetInspectionSupport
     final maxDepth = (req.arg<num>('maxDepth'))?.toInt() ?? 8;
     final projectOnly = req.arg<bool>('projectOnly') ?? true;
 
-    final objectGroup =
-        'mcp_inspector_${DateTime.now().millisecondsSinceEpoch}';
-
-    dynamic rootNode;
-    try {
-      final response = await vmService!.callServiceExtension(
-        'ext.flutter.inspector.getRootWidgetSummaryTree',
-        isolateId: isolateId,
-        args: {'objectGroup': objectGroup},
-      );
-      rootNode = _parseExtensionResult(response);
-    } catch (e) {
-      final response = await vmService!.callServiceExtension(
-        'ext.flutter.inspector.getRootWidgetTree',
-        isolateId: isolateId,
-        args: {
-          'groupName': objectGroup,
-          'isSummaryTree': 'true',
-          'withPreviews': 'false',
-        },
-      );
-      rootNode = _parseExtensionResult(response);
-    }
-
-    if (rootNode == null) {
-      return CallToolResult(
-        content: [TextContent(text: 'Failed to retrieve root widget node.')],
-        isError: true,
-      );
-    }
-
-    final Map<String, dynamic> rootMap;
-    if (rootNode is Map) {
-      rootMap = Map<String, dynamic>.from(rootNode);
-    } else {
-      return CallToolResult(
-        content: [
-          TextContent(text: 'Unexpected response format for root widget node.')
-        ],
-        isError: true,
-      );
-    }
-
-    try {
-      await _expandWidgetChildren(rootMap, objectGroup, 0, maxDepth);
-    } finally {
+    return _withInspectorGroup((objectGroup) async {
+      dynamic rootNode;
       try {
-        await vmService?.callServiceExtension(
-          'ext.flutter.inspector.disposeGroup',
+        final response = await vmService!.callServiceExtension(
+          'ext.flutter.inspector.getRootWidgetSummaryTree',
           isolateId: isolateId,
           args: {'objectGroup': objectGroup},
         );
+        rootNode = _parseExtensionResult(response);
       } catch (e) {
-        stderr.writeln(
-            '[mcp:widget] Error disposing inspector object group $objectGroup: $e');
+        final response = await vmService!.callServiceExtension(
+          'ext.flutter.inspector.getRootWidgetTree',
+          isolateId: isolateId,
+          args: {
+            'groupName': objectGroup,
+            'isSummaryTree': 'true',
+            'withPreviews': 'false',
+          },
+        );
+        rootNode = _parseExtensionResult(response);
       }
-    }
 
-    final flattened = _flattenWidgetTree(rootMap, 0, maxDepth, projectOnly);
-    final text = _formatTreeAsText(flattened);
+      if (rootNode == null) {
+        return CallToolResult(
+          content: [TextContent(text: 'Failed to retrieve root widget node.')],
+          isError: true,
+        );
+      }
 
-    final totalWidgets = flattened.length;
-    final projectWidgets = flattened.where((w) => w.isProjectWidget).length;
-    final maxDepthReached = flattened.isEmpty
-        ? 0
-        : flattened.map((w) => w.depth).reduce((a, b) => a > b ? a : b);
+      final Map<String, dynamic> rootMap;
+      if (rootNode is Map) {
+        rootMap = Map<String, dynamic>.from(rootNode);
+      } else {
+        return CallToolResult(
+          content: [
+            TextContent(
+                text: 'Unexpected response format for root widget node.')
+          ],
+          isError: true,
+        );
+      }
 
-    return serializeDualFormat(
-      title: 'Widget Tree Summary',
-      markdownBody:
-          'Widget Tree ($totalWidgets widgets, $projectWidgets from project, depth: $maxDepthReached)\n\n$text',
-      structuredData: {
-        'total_widgets': totalWidgets,
-        'project_widgets': projectWidgets,
-        'max_depth_reached': maxDepthReached,
-        'widgets': flattened.map((w) => w.toMap()).toList(),
-      },
-    );
+      await _expandWidgetChildren(rootMap, objectGroup, 0, maxDepth);
+
+      final flattened = _flattenWidgetTree(rootMap, 0, maxDepth, projectOnly);
+      final text = _formatTreeAsText(flattened);
+
+      final totalWidgets = flattened.length;
+      final projectWidgets = flattened.where((w) => w.isProjectWidget).length;
+      final maxDepthReached = flattened.isEmpty
+          ? 0
+          : flattened.map((w) => w.depth).reduce((a, b) => a > b ? a : b);
+
+      return serializeDualFormat(
+        title: 'Widget Tree Summary',
+        markdownBody:
+            'Widget Tree ($totalWidgets widgets, $projectWidgets from project, depth: $maxDepthReached)\n\n$text',
+        structuredData: {
+          'total_widgets': totalWidgets,
+          'project_widgets': projectWidgets,
+          'max_depth_reached': maxDepthReached,
+          'widgets': flattened.map((w) => w.toMap()).toList(),
+        },
+      );
+    });
   }
 
   dynamic _parseExtensionResult(Response response) {
