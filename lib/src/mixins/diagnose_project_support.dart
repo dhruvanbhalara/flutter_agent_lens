@@ -13,8 +13,8 @@ import 'package:path/path.dart' as p;
 /// Support mixin providing tools for analyzing application bundle sizes and validating deep links.
 base mixin DiagnoseProjectSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
-  /// The process runner helper, allowing test mocks.
-  ProcessRunner processRunner = const DefaultProcessRunner();
+  /// The process runner, injectable for tests; defaults to [Process.run].
+  ProcessRunner processRunner = Process.run;
 
   /// Registers the consolidated project diagnostics tool.
   void registerDiagnoseProjectTools() {
@@ -443,7 +443,7 @@ base mixin DiagnoseProjectSupport
     };
 
     stderr.writeln('[mcp:deeplinks] Executing: $executable ${args.join(' ')}');
-    final result = await processRunner.run(executable, args);
+    final result = await processRunner(executable, args);
 
     if (result.exitCode != 0) {
       return CallToolResult(

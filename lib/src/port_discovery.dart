@@ -48,16 +48,21 @@ Future<List<DiscoveredApp>> discoverActiveApps() {
       Platform.script.path.contains('test.dart')) {
     return Future.value(<DiscoveredApp>[]);
   }
-  return const PortDiscovery().discoverActiveApps();
+  return PortDiscovery().discoverActiveApps();
 }
 
 /// Discovers running Flutter/Dart applications using process queries and HTTP probing.
 class PortDiscovery {
-  /// The command runner helper, allowing test mocks.
+  /// The command runner, defaulting to [Process.run] for production use.
   final ProcessRunner processRunner;
 
+  /// Whether caching is enabled (disabled when a custom runner is injected for tests).
+  final bool _enableCache;
+
   /// Creates a new [PortDiscovery] instance.
-  const PortDiscovery({this.processRunner = const DefaultProcessRunner()});
+  PortDiscovery({ProcessRunner? processRunner})
+      : processRunner = processRunner ?? Process.run,
+        _enableCache = processRunner == null;
 
   static final RegExp _vmUriPattern = RegExp(r'--vm-service-uri=(http://\S+)');
   static final RegExp _pidPattern = RegExp(r'^\S+\s+(\d+)');
@@ -73,7 +78,7 @@ class PortDiscovery {
 
   /// Finds running Flutter/Dart applications by scanning OS processes.
   Future<List<DiscoveredApp>> discoverActiveApps() async {
-    if (processRunner is DefaultProcessRunner) {
+    if (_enableCache) {
       final now = DateTime.now();
       if (_lastDiscoveryTime != null &&
           _cachedApps != null &&
@@ -88,7 +93,7 @@ class PortDiscovery {
 
     try {
       if (Platform.isWindows) {
-        final result = await processRunner.run('powershell', [
+        final result = await processRunner('powershell', [
           '-Command',
           r'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*development-service*" } | Select-Object CommandLine, ProcessId, WorkingDirectory | ConvertTo-Json'
         ]).timeout(const Duration(seconds: 5));
@@ -130,8 +135,8 @@ class PortDiscovery {
               rawVmUri, projectName, 'process scan (DDS pid $pid)', apps);
         }
       } else {
-        final psResult = await processRunner
-            .run('ps', ['aux']).timeout(const Duration(seconds: 5));
+        final psResult = await processRunner('ps', ['aux'])
+            .timeout(const Duration(seconds: 5));
         if (psResult.exitCode != 0) {
           stderr.writeln('[discovery] ps command failed: ${psResult.exitCode}');
           return apps;
@@ -163,9 +168,9 @@ class PortDiscovery {
           // Get project name from the process's working directory.
           String projectName = 'Flutter App (pid $pid)';
           try {
-            final cwdResult = await processRunner
-                .run('lsof', ['-p', pid, '-Fn', '-d', 'cwd']).timeout(
-                    const Duration(seconds: 3));
+            final cwdResult =
+                await processRunner('lsof', ['-p', pid, '-Fn', '-d', 'cwd'])
+                    .timeout(const Duration(seconds: 3));
             if (cwdResult.exitCode == 0) {
               final cwdLines = (cwdResult.stdout as String).split('\n');
               for (final cwdLine in cwdLines) {
@@ -192,7 +197,7 @@ class PortDiscovery {
       stderr.writeln('[discovery] Process scan failed: $e');
     }
 
-    if (processRunner is DefaultProcessRunner) {
+    if (_enableCache) {
       _cachedApps = List.from(apps);
       _lastDiscoveryTime = DateTime.now();
     }
@@ -226,27 +231,17 @@ class PortDiscovery {
             configPath: configPath,
           ));
         } else {
-          final locPath = locationUri.path;
-          final pathSegments =
-              locPath.split('/').where((s) => s.isNotEmpty).toList();
-          if (pathSegments.isNotEmpty) {
-            final ddsToken = pathSegments.first;
-            final ddsPort = locationUri.port;
-            final ddsHost = locationUri.host;
-            final wsUri = 'ws://$ddsHost:$ddsPort/$ddsToken/ws';
-            apps.add(DiscoveredApp(
-              serviceUri: wsUri,
-              projectName: projectName,
-              configPath: configPath,
-            ));
-          }
+          final wsUri =
+              locationUri.replace(scheme: 'ws').resolve('ws').toString();
+          apps.add(DiscoveredApp(
+            serviceUri: wsUri,
+            projectName: projectName,
+            configPath: configPath,
+          ));
         }
       } else if (statusCode == 200) {
-        final uri = Uri.parse(rawVmUri);
-        final pathSegments =
-            uri.pathSegments.where((s) => s.isNotEmpty).toList();
-        final authToken = pathSegments.isNotEmpty ? pathSegments.first : '';
-        final wsUri = 'ws://${uri.host}:${uri.port}/$authToken/ws';
+        final wsUri =
+            Uri.parse(rawVmUri).replace(scheme: 'ws').resolve('ws').toString();
         apps.add(DiscoveredApp(
           serviceUri: wsUri,
           projectName: projectName,

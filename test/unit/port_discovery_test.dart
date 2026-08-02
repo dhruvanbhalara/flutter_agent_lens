@@ -6,13 +6,10 @@ import 'package:flutter_agent_lens/src/port_discovery.dart';
 import 'package:flutter_agent_lens/src/utils/process_runner.dart';
 import 'package:test/test.dart';
 
-class MockProcessRunner implements ProcessRunner {
-  final ProcessResult Function(String executable, List<String> arguments) onRun;
-
-  const MockProcessRunner(this.onRun);
-
-  @override
-  Future<ProcessResult> run(
+/// Returns a [ProcessRunner] closure that delegates to [onRun].
+ProcessRunner makeRunner(
+    ProcessResult Function(String executable, List<String> arguments) onRun) {
+  return (
     String executable,
     List<String> arguments, {
     String? workingDirectory,
@@ -23,7 +20,7 @@ class MockProcessRunner implements ProcessRunner {
     Encoding stderrEncoding = systemEncoding,
   }) async {
     return onRun(executable, arguments);
-  }
+  };
 }
 
 class FakeHttpClient implements HttpClient {
@@ -112,19 +109,14 @@ void main() {
         'WorkingDirectory': r'C:\Users\User\projects\my_flutter_app',
       });
 
-      final mockRunner = MockProcessRunner((exe, args) {
+      final runner = makeRunner((exe, args) {
         if (exe == 'powershell') {
-          return ProcessResult(
-            123,
-            0,
-            mockJson,
-            '',
-          );
+          return ProcessResult(123, 0, mockJson, '');
         }
         throw UnimplementedError('Unexpected executable: $exe');
       });
 
-      final discovery = PortDiscovery(processRunner: mockRunner);
+      final discovery = PortDiscovery(processRunner: runner);
 
       final apps = await discovery.discoverActiveApps();
       expect(apps, isNotEmpty);
@@ -135,7 +127,7 @@ void main() {
 
     test('ps/lsof scan on Unix successfully parses running DDS processes',
         () async {
-      final mockRunner = MockProcessRunner((exe, args) {
+      final runner = makeRunner((exe, args) {
         if (exe == 'ps') {
           return ProcessResult(
             123,
@@ -155,7 +147,7 @@ void main() {
         throw UnimplementedError('Unexpected executable: $exe');
       });
 
-      final discovery = PortDiscovery(processRunner: mockRunner);
+      final discovery = PortDiscovery(processRunner: runner);
 
       final apps = await discovery.discoverActiveApps();
       expect(apps, isNotEmpty);

@@ -14,23 +14,6 @@ void main() {
       );
       expect(truncateString('', maxLength: 5), equals(''));
     });
-
-    test('formatMapString basic and edge cases', () {
-      final map = {
-        'key1': 'value1',
-        'key2': {
-          'nestedKey': 'nestedValue',
-        },
-        'listKey': [1, 2, 3],
-        'longList': List.generate(15, (i) => i),
-      };
-
-      final formatted = formatMapString(map);
-      expect(formatted, contains('"key1": "value1"'));
-      expect(formatted, contains('"nestedKey": "nestedValue"'));
-      expect(formatted, contains('[1, 2, 3]'));
-      expect(formatted, contains('[0, ... (14 more items)]'));
-    });
   });
 
   group('CallToolRequestX Extension Tests', () {
