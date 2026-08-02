@@ -202,10 +202,10 @@ base mixin WidgetInspectionSupport
     final enabled = req.requireArg<bool>('enabled');
     stderr.writeln('[mcp:toggle_widget_selection] Setting enabled = $enabled');
 
-    await vmService!.callServiceExtension(
-      'ext.flutter.inspector.show',
+    await vmService!.safeToggleFlutterExtension(
+      'inspector.show',
+      enabled: enabled,
       isolateId: isolateId,
-      args: {'enabled': enabled ? 'true' : 'false'},
     );
     return CallToolResult(
       content: [

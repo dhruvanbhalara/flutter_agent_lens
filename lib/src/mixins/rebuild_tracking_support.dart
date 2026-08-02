@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:path/path.dart' as p;
@@ -161,16 +162,11 @@ base mixin RebuildTrackingSupport
 
     await extSub.cancel();
     if (sampleResult.completed) {
-      try {
-        await vmService?.callServiceExtension(
-          'ext.flutter.inspector.trackRebuildDirtyWidgets',
-          isolateId: isolateId,
-          args: {'enabled': 'false'},
-        );
-      } catch (e) {
-        stderr.writeln(
-            '[mcp:widget_rebuild_counts] Error disabling trackRebuildDirtyWidgets: $e');
-      }
+      await vmService?.safeToggleFlutterExtension(
+        'inspector.trackRebuildDirtyWidgets',
+        enabled: false,
+        isolateId: isolateId,
+      );
     }
 
     stderr.writeln(
@@ -459,10 +455,10 @@ base mixin RebuildTrackingSupport
     Map<String, String> idToName,
     Map<String, String> idToFile,
   ) async {
-    await vmService!.callServiceExtension(
-      'ext.flutter.inspector.trackRebuildDirtyWidgets',
+    await vmService!.safeToggleFlutterExtension(
+      'inspector.trackRebuildDirtyWidgets',
+      enabled: true,
       isolateId: isolateId,
-      args: {'enabled': 'true'},
     );
     try {
       final locationResponse = await vmService!.callServiceExtension(
