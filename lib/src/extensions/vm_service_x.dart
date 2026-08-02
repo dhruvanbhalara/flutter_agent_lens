@@ -21,6 +21,30 @@ extension VmServiceX on VmService {
     );
   }
 
+  /// Toggles a Flutter service extension safely without throwing exceptions.
+  ///
+  /// Returns `true` if the RPC succeeded, or `false` if an RPC error occurred
+  /// (e.g. extension not registered or VM service disconnected).
+  Future<bool> safeToggleFlutterExtension(
+    String extensionSuffix, {
+    required bool enabled,
+    String? isolateId,
+  }) async {
+    try {
+      await toggleFlutterExtension(
+        extensionSuffix,
+        enabled: enabled,
+        isolateId: isolateId,
+      );
+      return true;
+    } catch (e) {
+      stderr.writeln(
+        '[VmServiceX.safeToggleFlutterExtension] Error toggling ext.flutter.$extensionSuffix: $e',
+      );
+      return false;
+    }
+  }
+
   /// Safely evaluates [expression] in [libraryId] for [isolateId].
   ///
   /// Returns `null` if the evaluation fails due to a sentinel exception or RPC error
@@ -28,24 +52,27 @@ extension VmServiceX on VmService {
   Future<Response?> evalSafe(
     String isolateId,
     String libraryId,
-    String expression,
-  ) async {
+    String expression, {
+    bool silent = false,
+  }) async {
     try {
       return await evaluate(isolateId, libraryId, expression);
     } catch (e, st) {
-      if (e is SentinelException ||
-          (e is RPCError &&
-              (e.code == 106 ||
-                  e.message.contains('collected') ||
-                  e.message.toLowerCase().contains('sentinel')))) {
-        stderr.writeln(
-          '[VmServiceX.evalSafe] Caught sentinel/collected error during evaluate("$expression"): $e',
-        );
-        return null;
+      if (!silent) {
+        if (e is SentinelException ||
+            (e is RPCError &&
+                (e.code == 106 ||
+                    e.message.contains('collected') ||
+                    e.message.toLowerCase().contains('sentinel')))) {
+          stderr.writeln(
+            '[VmServiceX.evalSafe] Caught sentinel/collected error during evaluate("$expression"): $e',
+          );
+        } else {
+          stderr.writeln(
+            '[VmServiceX.evalSafe] Evaluate failed ("$expression"): $e\n$st',
+          );
+        }
       }
-      stderr.writeln(
-        '[VmServiceX.evalSafe] Evaluate failed ("$expression"): $e\n$st',
-      );
       return null;
     }
   }

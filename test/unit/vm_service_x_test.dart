@@ -7,6 +7,7 @@ class _FakeVmServiceForTest extends Fake implements VmService {
   String? lastExtensionCalled;
   Map<String, dynamic>? lastArgs;
   bool shouldThrowSentinel = false;
+  bool shouldThrowRPCError = false;
 
   @override
   Future<Response> callServiceExtension(
@@ -14,6 +15,9 @@ class _FakeVmServiceForTest extends Fake implements VmService {
     String? isolateId,
     Map<String, dynamic>? args,
   }) async {
+    if (shouldThrowRPCError) {
+      throw RPCError('callServiceExtension', -32601, 'Method not found');
+    }
     lastExtensionCalled = method;
     lastArgs = args;
     return Response.parse({'type': 'Success'})!;
@@ -57,6 +61,21 @@ void main() {
 
       await fakeVmService.toggleFlutterExtension('debugPaint', enabled: false);
       expect(fakeVmService.lastArgs, equals({'enabled': 'false'}));
+    });
+
+    test('safeToggleFlutterExtension handles success and RPC errors', () async {
+      final success = await fakeVmService.safeToggleFlutterExtension(
+        'debugPaint',
+        enabled: true,
+      );
+      expect(success, isTrue);
+
+      fakeVmService.shouldThrowRPCError = true;
+      final failure = await fakeVmService.safeToggleFlutterExtension(
+        'debugPaint',
+        enabled: false,
+      );
+      expect(failure, isFalse);
     });
 
     test('evalSafe returns result on success and null on error', () async {
