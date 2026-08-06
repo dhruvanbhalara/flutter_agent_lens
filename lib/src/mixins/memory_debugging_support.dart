@@ -442,8 +442,9 @@ base mixin MemoryDebuggingSupport
       final bytesDelta = currentBytes - baselineBytes;
 
       if (instanceDelta != 0 || bytesDelta != 0) {
-        if (req.arg<bool>('filter_zero_deltas') == true &&
-            instanceDelta == 0 &&
+        // Filter out VM-internal noise if delta is tiny
+        if (_isVmInternal(className) &&
+            instanceDelta.abs() <= 1 &&
             bytesDelta.abs() < 512) {
           continue;
         }
