@@ -1,9 +1,9 @@
 ## 1.7.1
 
 ### Fixed
-- Fixed target Flutter application memory growth during widget tree inspection by automatically releasing DevTools inspector object references.
-- Fixed background stream listener cleanup in `FlutterAgentLensServer.cleanupStreams()` by invoking `super.cleanupStreams()`, ensuring `extensionRegistry.dispose()` runs on disconnect.
-- Fixed tool execution hangs when a target application crashes or disconnects mid-sampling (`console_logs`, `network`, `rebuild_tracking`, `memory`, `profiling`). Interrupted operations now return partial data with a warning alert.
+- Resolved gradual target application memory growth during repeated widget tree inspections.
+- Ensured background VM service stream listeners clean up properly on client disconnect.
+- Fixed tool execution hangs when a target application crashes or disconnects mid-sampling (`console_logs`, `network`, `rebuild_tracking`, `memory`, `profiling`). Interrupted operations now safely return partial collected data with a warning alert.
 
 ## 1.7.0
 
