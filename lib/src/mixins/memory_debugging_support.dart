@@ -6,6 +6,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
+import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for analyzing heap usage, tracking class instances,
@@ -521,7 +522,9 @@ base mixin MemoryDebuggingSupport
     final forceGc = req.arg<bool>('forceGC') ?? true;
 
     final snapshot = await _takeSnapshot(name, forceGc);
-    if (memorySnapshots.length >= 10) {
+    final maxSnapshots =
+        req.intArg('maxSnapshots') ?? req.intArg('limit') ?? 10;
+    if (memorySnapshots.length >= maxSnapshots) {
       final oldestKey = memorySnapshots.keys.first;
       memorySnapshots.remove(oldestKey);
     }

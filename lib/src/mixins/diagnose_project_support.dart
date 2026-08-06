@@ -8,6 +8,7 @@ import 'package:flutter_agent_lens/src/enums/target_platform.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/utils/process_runner.dart';
+import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:path/path.dart' as p;
 
 /// Support mixin providing tools for analyzing application bundle sizes and validating deep links.
