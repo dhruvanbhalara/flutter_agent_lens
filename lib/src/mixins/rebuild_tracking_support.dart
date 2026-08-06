@@ -6,6 +6,7 @@ import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 
@@ -151,10 +152,14 @@ base mixin RebuildTrackingSupport
       }
     });
 
+    late final SamplingResult samplingResult;
     try {
       stderr.writeln(
           '[mcp:widget_rebuild_counts] Collecting rebuild events for ${duration}s...');
-      await Future<void>.delayed(Duration(seconds: duration));
+      samplingResult = await safeSamplingWindow(
+        vmService: vmService,
+        duration: Duration(seconds: duration),
+      );
     } finally {
       await extSub.cancel();
       try {
@@ -198,7 +203,14 @@ base mixin RebuildTrackingSupport
       projectName: projectName,
     );
 
-    final mdBuffer = StringBuffer('Top Rebuilding Widgets\n\n');
+    final mdBuffer = StringBuffer();
+    writeSamplingWarningIfInterrupted(
+      samplingResult,
+      mdBuffer,
+      requestedSeconds: duration,
+      dataName: 'rebuild events',
+    );
+    mdBuffer.writeln('Top Rebuilding Widgets\n');
     if (excludeBuiltIn) {
       mdBuffer.writeln(
           '_Note: Built-in Flutter/SDK widgets excluded. Pass `exclude_flutter_widgets: false` to include them._\n');

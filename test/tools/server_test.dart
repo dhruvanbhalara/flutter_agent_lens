@@ -9,6 +9,7 @@ import 'package:test/test.dart';
 import 'package:vm_service/vm_service.dart';
 
 class FakeVmService extends VmService {
+  final Completer<void> _onDoneCompleter = Completer<void>();
   final Map<String, Map<String, dynamic>> serviceExtensionResponses = {};
   bool disposeCalled = false;
   int allocationProfileCalls = 0;
@@ -24,6 +25,9 @@ class FakeVmService extends VmService {
           const Stream<dynamic>.empty(),
           (message) {},
         );
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
 
   @override
   Stream<Event> get onExtensionEvent => const Stream<Event>.empty();

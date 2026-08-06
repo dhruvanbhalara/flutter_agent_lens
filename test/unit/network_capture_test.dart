@@ -22,10 +22,14 @@ base class NetworkCaptureMock extends MCPServer
 }
 
 class FakeVmServiceForNetwork extends vm_service.VmService {
+  final Completer<void> _onDoneCompleter = Completer<void>();
   final Map<String, dynamic> responseMap;
 
   FakeVmServiceForNetwork(this.responseMap)
       : super(const Stream<dynamic>.empty(), (msg) {});
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
 
   @override
   Future<vm_service.Isolate> getIsolate(String isolateId) async {

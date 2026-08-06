@@ -7,6 +7,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/services/log_stream_broadcaster.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for fetching and statefully buffering console
@@ -234,8 +235,12 @@ base mixin ConsoleLoggingSupport
     final watchBuffer = <String>[];
     final unsubscribe = logBroadcaster.addListener(watchBuffer.add);
 
+    late final SamplingResult samplingResult;
     try {
-      await Future<void>.delayed(Duration(seconds: duration));
+      samplingResult = await safeSamplingWindow(
+        vmService: vmService,
+        duration: Duration(seconds: duration),
+      );
     } finally {
       unsubscribe();
     }
@@ -250,8 +255,14 @@ base mixin ConsoleLoggingSupport
       matchingLogs = watchBuffer;
     }
 
-    final mdBuffer =
-        StringBuffer('Live Console Logs ($duration s duration window)\n\n');
+    final mdBuffer = StringBuffer();
+    writeSamplingWarningIfInterrupted(
+      samplingResult,
+      mdBuffer,
+      requestedSeconds: duration,
+      dataName: 'console logs',
+    );
+    mdBuffer.writeln('Live Console Logs ($duration s duration window)\n');
     if (matchingLogs.isEmpty) {
       mdBuffer.writeln('No matching logs received during watch window.');
     } else {

@@ -6,6 +6,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 
 /// Support mixin providing tools for capturing and analyzing HTTP traffic details.
@@ -837,7 +838,10 @@ base mixin NetworkCaptureSupport
           '[mcp:watch_network] Error enabling HTTP timeline logging: $e');
     }
 
-    await Future<void>.delayed(Duration(seconds: duration));
+    final samplingResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
 
     final currentRequests = await _getHttpRequests();
     final newRequests = <Map<String, dynamic>>[];
@@ -858,7 +862,7 @@ base mixin NetworkCaptureSupport
 
     final completedRequests = newRequests.where((r) {
       final responseData = r['response'] as Map<String, dynamic>?;
-      return responseData != null && r['endTime'] != null;
+      return responseData != null || r['endTime'] != null;
     }).toList();
 
     final failedRequests = newRequests.where((r) {
@@ -873,9 +877,9 @@ base mixin NetworkCaptureSupport
       return r['endTime'] == null && r['error'] == null && responseData == null;
     }).toList();
 
-    final totalSize = newRequests.fold<int>(0, (sum, r) {
+    final totalSize = completedRequests.fold<int>(0, (sum, r) {
       final responseData = r['response'] as Map<String, dynamic>?;
-      return sum + ((responseData?['contentLength'] as int?) ?? 0);
+      return sum + (responseData?['contentLength'] as int? ?? 0);
     });
 
     final durations = completedRequests.map((r) {
@@ -904,7 +908,16 @@ base mixin NetworkCaptureSupport
     }).toList();
 
     final formattedRequests = <Map<String, dynamic>>[];
+    final warningBuffer = StringBuffer();
+    writeSamplingWarningIfInterrupted(
+      samplingResult,
+      warningBuffer,
+      requestedSeconds: duration,
+      dataName: 'network requests',
+    );
+
     final output = <String>[
+      if (warningBuffer.isNotEmpty) warningBuffer.toString().trimRight(),
       'LIVE NETWORK WATCH REPORT ($duration s window)',
       '',
       'SUMMARY',

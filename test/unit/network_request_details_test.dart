@@ -21,6 +21,7 @@ base class NetworkDetailsMock extends MCPServer
 }
 
 class FakeVmServiceForRequestDetails extends vm_service.VmService {
+  final Completer<void> _onDoneCompleter = Completer<void>();
   final Map<String, dynamic> requestDetailsResponse;
   final bool supportExtension;
 
@@ -28,6 +29,9 @@ class FakeVmServiceForRequestDetails extends vm_service.VmService {
     this.requestDetailsResponse, {
     this.supportExtension = true,
   }) : super(const Stream<dynamic>.empty(), (msg) {});
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
 
   @override
   Future<vm_service.Isolate> getIsolate(String isolateId) async {

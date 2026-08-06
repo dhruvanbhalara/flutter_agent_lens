@@ -22,9 +22,13 @@ base class PerformanceProfilingMock extends MCPServer
 }
 
 class FakeVmServiceForProfiling extends vm_service.VmService {
+  final Completer<void> _onDoneCompleter = Completer<void>();
   final Map<String, dynamic> responseMap;
   FakeVmServiceForProfiling(this.responseMap)
       : super(const Stream<dynamic>.empty(), (msg) {});
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
 
   @override
   Future<vm_service.Isolate> getIsolate(String isolateId) async {
