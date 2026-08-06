@@ -6,6 +6,8 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
+import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for analyzing heap usage, tracking class instances,
@@ -409,10 +411,18 @@ base mixin MemoryDebuggingSupport
     }
 
     stderr.writeln('[mcp:diff_heap] Sampling memory for ${duration}s...');
-    await Future<void>.delayed(Duration(seconds: duration));
+    final samplingResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
 
-    final currentProfile =
-        await vmService!.getAllocationProfile(isolateId!, gc: false);
+    AllocationProfile currentProfile;
+    try {
+      currentProfile =
+          await vmService!.getAllocationProfile(isolateId!, gc: false);
+    } catch (_) {
+      currentProfile = AllocationProfile(members: []);
+    }
     final deltas = <Map<String, dynamic>>[];
     final currentMembers =
         (currentProfile.members ?? const []).cast<ClassHeapStats>();
@@ -453,8 +463,15 @@ base mixin MemoryDebuggingSupport
     final limit = (req.arg<num>('limit'))?.toInt() ?? 20;
     _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
-    final md = StringBuffer('Memory Allocations Delta\n\n')
-      ..write(_formatAllocationDiffTable(deltas));
+    final md = StringBuffer();
+    writeSamplingWarningIfInterrupted(
+      samplingResult,
+      md,
+      requestedSeconds: duration,
+      dataName: 'heap allocations',
+    );
+    md.writeln('Memory Allocations Delta\n');
+    md.write(_formatAllocationDiffTable(deltas));
 
     return serializeDualFormat(
       title: 'Memory Delta Analysis',
@@ -521,7 +538,10 @@ base mixin MemoryDebuggingSupport
     final forceGc = req.arg<bool>('forceGC') ?? true;
 
     final snapshot = await _takeSnapshot(name, forceGc);
-    if (memorySnapshots.length >= 10) {
+    final maxSnapshots = req.intArg('limit') ?? 10;
+    if (maxSnapshots > 0 &&
+        memorySnapshots.length >= maxSnapshots &&
+        memorySnapshots.isNotEmpty) {
       final oldestKey = memorySnapshots.keys.first;
       memorySnapshots.remove(oldestKey);
     }
@@ -1043,32 +1063,52 @@ base mixin MemoryDebuggingSupport
     final samples = <MemoryTimelineSample>[];
     final startEventCount = _gcEventBuffer.length;
     var lastCheckEventCount = startEventCount;
+    var wasInterrupted = false;
 
     for (var i = 0; i <= duration; i++) {
       if (i > 0) {
-        await Future<void>.delayed(const Duration(seconds: 1));
+        final tickResult = await safeSamplingWindow(
+          vmService: vmService,
+          duration: const Duration(seconds: 1),
+        );
+        if (!tickResult.completed) {
+          wasInterrupted = true;
+          break;
+        }
       }
-      final heap = await _getHeapStats();
-      final rss = await _getRssBytes();
-      final currentEventCount = _gcEventBuffer.length;
-      final gcInInterval = currentEventCount - lastCheckEventCount;
-      lastCheckEventCount = currentEventCount;
+      try {
+        final heap = await _getHeapStats();
+        final rss = await _getRssBytes();
+        final currentEventCount = _gcEventBuffer.length;
+        final gcInInterval = currentEventCount - lastCheckEventCount;
+        lastCheckEventCount = currentEventCount;
 
-      samples.add(MemoryTimelineSample(
-        timestamp: DateTime.now().millisecondsSinceEpoch,
-        heapUsed: heap.heapUsage,
-        heapCapacity: heap.heapCapacity,
-        externalUsage: heap.externalUsage,
-        rss: rss,
-        gcEventsInInterval: gcInInterval,
-      ));
+        samples.add(MemoryTimelineSample(
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          heapUsed: heap.heapUsage,
+          heapCapacity: heap.heapCapacity,
+          externalUsage: heap.externalUsage,
+          rss: rss,
+          gcEventsInInterval: gcInInterval,
+        ));
+      } catch (_) {
+        wasInterrupted = true;
+        break;
+      }
     }
 
     if (!wasActive) {
       await _stopGcStreamInternal();
     }
 
-    final text = StringBuffer()
+    final text = StringBuffer();
+    if (wasInterrupted) {
+      text.writeln('> [!WARNING]');
+      text.writeln(
+        '> Memory timeline sampling interrupted early due to target disconnection. Partial samples follow.\n',
+      );
+    }
+    text
       ..writeln(
           '| Timestamp | Heap Used | Heap Capacity | External | RSS | GC Events |')
       ..writeln('| :--- | :--- | :--- | :--- | :--- | :--- |');
@@ -1111,7 +1151,10 @@ base mixin MemoryDebuggingSupport
     }
 
     final startIndex = _gcEventBuffer.length;
-    await Future<void>.delayed(Duration(seconds: duration));
+    final samplingResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
 
     final newEvents = _gcEventBuffer.skip(startIndex).toList();
     if (!wasActive) {
@@ -1149,7 +1192,14 @@ base mixin MemoryDebuggingSupport
       typeCounts[type] = (typeCounts[type] ?? 0) + 1;
     }
 
-    final text = StringBuffer()
+    final text = StringBuffer();
+    writeSamplingWarningIfInterrupted(
+      samplingResult,
+      text,
+      requestedSeconds: duration,
+      dataName: 'GC pressure events',
+    );
+    text
       ..writeln('- **Pressure Level**: `${pressureLevel.toUpperCase()}`')
       ..writeln('- **GC Event Count**: $gcCount')
       ..writeln('- **GC Frequency**: ${gcPerSec.toStringAsFixed(2)} GC/sec')

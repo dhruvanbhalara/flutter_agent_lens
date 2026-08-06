@@ -51,15 +51,6 @@ void main() {
           equals('ws://127.0.0.1:8181/token/ws'));
     });
 
-    test('formatBytes formatting sizes', () {
-      expect(mock.formatBytes(0), equals('0 B'));
-      expect(mock.formatBytes(1023), equals('1023.00 B'));
-      expect(mock.formatBytes(1024), equals('1.00 KB'));
-      expect(mock.formatBytes(1024 * 1024), equals('1.00 MB'));
-      expect(mock.formatBytes(1024 * 1024 * 1024), equals('1.00 GB'));
-      expect(mock.formatBytes(-512), equals('-512.00 B'));
-    });
-
     test('serializeDualFormat formats as json when preferred', () {
       mock.responseFormat = 'json';
       final res = mock.serializeDualFormat(

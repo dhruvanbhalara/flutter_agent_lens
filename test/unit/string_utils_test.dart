@@ -31,6 +31,15 @@ void main() {
       expect(formatted, contains('[1, 2, 3]'));
       expect(formatted, contains('[0, ... (14 more items)]'));
     });
+
+    test('formatBytes formatting sizes', () {
+      expect(formatBytes(0), equals('0 B'));
+      expect(formatBytes(1023), equals('1023.00 B'));
+      expect(formatBytes(1024), equals('1.00 KB'));
+      expect(formatBytes(1024 * 1024), equals('1.00 MB'));
+      expect(formatBytes(1024 * 1024 * 1024), equals('1.00 GB'));
+      expect(formatBytes(-512), equals('-512.00 B'));
+    });
   });
 
   group('CallToolRequestX Extension Tests', () {

@@ -1,4 +1,9 @@
-## Unreleased
+## 1.7.1
+
+### Fixed
+- Resolved gradual target application memory growth during repeated widget tree inspections.
+- Ensured background VM service stream listeners clean up properly on client disconnect.
+- Fixed tool execution hangs when a target application crashes or disconnects mid-sampling (`console_logs`, `network`, `rebuild_tracking`, `memory`, `profiling`). Interrupted operations now safely return partial collected data with a warning alert.
 
 ## 1.7.0
 

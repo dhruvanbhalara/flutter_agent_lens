@@ -6,6 +6,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
@@ -104,9 +105,15 @@ base mixin PerformanceProfilingSupport
     await vmService!.clearVMTimeline();
 
     Timeline timeline;
+    late final SamplingResult samplingResult;
     try {
-      await Future<void>.delayed(Duration(seconds: duration));
+      samplingResult = await safeSamplingWindow(
+        vmService: vmService,
+        duration: Duration(seconds: duration),
+      );
       timeline = await vmService!.getVMTimeline();
+    } catch (_) {
+      timeline = Timeline(traceEvents: []);
     } finally {
       try {
         await vmService!.setVMTimelineFlags([]);
@@ -140,7 +147,15 @@ base mixin PerformanceProfilingSupport
         totalFrames > 0 ? (jankyFrames / totalFrames) * 100 : 0.0;
     stderr.writeln(
         '[mcp:diagnose_jank] Collected ${events.length} timeline events, $jankyFrames janky frames');
-    final mdBuffer = StringBuffer('Jank Diagnostic Report\n\n')
+    final mdBuffer = StringBuffer();
+    writeSamplingWarningIfInterrupted(
+      samplingResult,
+      mdBuffer,
+      requestedSeconds: duration,
+      dataName: 'timeline events',
+    );
+    mdBuffer
+      ..writeln('Jank Diagnostic Report\n')
       ..writeln('- Total Frame Events Sampled: $totalFrames')
       ..writeln(
           '- Janky Frame Events (> 16.6ms): $jankyFrames ($jankPercentage%)')
@@ -307,15 +322,30 @@ base mixin PerformanceProfilingSupport
         '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
 
     await vmService!.clearCpuSamples(isolateId!);
-    await Future<void>.delayed(Duration(seconds: duration));
+    final samplingResult = await safeSamplingWindow(
+      vmService: vmService,
+      duration: Duration(seconds: duration),
+    );
 
     final endTime = DateTime.now().microsecondsSinceEpoch;
-    final cpuSamples = await vmService!.getCpuSamples(isolateId!, 0, endTime);
+    CpuSamples cpuSamples;
+    try {
+      cpuSamples = await vmService!.getCpuSamples(isolateId!, 0, endTime);
+    } catch (_) {
+      cpuSamples =
+          CpuSamples(sampleCount: 0, samplePeriod: 0, maxStackDepth: 0);
+    }
     final functions = cpuSamples.functions ?? [];
 
     final hotspots = <Map<String, dynamic>>[];
-    final mdBuffer =
-        StringBuffer('CPU Execution Hotspots (Exclusive Ticks)\n\n');
+    final mdBuffer = StringBuffer();
+    writeSamplingWarningIfInterrupted(
+      samplingResult,
+      mdBuffer,
+      requestedSeconds: duration,
+      dataName: 'CPU samples',
+    );
+    mdBuffer.writeln('CPU Execution Hotspots (Exclusive Ticks)\n');
 
     for (final dynamic f in functions) {
       if (f is ProfileFunction) {

@@ -22,10 +22,16 @@ base class NetworkCaptureMock extends MCPServer
 }
 
 class FakeVmServiceForNetwork extends vm_service.VmService {
+  final Completer<void> _onDoneCompleter = Completer<void>();
   final Map<String, dynamic> responseMap;
+  final List<Map<String, dynamic>>? responseSequence;
+  int _callIndex = 0;
 
-  FakeVmServiceForNetwork(this.responseMap)
+  FakeVmServiceForNetwork(this.responseMap, {this.responseSequence})
       : super(const Stream<dynamic>.empty(), (msg) {});
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
 
   @override
   Future<vm_service.Isolate> getIsolate(String isolateId) async {
@@ -42,6 +48,14 @@ class FakeVmServiceForNetwork extends vm_service.VmService {
     String? isolateId,
     Map<String, dynamic>? args,
   }) async {
+    if (method == 'ext.dart.io.getHttpProfile') {
+      if (responseSequence != null && responseSequence!.isNotEmpty) {
+        final currentMap =
+            responseSequence![_callIndex % responseSequence!.length];
+        _callIndex++;
+        return vm_service.Response.parse(currentMap)!;
+      }
+    }
     return vm_service.Response.parse(responseMap)!;
   }
 }
@@ -117,6 +131,52 @@ void main() {
       final text = (result.content.first as TextContent).text;
       expect(text, contains('https://api.example.com/data'));
       expect(text, contains('500 B'));
+    });
+
+    test(
+        'watch action counts request as completed if endTime is present even when response is null',
+        () async {
+      mock.vmService = FakeVmServiceForNetwork(
+        const <String, dynamic>{},
+        responseSequence: <Map<String, dynamic>>[
+          <String, dynamic>{
+            'result': <String, dynamic>{
+              'requests': <dynamic>[],
+            }
+          },
+          <String, dynamic>{
+            'result': <String, dynamic>{
+              'requests': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'id': 'req_1',
+                  'method': 'POST',
+                  'uri': 'https://api.example.com/submit',
+                  'startTime': 1000000,
+                  'endTime': 1200000,
+                  'request': <String, dynamic>{'contentLength': 50},
+                  'response': null,
+                }
+              ]
+            }
+          }
+        ],
+      );
+      mock.isolateId = 'isolate_1';
+
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'network',
+          arguments: const {
+            'action': 'watch',
+            'duration_seconds': 1,
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('LIVE NETWORK WATCH REPORT'));
+      expect(text, contains('Completed: 1'));
     });
   });
 }

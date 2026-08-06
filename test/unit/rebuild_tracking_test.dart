@@ -24,10 +24,14 @@ base class RebuildTrackingMock extends MCPServer
 }
 
 class FakeVmServiceForRebuilds extends vm_service.VmService {
+  final Completer<void> _onDoneCompleter = Completer<void>();
   final StreamController<vm_service.Event> _eventController =
       StreamController<vm_service.Event>.broadcast();
 
   FakeVmServiceForRebuilds() : super(const Stream<dynamic>.empty(), (msg) {});
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
 
   @override
   Stream<vm_service.Event> get onExtensionEvent => _eventController.stream;
