@@ -1,3 +1,8 @@
+## 1.7.2
+
+### Added
+- Added `filter_zero_deltas` optional boolean property to `memory` tool's `inputSchema` for filtering zero-delta classes during heap allocation diffs.
+
 ## 1.7.1
 
 ### Fixed
