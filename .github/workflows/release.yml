@@ -1,18 +1,23 @@
-name: Release Notes
+name: Release
 
 on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
 
-permissions:
-  contents: write
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   release:
-    name: Generate GitHub Release Notes
+    name: Release & Publish Package
+    permissions:
+      contents: write
+      id-token: write # Required for OIDC authentication
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -53,3 +58,17 @@ jobs:
             gh release create "$TAG" --notes-file release_notes.txt --title "$TAG"
             echo "Created new release $TAG"
           fi
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        run: dart pub get --no-example
+
+      - name: Verify publishing eligibility
+        run: dart pub publish --dry-run
+
+      - name: Publish to pub.dev
+        run: dart pub publish --force
