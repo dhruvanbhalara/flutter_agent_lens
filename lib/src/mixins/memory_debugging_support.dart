@@ -77,6 +77,10 @@ base mixin MemoryDebuggingSupport
               description:
                   'Whether to include the raw response in structured data (for get_referrers).',
             ),
+            'filter_zero_deltas': BooleanSchema(
+              description:
+                  'Whether to filter out zero-delta classes (for diff_allocations).',
+            ),
           },
           required: ['action'],
         ),
@@ -440,6 +444,11 @@ base mixin MemoryDebuggingSupport
 
       final instanceDelta = currentInstances - baselineInstances;
       final bytesDelta = currentBytes - baselineBytes;
+
+      final filterZeroDeltas = req.arg<bool>('filter_zero_deltas') ?? false;
+      if (filterZeroDeltas && instanceDelta == 0 && bytesDelta == 0) {
+        continue;
+      }
 
       if (instanceDelta != 0 || bytesDelta != 0) {
         // Filter out VM-internal noise if delta is tiny
