@@ -217,26 +217,27 @@ base mixin MemoryDebuggingSupport
     final reports = <Map<String, dynamic>>[];
     final mdBuffer = StringBuffer();
 
-    final mountedResults = await Future.wait(
-      instances.map((instanceRef) async {
-        final instanceId = instanceRef.id;
-        if (instanceId == null) {
-          return (instanceId: null, isMounted: true);
-        }
-        try {
-          final evalResult = await vmService!.evaluate(
-            isolateId!,
-            instanceId,
-            'this.mounted',
-          );
-          final isMounted =
-              evalResult is InstanceRef && evalResult.valueAsString == 'true';
-          return (instanceId: instanceId, isMounted: isMounted);
-        } catch (_) {
-          return (instanceId: instanceId, isMounted: true);
-        }
-      }),
-    );
+    // Process mounted evaluations sequentially/chunked to prevent VM Service RPC queue starvation
+    final mountedResults = <({String? instanceId, bool isMounted})>[];
+    for (final instanceRef in instances) {
+      final instanceId = instanceRef.id;
+      if (instanceId == null) {
+        mountedResults.add((instanceId: null, isMounted: true));
+        continue;
+      }
+      try {
+        final evalResult = await vmService!.evaluate(
+          isolateId!,
+          instanceId,
+          'this is State ? (this as dynamic).mounted : true',
+        );
+        final isMounted =
+            evalResult is InstanceRef && evalResult.valueAsString == 'true';
+        mountedResults.add((instanceId: instanceId, isMounted: isMounted));
+      } catch (_) {
+        mountedResults.add((instanceId: instanceId, isMounted: true));
+      }
+    }
 
     final unmountedInstances = mountedResults
         .where((r) => r.instanceId != null && !r.isMounted)
@@ -244,35 +245,34 @@ base mixin MemoryDebuggingSupport
         .toList();
 
     if (unmountedInstances.isNotEmpty) {
-      final retainingPathResults = await Future.wait(
-        unmountedInstances.map((instanceId) async {
-          try {
-            final retainingPath =
-                await vmService!.getRetainingPath(isolateId!, instanceId, 15);
-            final pathElements = <String>[];
-            final elements = retainingPath.elements ?? [];
-            for (final element in elements.whereType<RetainingObject>()) {
-              final val = element.value;
-              if (val is InstanceRef) {
-                pathElements.add('${val.classRef?.name} (${val.id})');
-              } else {
-                pathElements.add(val.toString());
-              }
+      final retainingPathResults = <Map<String, dynamic>>[];
+      for (final instanceId in unmountedInstances) {
+        try {
+          final retainingPath =
+              await vmService!.getRetainingPath(isolateId!, instanceId, 15);
+          final pathElements = <String>[];
+          final elements = retainingPath.elements ?? [];
+          for (final element in elements.whereType<RetainingObject>()) {
+            final val = element.value;
+            if (val is InstanceRef) {
+              pathElements.add('${val.classRef?.name} (${val.id})');
+            } else {
+              pathElements.add(val.toString());
             }
-            return {
-              'instance_id': instanceId,
-              'mounted': false,
-              'retaining_path': pathElements,
-            };
-          } catch (e) {
-            return {
-              'instance_id': instanceId,
-              'mounted': false,
-              'retaining_path': ['Error retrieving retaining path: $e'],
-            };
           }
-        }),
-      );
+          retainingPathResults.add({
+            'instance_id': instanceId,
+            'mounted': false,
+            'retaining_path': pathElements,
+          });
+        } catch (e) {
+          retainingPathResults.add({
+            'instance_id': instanceId,
+            'mounted': false,
+            'retaining_path': ['Error retrieving retaining path: $e'],
+          });
+        }
+      }
       reports.addAll(retainingPathResults);
     }
 

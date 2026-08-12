@@ -1,3 +1,9 @@
+## 1.7.3
+
+### Fixed
+- Fixed VM Service connection hangs during memory leak audits on classes with large instance counts.
+- Fixed evaluation crashes when auditing memory leaks on non-State objects.
+
 ## 1.7.2
 
 ### Added
