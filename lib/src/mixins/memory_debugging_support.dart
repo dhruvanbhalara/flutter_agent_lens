@@ -108,7 +108,13 @@ base mixin MemoryDebuggingSupport
   Future<({int heapUsage, int heapCapacity, int externalUsage})> _getHeapStats({
     bool gc = false,
   }) async {
-    final profile = await vmService!.getAllocationProfile(isolateId!, gc: gc);
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) {
+      throw StateError('Not connected to VM service');
+    }
+    final profile =
+        await service.getAllocationProfile(currentIsolateId, gc: gc);
     return (
       heapUsage: profile.memoryUsage?.heapUsage ?? 0,
       heapCapacity: profile.memoryUsage?.heapCapacity ?? 0,
@@ -118,10 +124,14 @@ base mixin MemoryDebuggingSupport
 
   /// Helper to fetch total RSS process memory in bytes.
   Future<int> _getRssBytes() async {
+    final service = vmService;
+    if (service == null) return 0;
     try {
-      final usage = await vmService!.getProcessMemoryUsage();
+      final usage = await service.getProcessMemoryUsage();
       return usage.root?.size ?? 0;
-    } catch (_) {
+    } on RPCError catch (_) {
+      return 0;
+    } on Exception catch (_) {
       return 0;
     }
   }
@@ -134,32 +144,35 @@ base mixin MemoryDebuggingSupport
     _gcStreamRefCount++;
     if (_gcStreamActive) return;
 
-    if (vmService != null) {
+    final service = vmService;
+    if (service != null) {
       try {
-        await vmService!.streamListen(EventStreams.kGC);
+        await service.streamListen(EventStreams.kGC);
       } on RPCError catch (e) {
         if (e.code != 103) rethrow;
       }
     }
     await _gcStreamSub?.cancel();
-    _gcStreamSub = vmService!.onGCEvent.listen((Event event) {
-      final item = <String, dynamic>{
-        'kind': event.kind ?? 'GC',
-        'timestamp': event.timestamp ?? DateTime.now().millisecondsSinceEpoch,
-        if (event.gcType != null) 'gcType': event.gcType,
-      };
-      if (event.json != null) {
-        final raw = event.json!;
-        if (raw.containsKey('reason')) item['reason'] = raw['reason'];
-        if (raw.containsKey('duration')) item['duration'] = raw['duration'];
-      }
-      _gcEventBuffer.add(item);
-      if (_gcEventBuffer.length > 500) {
-        _gcEventBuffer.removeAt(0);
-      }
-    });
-    _gcStreamActive = true;
-    _gcStreamStartTime = DateTime.now().millisecondsSinceEpoch;
+    if (service != null) {
+      _gcStreamSub = service.onGCEvent.listen((Event event) {
+        final item = <String, dynamic>{
+          'kind': event.kind ?? 'GC',
+          'timestamp': event.timestamp ?? DateTime.now().millisecondsSinceEpoch,
+          if (event.gcType != null) 'gcType': event.gcType,
+        };
+        if (event.json != null) {
+          final raw = event.json!;
+          if (raw.containsKey('reason')) item['reason'] = raw['reason'];
+          if (raw.containsKey('duration')) item['duration'] = raw['duration'];
+        }
+        _gcEventBuffer.add(item);
+        if (_gcEventBuffer.length > 500) {
+          _gcEventBuffer.removeAt(0);
+        }
+      });
+      _gcStreamActive = true;
+      _gcStreamStartTime = DateTime.now().millisecondsSinceEpoch;
+    }
   }
 
   /// Internal cleanup for GC event stream with reference counting.
@@ -172,10 +185,13 @@ base mixin MemoryDebuggingSupport
     await _gcStreamSub?.cancel();
     _gcStreamSub = null;
     _gcStreamActive = false;
-    if (vmService != null) {
+    final service = vmService;
+    if (service != null) {
       try {
-        await vmService!.streamCancel(EventStreams.kGC);
-      } catch (e) {
+        await service.streamCancel(EventStreams.kGC);
+      } on RPCError catch (e) {
+        stderr.writeln('[mcp:memory] RPC error cancelling GC stream: $e');
+      } on Exception catch (e) {
         stderr.writeln('[mcp:memory] Error cancelling GC stream: $e');
       }
     }
@@ -184,12 +200,16 @@ base mixin MemoryDebuggingSupport
   /// Handles the audit_class_memory_leak tool request.
   Future<CallToolResult> _handleAuditClassMemoryLeak(
       CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final className = req.requireArg<String>('class_name');
     final limit = (req.arg<num>('limit'))?.toInt() ?? 100;
     stderr.writeln(
         '[mcp:audit_memory] Auditing class: $className (limit=$limit)');
 
-    final classList = await vmService!.getClassList(isolateId!);
+    final classList = await service.getClassList(currentIsolateId);
     final classes = classList.classes ?? [];
     ClassRef? classRef;
     for (final c in classes) {
@@ -211,7 +231,7 @@ base mixin MemoryDebuggingSupport
     }
 
     final instancesResponse =
-        await vmService!.getInstances(isolateId!, classRef.id!, limit);
+        await service.getInstances(currentIsolateId, classRef.id!, limit);
     final instances = instancesResponse.instances ?? [];
 
     final reports = <Map<String, dynamic>>[];
@@ -226,8 +246,8 @@ base mixin MemoryDebuggingSupport
         continue;
       }
       try {
-        final evalResult = await vmService!.evaluate(
-          isolateId!,
+        final evalResult = await service.evaluate(
+          currentIsolateId,
           instanceId,
           'this is State ? (this as dynamic).mounted : true',
         );
@@ -249,7 +269,7 @@ base mixin MemoryDebuggingSupport
       for (final instanceId in unmountedInstances) {
         try {
           final retainingPath =
-              await vmService!.getRetainingPath(isolateId!, instanceId, 15);
+              await service.getRetainingPath(currentIsolateId, instanceId, 15);
           final pathElements = <String>[];
           final elements = retainingPath.elements ?? [];
           for (final element in elements.whereType<RetainingObject>()) {
@@ -383,6 +403,10 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the diff_heap_allocations tool request.
   Future<CallToolResult> _handleDiffHeapAllocations(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
     final expression = req.arg<String>('expression');
     final forceGc =
@@ -392,7 +416,7 @@ base mixin MemoryDebuggingSupport
         '[mcp:diff_heap] Starting heap profiling (duration=${duration}s, forceGc=$forceGc)');
 
     final baselineProfile =
-        await vmService!.getAllocationProfile(isolateId!, gc: forceGc);
+        await service.getAllocationProfile(currentIsolateId, gc: forceGc);
     final baselineStats = <String, ClassHeapStats>{};
     final baselineMembers =
         (baselineProfile.members ?? const []).cast<ClassHeapStats>();
@@ -408,23 +432,27 @@ base mixin MemoryDebuggingSupport
           .writeln('[mcp:diff_heap] Evaluating action expression: $expression');
       try {
         final libraryId = await getEvaluationLibraryId();
-        await vmService!.evaluate(isolateId!, libraryId, expression);
-      } catch (e) {
+        await service.evaluate(currentIsolateId, libraryId, expression);
+      } on RPCError catch (e) {
+        stderr.writeln('[mcp:diff_heap] Action evaluation RPC error: $e');
+      } on Exception catch (e) {
         stderr.writeln('[mcp:diff_heap] Action evaluation failed: $e');
       }
     }
 
     stderr.writeln('[mcp:diff_heap] Sampling memory for ${duration}s...');
     final samplingResult = await safeSamplingWindow(
-      vmService: vmService,
+      vmService: service,
       duration: Duration(seconds: duration),
     );
 
     AllocationProfile currentProfile;
     try {
       currentProfile =
-          await vmService!.getAllocationProfile(isolateId!, gc: false);
-    } catch (_) {
+          await service.getAllocationProfile(currentIsolateId, gc: false);
+    } on RPCError catch (_) {
+      currentProfile = AllocationProfile(members: []);
+    } on Exception catch (_) {
       currentProfile = AllocationProfile(members: []);
     }
     final deltas = <Map<String, dynamic>>[];
@@ -496,6 +524,10 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the get_object_referrers tool request.
   Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final objectId = req.requireArg<String>('object_id');
     final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
     final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
@@ -503,7 +535,7 @@ base mixin MemoryDebuggingSupport
         '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit');
 
     final retainingPath =
-        await vmService!.getRetainingPath(isolateId!, objectId, limit);
+        await service.getRetainingPath(currentIsolateId, objectId, limit);
     final pathElements = <String>[];
 
     final elements = retainingPath.elements ?? [];
@@ -738,7 +770,13 @@ base mixin MemoryDebuggingSupport
 
   /// Helper to capture a new [MemorySnapshot] from the VM.
   Future<MemorySnapshot> _takeSnapshot(String name, bool gc) async {
-    final profile = await vmService!.getAllocationProfile(isolateId!, gc: gc);
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) {
+      throw StateError('Not connected to VM service');
+    }
+    final profile =
+        await service.getAllocationProfile(currentIsolateId, gc: gc);
     final heapUsage = profile.memoryUsage?.heapUsage ?? 0;
     final heapCapacity = profile.memoryUsage?.heapCapacity ?? 0;
     final externalUsage = profile.memoryUsage?.externalUsage ?? 0;
@@ -780,6 +818,10 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the get_memory_snapshot tool request.
   Future<CallToolResult> _handleGetMemorySnapshot(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final forceGc = req.arg<bool>('forceGC') ?? false;
     final topN = (req.arg<num>('topN'))?.toInt() ?? 20;
 
@@ -787,7 +829,7 @@ base mixin MemoryDebuggingSupport
         '[mcp:memory_snapshot] Fetching memory snapshot (forceGc=$forceGc, topN=$topN)');
 
     final profile =
-        await vmService!.getAllocationProfile(isolateId!, gc: forceGc);
+        await service.getAllocationProfile(currentIsolateId, gc: forceGc);
     final heapUsage = profile.memoryUsage?.heapUsage ?? 0;
     final heapCapacity = profile.memoryUsage?.heapCapacity ?? 0;
     final externalUsage = profile.memoryUsage?.externalUsage ?? 0;
