@@ -4,9 +4,11 @@ import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/widget_action.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 
@@ -20,13 +22,13 @@ base mixin WidgetInspectionSupport
         name: McpTool.widget.name,
         description:
             'Manage widget tree, inspect layout details, and toggle selection overlay. '
-            'Actions: inspect (widget properties), toggle_selection (on-device tap-to-select overlay), '
-            'get_tree (retrieve widget tree summary).',
+            'Actions: inspect (widget properties), toggleSelection (on-device tap-to-select overlay), '
+            'getTree (lightweight JSON widget tree).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
               description:
-                  'The widget action: inspect, toggle_selection, get_tree.',
+                  'The widget action: inspect, toggleSelection, getTree.',
             ),
             'widgetId': StringSchema(
               description:
@@ -38,15 +40,15 @@ base mixin WidgetInspectionSupport
             ),
             'enabled': BooleanSchema(
               description:
-                  'Whether to enable the widget selection overlay (required for action: toggle_selection).',
+                  'Whether to enable the widget selection overlay (required for action: toggleSelection).',
             ),
             'maxDepth': IntegerSchema(
               description:
-                  'Maximum depth of the widget tree to return (default: 8, for action: get_tree).',
+                  'Maximum depth of the widget tree to return (default: 8, for action: getTree).',
             ),
             'projectOnly': BooleanSchema(
               description:
-                  'If true, only return widgets created by the local project code (default: true, for action: get_tree).',
+                  'If true, only return widgets created by the local project code (default: true, for action: getTree).',
             ),
           },
           required: ['action'],
@@ -76,15 +78,19 @@ base mixin WidgetInspectionSupport
 
   /// Delegates widget actions to respective handlers.
   Future<CallToolResult> _handleWidget(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
+    final actionStr = req.requireArg<String>('action');
+    final action = WidgetAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        WidgetAction.values,
+        'widget',
+      );
+    }
     return switch (action) {
-      'inspect' => _handleInspectLayoutConstraints(req),
-      'toggle_selection' => _handleToggleWidgetSelection(req),
-      'get_tree' => _handleGetWidgetTree(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown widget action: $action')],
-          isError: true,
-        ),
+      WidgetAction.inspect => _handleInspectLayoutConstraints(req),
+      WidgetAction.toggleSelection => _handleToggleWidgetSelection(req),
+      WidgetAction.getTree => _handleGetWidgetTree(req),
     };
   }
 
@@ -186,7 +192,7 @@ base mixin WidgetInspectionSupport
         title: 'Widget Layout Constraints',
         markdownBody: sb.toString(),
         structuredData: {
-          'widget_id': widgetId,
+          'widgetId': widgetId,
           'description': widgetDescription,
           'size': size,
           'constraints': constraints,
@@ -279,9 +285,9 @@ base mixin WidgetInspectionSupport
         markdownBody:
             'Widget Tree ($totalWidgets widgets, $projectWidgets from project, depth: $maxDepthReached)\n\n$text',
         structuredData: {
-          'total_widgets': totalWidgets,
-          'project_widgets': projectWidgets,
-          'max_depth_reached': maxDepthReached,
+          'totalWidgets': totalWidgets,
+          'projectWidgets': projectWidgets,
+          'maxDepthReached': maxDepthReached,
           'widgets': flattened.map((w) => w.toMap()).toList(),
         },
       );
@@ -729,11 +735,11 @@ base mixin WidgetInspectionSupport
         title: 'Navigation Tree',
         markdownBody: md.toString(),
         structuredData: {
-          'current_url': currentUrl,
-          'static_route_tree': staticRouteTree,
-          'navigator_count': navList.length,
-          'max_depth': maxRouteCount,
-          'has_leak_warning': hasLeak,
+          'currentUrl': currentUrl,
+          'staticRouteTree': staticRouteTree,
+          'navigatorCount': navList.length,
+          'maxDepth': maxRouteCount,
+          'hasLeakWarning': hasLeak,
           'navigators': navList,
           'delegates': delegates,
           'logs': evalLogs,

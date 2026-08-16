@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/network_action.dart';
 import 'package:flutter_agent_lens/src/enums/network_sort_by.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:flutter_agent_lens/src/utils/string_utils.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 
 /// Support mixin providing tools for capturing and analyzing HTTP traffic details.
 base mixin NetworkCaptureSupport
@@ -28,28 +30,28 @@ base mixin NetworkCaptureSupport
         name: McpTool.network.name,
         description: 'Manage HTTP network capture. '
             'Actions: start (begin capture), stop (end and get report), '
-            'get_profile (read HTTP request history), '
+            'getProfile (read HTTP request history), '
             'watch (capture and report HTTP traffic over a duration window), '
-            'get_request_details (inspect full headers, cookies, timing, and body for a request).',
+            'getRequestDetails (inspect full headers, cookies, timing, and body for a request).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
               description:
-                  'Action to perform: start, stop, get_profile, watch, get_request_details.',
+                  'Action to perform: start, stop, getProfile, watch, getRequestDetails.',
             ),
             'requestId': StringSchema(
               description:
-                  'Request ID to inspect for get_request_details action.',
+                  'Request ID to inspect for getRequestDetails action.',
             ),
             'sortBy': StringSchema(
               description: 'Sort by: time, duration, size (for stop action).',
             ),
-            'duration_seconds': durationSchema(defaultValue: 5.0),
-            'slow_threshold_ms': IntegerSchema(
+            'durationSeconds': durationSchema(defaultValue: 5.0),
+            'slowThresholdMs': IntegerSchema(
               description:
                   'Threshold in milliseconds to flag slow requests for watch action (default: 500).',
             ),
-            'include_details': BooleanSchema(
+            'includeDetails': BooleanSchema(
               description:
                   'Whether to include full request/response headers, cookies, and bodies for returned requests (default: false).',
             ),
@@ -223,17 +225,15 @@ base mixin NetworkCaptureSupport
           'method': method,
           'uri': uri,
           'statusCode': statusCode,
-          'duration_ms': startTimeUs != null && endTimeUs != null
+          'durationMs': startTimeUs != null && endTimeUs != null
               ? (endTimeUs - startTimeUs) / 1000.0
               : null,
-          'request_size_bytes': reqSize,
-          'response_size_bytes': resSize,
-          'start_time': startTimeStr,
+          'requestSizeBytes': reqSize,
+          'responseSizeBytes': resSize,
+          'startTime': startTimeStr,
         };
 
-        final includeDetails = req.arg<bool>('include_details') ??
-            req.arg<bool>('includeDetails') ??
-            false;
+        final includeDetails = req.arg<bool>('includeDetails') ?? false;
         if (includeDetails && id != 'N/A') {
           final details = await _fetchRequestDetailsMap(id);
           if (details != null) {
@@ -250,9 +250,9 @@ base mixin NetworkCaptureSupport
       title: 'Network Diagnostics Report',
       markdownBody: md.toString(),
       structuredData: {
-        'total_requests': allFetched.length,
+        'totalRequests': allFetched.length,
         'requests': formattedRequests,
-        if (includeRawResponse) 'raw_response': allFetched,
+        if (includeRawResponse) 'rawResponse': allFetched,
       },
     );
   }
@@ -483,14 +483,12 @@ base mixin NetworkCaptureSupport
         'method': method,
         'uri': uri,
         'statusCode': responseData?['statusCode'] ?? 'Pending',
-        'duration_ms': durationVal,
-        'request_size_bytes': reqSize,
-        'response_size_bytes': resSize,
+        'durationMs': durationVal,
+        'requestSizeBytes': reqSize,
+        'responseSizeBytes': resSize,
       };
 
-      final includeDetails = req.arg<bool>('include_details') ??
-          req.arg<bool>('includeDetails') ??
-          false;
+      final includeDetails = req.arg<bool>('includeDetails') ?? false;
       if (includeDetails && id != 'N/A') {
         final details = await _fetchRequestDetailsMap(id);
         if (details != null) {
@@ -545,10 +543,10 @@ base mixin NetworkCaptureSupport
       title: 'Network Traffic Report',
       markdownBody: output.join('\n'),
       structuredData: {
-        'duration_ms': durationMs,
-        'total_requests': allRequests.length,
+        'durationMs': durationMs,
+        'totalRequests': allRequests.length,
         'requests': formattedRequests,
-        if (includeRawResponse) 'raw_response': allRequests,
+        if (includeRawResponse) 'rawResponse': allRequests,
       },
     );
   }
@@ -581,12 +579,12 @@ base mixin NetworkCaptureSupport
       final resData = rawRes is Map ? Map<String, dynamic>.from(rawRes) : null;
 
       return {
-        'request_headers': reqData?['headers'] ?? <String, dynamic>{},
-        'request_cookies': reqData?['cookies'] ?? <dynamic>[],
-        'request_body': reqData?['body'],
-        'response_headers': resData?['headers'] ?? <String, dynamic>{},
-        'response_cookies': resData?['cookies'] ?? <dynamic>[],
-        'response_body': resData?['body'],
+        'requestHeaders': reqData?['headers'] ?? <String, dynamic>{},
+        'requestCookies': reqData?['cookies'] ?? <dynamic>[],
+        'requestBody': reqData?['body'],
+        'responseHeaders': resData?['headers'] ?? <String, dynamic>{},
+        'responseCookies': resData?['cookies'] ?? <dynamic>[],
+        'responseBody': resData?['body'],
       };
     } catch (_) {
       return null;
@@ -596,8 +594,7 @@ base mixin NetworkCaptureSupport
   /// Handles the get_request_details tool request.
   Future<CallToolResult> _handleGetHttpRequestDetails(
       CallToolRequest req) async {
-    final requestId =
-        req.arg<String>('requestId') ?? req.arg<String>('request_id');
+    final requestId = req.arg<String>('requestId');
 
     if (vmService == null) return notConnected();
 
@@ -776,7 +773,7 @@ base mixin NetworkCaptureSupport
         'uri': uri,
         'statusCode': statusCode,
         'reasonPhrase': reasonPhrase,
-        'duration_ms': durationMs,
+        'durationMs': durationMs,
         'startTime': startTimeStr,
         'error': error,
         'request': {
@@ -813,9 +810,9 @@ base mixin NetworkCaptureSupport
       );
     }
 
-    final rawDuration = req.arg<num>('duration_seconds') ?? 5;
+    final rawDuration = req.arg<num>('durationSeconds') ?? 5;
     final duration = rawDuration.toInt().clamp(1, 30);
-    final slowThresholdMs = (req.arg<num>('slow_threshold_ms'))?.toInt() ?? 500;
+    final slowThresholdMs = (req.arg<num>('slowThresholdMs'))?.toInt() ?? 500;
 
     stderr.writeln(
         '[mcp:watch_network] Watching network traffic for ${duration}s (slow threshold: ${slowThresholdMs}ms)...');
@@ -973,18 +970,16 @@ base mixin NetworkCaptureSupport
           'method': method,
           'uri': uri,
           'statusCode': responseData?['statusCode'] ?? 'Pending',
-          'duration_ms': durationVal,
-          'is_slow': isSlow,
-          'request_size_bytes': reqSize,
-          'response_size_bytes': resSize,
+          'durationMs': durationVal,
+          'isSlow': isSlow,
+          'requestSizeBytes': reqSize,
+          'responseSizeBytes': resSize,
         };
 
         formattedRequests.add(reqEntry);
       }
 
-      final includeDetails = req.arg<bool>('include_details') ??
-          req.arg<bool>('includeDetails') ??
-          false;
+      final includeDetails = req.arg<bool>('includeDetails') ?? false;
       if (includeDetails) {
         final detailFutures = formattedRequests.map((entry) async {
           final id = entry['id']?.toString();
@@ -1023,29 +1018,33 @@ base mixin NetworkCaptureSupport
       title: 'Live Network Watch Report',
       markdownBody: output.join('\n'),
       structuredData: {
-        'duration_seconds': duration,
-        'slow_threshold_ms': slowThresholdMs,
-        'total_requests': newRequests.length,
-        'slow_requests_count': slowRequests.length,
+        'durationSeconds': duration,
+        'slowThresholdMs': slowThresholdMs,
+        'totalRequests': newRequests.length,
+        'slowRequestsCount': slowRequests.length,
         'requests': formattedRequests,
-        if (includeRawResponse) 'raw_response': newRequests,
+        if (includeRawResponse) 'rawResponse': newRequests,
       },
     );
   }
 
   /// Handles the network composite tool request.
   Future<CallToolResult> _handleNetwork(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
+    final actionStr = req.requireArg<String>('action');
+    final action = NetworkAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        NetworkAction.values,
+        'network',
+      );
+    }
     return switch (action) {
-      'start' => _handleStartNetworkCapture(req),
-      'stop' => _handleStopNetworkCapture(req),
-      'get_profile' => _handleGetNetworkProfile(req),
-      'watch' => _handleWatchNetwork(req),
-      'get_request_details' => _handleGetHttpRequestDetails(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown network action: $action')],
-          isError: true,
-        ),
+      NetworkAction.start => _handleStartNetworkCapture(req),
+      NetworkAction.stop => _handleStopNetworkCapture(req),
+      NetworkAction.getProfile => _handleGetNetworkProfile(req),
+      NetworkAction.watch => _handleWatchNetwork(req),
+      NetworkAction.getRequestDetails => _handleGetHttpRequestDetails(req),
     };
   }
 }

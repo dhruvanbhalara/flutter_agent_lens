@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/console_log_action.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/services/log_stream_broadcaster.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for fetching and statefully buffering console
@@ -49,7 +51,7 @@ base mixin ConsoleLoggingSupport
               description: 'Action to perform: fetch, watch. Default: fetch.',
             ),
             'limit': limitSchema(defaultValue: 50),
-            'duration_seconds': durationSchema(defaultValue: 5.0),
+            'durationSeconds': durationSchema(defaultValue: 5.0),
             'filter': StringSchema(
               description: 'Optional text filter substring for watch action.',
             ),
@@ -183,14 +185,18 @@ base mixin ConsoleLoggingSupport
 
   /// Handles the console_logs composite tool request.
   Future<CallToolResult> _handleConsoleLogs(CallToolRequest req) async {
-    final action = req.arg<String>('action') ?? 'fetch';
+    final actionStr = req.arg<String>('action') ?? 'fetch';
+    final action = ConsoleLogAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        ConsoleLogAction.values,
+        'console_logs',
+      );
+    }
     return switch (action) {
-      'fetch' => _handleFetchConsoleLogs(req),
-      'watch' => _handleWatchLogs(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown console_logs action: $action')],
-          isError: true,
-        ),
+      ConsoleLogAction.fetch => _handleFetchConsoleLogs(req),
+      ConsoleLogAction.watch => _handleWatchLogs(req),
     };
   }
 
@@ -216,8 +222,8 @@ base mixin ConsoleLoggingSupport
       title: 'Console Log Cache',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'total_buffered_lines': totalLines,
-        'returned_lines': recentLogs.length,
+        'totalBufferedLines': totalLines,
+        'returnedLines': recentLogs.length,
         'logs': recentLogs,
       },
     );
@@ -225,7 +231,7 @@ base mixin ConsoleLoggingSupport
 
   /// Handles watching live console logs over a specified duration window.
   Future<CallToolResult> _handleWatchLogs(CallToolRequest req) async {
-    final rawDuration = req.arg<num>('duration_seconds') ?? 5;
+    final rawDuration = req.arg<num>('durationSeconds') ?? 5;
     final duration = rawDuration.toInt().clamp(1, 30);
     final filter = req.arg<String>('filter');
 
@@ -273,10 +279,10 @@ base mixin ConsoleLoggingSupport
       title: 'Live Console Logs',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'duration_seconds': duration,
+        'durationSeconds': duration,
         if (filter != null && filter.isNotEmpty) 'filter': filter,
-        'total_captured_lines': watchBuffer.length,
-        'returned_lines': matchingLogs.length,
+        'totalCapturedLines': watchBuffer.length,
+        'returnedLines': matchingLogs.length,
         'logs': matchingLogs,
       },
     );

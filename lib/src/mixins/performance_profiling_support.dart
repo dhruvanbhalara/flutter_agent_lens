@@ -3,10 +3,12 @@ import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/profiling_action.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
@@ -30,13 +32,13 @@ base mixin PerformanceProfilingSupport
         name: McpTool.profiling.name,
         description: 'Manage CPU & jank profiling. '
             'Actions: start (begin session), stop (end and get report), '
-            'get_cpu (sample CPU hotspots), diagnose_jank (check frame times).',
+            'getCpu (sample CPU hotspots), diagnoseJank (check frame times).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
-              description: 'Action: start, stop, get_cpu, diagnose_jank.',
+              description: 'Action: start, stop, getCpu, diagnoseJank.',
             ),
-            'duration_seconds': durationSchema(),
+            'durationSeconds': durationSchema(),
             'limit': limitSchema(defaultValue: 15),
           },
           required: ['action'],
@@ -96,7 +98,7 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the diagnose_jank tool request.
   Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final duration = (req.arg<num>('durationSeconds'))?.toInt() ?? 3;
     stderr.writeln(
         '[mcp:diagnose_jank] Starting jank diagnosis, duration=${duration}s');
 
@@ -136,7 +138,7 @@ base mixin PerformanceProfilingSupport
           jankyFrames++;
           frameEvents.add({
             'event': eventName,
-            'duration_ms': dur / 1000.0,
+            'durationMs': dur / 1000.0,
             'timestamp': event.json?['ts'],
           });
         }
@@ -166,7 +168,7 @@ base mixin PerformanceProfilingSupport
       mdBuffer.writeln('| Event | Duration (ms) | Severity |');
       mdBuffer.writeln('| :--- | :--- | :--- |');
       for (final f in frameEvents.take(limit)) {
-        final dur = f['duration_ms'] as double;
+        final dur = f['durationMs'] as double;
         final severity = dur > 33.3 ? 'CRITICAL (>33ms)' : 'WARNING (>16ms)';
         mdBuffer.writeln(
             '| ${f['event']} | ${dur.toStringAsFixed(2)} | $severity |');
@@ -180,10 +182,10 @@ base mixin PerformanceProfilingSupport
       title: 'Jank Diagnosis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'total_frames': totalFrames,
-        'janky_frames': jankyFrames,
-        'jank_percentage': jankPercentage,
-        'critical_events': frameEvents,
+        'totalFrames': totalFrames,
+        'jankyFrames': jankyFrames,
+        'jankPercentage': jankPercentage,
+        'criticalEvents': frameEvents,
       },
     );
   }
@@ -317,7 +319,7 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the get_cpu_profile tool request.
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final duration = (req.arg<num>('durationSeconds'))?.toInt() ?? 3;
     stderr.writeln(
         '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
 
@@ -367,8 +369,8 @@ base mixin PerformanceProfilingSupport
 
           hotspots.add({
             'name': name,
-            'exclusive_ticks': exclusive,
-            'inclusive_ticks': inclusive,
+            'exclusiveTicks': exclusive,
+            'inclusiveTicks': inclusive,
             'location': resolvedPath,
           });
         }
@@ -376,7 +378,7 @@ base mixin PerformanceProfilingSupport
     }
 
     hotspots.sort((a, b) =>
-        (b['exclusive_ticks'] as int).compareTo(a['exclusive_ticks'] as int));
+        (b['exclusiveTicks'] as int).compareTo(a['exclusiveTicks'] as int));
     stderr.writeln(
         '[mcp:cpu_profile] Collected ${cpuSamples.sampleCount} samples, ${hotspots.length} active functions');
 
@@ -389,7 +391,7 @@ base mixin PerformanceProfilingSupport
       mdBuffer.writeln('| :--- | :--- | :--- | :--- |');
       for (final h in hotspots.take(limit)) {
         mdBuffer.writeln(
-            '| ${h['name']} | ${h['exclusive_ticks']} | ${h['inclusive_ticks']} | `${h['location']}` |');
+            '| ${h['name']} | ${h['exclusiveTicks']} | ${h['inclusiveTicks']} | `${h['location']}` |');
       }
     }
 
@@ -397,8 +399,8 @@ base mixin PerformanceProfilingSupport
       title: 'CPU Profiler Diagnostic Report',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'duration_seconds': duration,
-        'total_samples': cpuSamples.sampleCount ?? 0,
+        'durationSeconds': duration,
+        'totalSamples': cpuSamples.sampleCount ?? 0,
         'hotspots': hotspots.take(limit).toList(),
       },
     );
@@ -696,20 +698,20 @@ base mixin PerformanceProfilingSupport
       title: 'Performance Profiling Analysis',
       markdownBody: output.join('\n'),
       structuredData: {
-        'profiling_duration_ms': durationMs,
-        'frame_analysis': {
-          'total_frames': totalFrames,
-          'janky_frames': jankyFrames,
-          'jank_percentage': jankPct,
-          'average_frame_time_ms': avgFrameTime,
-          'max_frame_time_ms': maxFrameTimeMs,
-          'p90_frame_time_ms': p90,
-          'p99_frame_time_ms': p99,
+        'profilingDurationMs': durationMs,
+        'frameAnalysis': {
+          'totalFrames': totalFrames,
+          'jankyFrames': jankyFrames,
+          'jankPercentage': jankPct,
+          'averageFrameTimeMs': avgFrameTime,
+          'maxFrameTimeMs': maxFrameTimeMs,
+          'p90FrameTimeMs': p90,
+          'p99FrameTimeMs': p99,
         },
-        'build_phase': buildPhase,
-        'layout_phase': layoutPhase,
-        'paint_phase': paintPhase,
-        'cpu_hotspots': cpuHotspots,
+        'buildPhase': buildPhase,
+        'layoutPhase': layoutPhase,
+        'paintPhase': paintPhase,
+        'cpuHotspots': cpuHotspots,
         'recommendations': recommendations,
       },
     );
@@ -717,16 +719,20 @@ base mixin PerformanceProfilingSupport
 
   /// Handles the profiling composite tool request.
   Future<CallToolResult> _handleProfiling(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
+    final actionStr = req.requireArg<String>('action');
+    final action = ProfilingAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        ProfilingAction.values,
+        'profiling',
+      );
+    }
     return switch (action) {
-      'start' => _handleStartProfiling(req),
-      'stop' => _handleStopProfiling(req),
-      'get_cpu' => _handleGetCpuProfile(req),
-      'diagnose_jank' => _handleDiagnoseJank(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown profiling action: $action')],
-          isError: true,
-        ),
+      ProfilingAction.start => _handleStartProfiling(req),
+      ProfilingAction.stop => _handleStopProfiling(req),
+      ProfilingAction.getCpu => _handleGetCpuProfile(req),
+      ProfilingAction.diagnoseJank => _handleDiagnoseJank(req),
     };
   }
 }

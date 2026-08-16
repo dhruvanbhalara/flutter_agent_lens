@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/debug_flag_action.dart';
 import 'package:flutter_agent_lens/src/enums/flutter_debug_flag.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 
@@ -16,16 +18,15 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     registerTool(
       Tool(
         name: McpTool.debugFlag.name,
-        description: 'Manage Flutter debug flags and settings. '
-            'Actions: toggle (set a Flutter debug flag like debugPaintSizeEnabled), '
-            'toggle_package_widgets (show/hide package widgets in the widget tree).',
+        description: 'Manage debug flags and settings. '
+            'Actions: toggle (change a specific debug flag), togglePackageWidgets (hide/show package widgets in widget tree).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
               description:
-                  'The debug flag action: toggle, toggle_package_widgets.',
+                  'The debug flag action: toggle, togglePackageWidgets.',
             ),
-            'flag_name': StringSchema(
+            'flagName': StringSchema(
               description:
                   'The name of the Flutter debug flag to change (required for toggle). Supported flags: debugPaintSizeEnabled, debugPaintBaselinesEnabled, repaintRainbow, invertOversizedImages, timeDilation.',
             ),
@@ -34,7 +35,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             ),
             'enabled': BooleanSchema(
               description:
-                  'Whether to show package widgets (required for toggle_package_widgets).',
+                  'Whether to show package widgets (required for togglePackageWidgets).',
             ),
           },
           required: ['action'],
@@ -46,21 +47,25 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Delegates debug flag actions to respective handlers.
   Future<CallToolResult> _handleDebugFlag(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
+    final actionStr = req.requireArg<String>('action');
+    final action = DebugFlagAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        DebugFlagAction.values,
+        'debug flag',
+      );
+    }
     return switch (action) {
-      'toggle' => _handleToggleDebugFlag(req),
-      'toggle_package_widgets' => _handleTogglePackageWidgets(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown debug flag action: $action')],
-          isError: true,
-        ),
+      DebugFlagAction.toggle => _handleToggleDebugFlag(req),
+      DebugFlagAction.togglePackageWidgets => _handleTogglePackageWidgets(req),
     };
   }
 
   Future<CallToolResult> _handleTogglePackageWidgets(
       CallToolRequest req) async {
     final enabled = req.requireArg<bool>('enabled');
-    stderr.writeln('[mcp:toggle_package_widgets] Setting enabled = $enabled');
+    stderr.writeln('[mcp:togglePackageWidgets] Setting enabled = $enabled');
 
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
@@ -68,7 +73,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         content: [
           TextContent(
             text:
-                'Workspace root is not configured. Please reconnect to the app specifying workspace_root.',
+                'Workspace root is not configured. Please reconnect to the app specifying workspaceRoot.',
           ),
         ],
         isError: true,
@@ -122,7 +127,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
     if (enabled) {
       stderr.writeln(
-          '[mcp:toggle_package_widgets] Adding ${packagePaths.length} pub root directories');
+          '[mcp:togglePackageWidgets] Adding ${packagePaths.length} pub root directories');
       await vmService!.evaluate(
         isolateId!,
         libId,
@@ -130,7 +135,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     } else {
       stderr.writeln(
-          '[mcp:toggle_package_widgets] Removing ${packagePaths.length} pub root directories');
+          '[mcp:togglePackageWidgets] Removing ${packagePaths.length} pub root directories');
       await vmService!.evaluate(
         isolateId!,
         libId,
@@ -203,7 +208,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   }
 
   Future<CallToolResult> _handleToggleDebugFlag(CallToolRequest req) async {
-    final flagName = req.requireArg<String>('flag_name');
+    final flagName = req.requireArg<String>('flagName');
     final valStr = req.requireArg<String>('value');
     stderr.writeln('[mcp:toggle_flag] Flag: $flagName, Target value: $valStr');
 

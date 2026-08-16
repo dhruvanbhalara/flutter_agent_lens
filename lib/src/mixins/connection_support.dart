@@ -4,12 +4,14 @@ import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
 import 'package:dtd/dtd.dart';
+import 'package:flutter_agent_lens/src/enums/connection_action.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/console_logging_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/path_resolver.dart';
 import 'package:flutter_agent_lens/src/port_discovery.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:vm_service/vm_service.dart' hide Event;
 import 'package:vm_service/vm_service_io.dart';
 
@@ -40,7 +42,7 @@ base mixin ConnectionSupport
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
-              description: 'Operation (connect, connect_dtd, disconnect).',
+              description: 'Operation (connect, connectDtd, disconnect).',
             ),
             'uri': StringSchema(
               description: 'WebSocket or HTTP URI.',
@@ -48,7 +50,7 @@ base mixin ConnectionSupport
             'vmServiceUri': StringSchema(
               description: 'Alias for uri.',
             ),
-            'workspace_root': StringSchema(
+            'workspaceRoot': StringSchema(
               description: 'Flutter project root path.',
             ),
           },
@@ -74,7 +76,7 @@ base mixin ConnectionSupport
               description:
                   'Auto-connect to first discovered app (default: true).',
             ),
-            'workspace_root': StringSchema(
+            'workspaceRoot': StringSchema(
               description: 'Flutter project root path.',
             ),
           },
@@ -154,15 +156,19 @@ base mixin ConnectionSupport
 
   /// Consolidated connection handler.
   Future<CallToolResult> _handleConnection(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
+    final actionStr = req.requireArg<String>('action');
+    final action = ConnectionAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        ConnectionAction.values,
+        'connection',
+      );
+    }
     return switch (action) {
-      'connect' => _handleConnect(req),
-      'connect_dtd' => _handleConnectDtd(req),
-      'disconnect' => _handleDisconnect(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown action: $action')],
-          isError: true,
-        ),
+      ConnectionAction.connect => _handleConnect(req),
+      ConnectionAction.connectDtd => _handleConnectDtd(req),
+      ConnectionAction.disconnect => _handleDisconnect(req),
     };
   }
 
@@ -367,7 +373,7 @@ base mixin ConnectionSupport
   }
 
   Future<void> _resolveWorkspaceRoot(CallToolRequest req) async {
-    workspaceRoot = req.arg<String>('workspace_root');
+    workspaceRoot = req.arg<String>('workspaceRoot');
 
     if (workspaceRoot case final root? when root.isNotEmpty) {
       // workspaceRoot is already resolved and not empty
@@ -488,7 +494,7 @@ base mixin ConnectionSupport
         content: [
           TextContent(
               text:
-                  'Not connected to DTD. Run the `connection` tool with action: `connect_dtd` first.')
+                  'Not connected to DTD. Run the `connection` tool with action: `connectDtd` first.')
         ],
         isError: true,
       );
@@ -670,7 +676,7 @@ base mixin ConnectionSupport
 
   /// Handles the discover_apps tool request.
   Future<CallToolResult> _handleAutodiscover(CallToolRequest req) async {
-    final workspace = req.arg<String>('workspace_root');
+    final workspace = req.arg<String>('workspaceRoot');
     final autoConnect = req.arg<bool>('autoConnect') ?? true;
     stderr.writeln(
         '[mcp:autodiscover] Starting auto-discovery, workspace=$workspace, autoConnect=$autoConnect');
@@ -704,7 +710,7 @@ base mixin ConnectionSupport
       final app = runningApps.first;
       final arguments = {
         'uri': app.serviceUri,
-        if (workspace != null) 'workspace_root': workspace,
+        if (workspace != null) 'workspaceRoot': workspace,
       };
 
       final connectReq = CallToolRequest(
