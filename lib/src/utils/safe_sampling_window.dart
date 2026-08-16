@@ -2,14 +2,22 @@ import 'dart:async';
 
 import 'package:vm_service/vm_service.dart';
 
-/// Result of a sampling window that may have been interrupted by VM Service disconnect.
+/// Discrete outcome of a time-bounded VM sampling operation.
 typedef SamplingResult = ({
   bool completed,
   Duration elapsed,
   String? interruptReason,
 });
 
-/// Appends a standardized GitHub alert warning to [buffer] if sampling was interrupted.
+/// Typed sampling interruption causes.
+extension type const InterruptionReason(String value) {
+  /// VM Service connection dropped before sampling completed.
+  static const InterruptionReason vmDisconnected =
+      InterruptionReason('vm_service_disconnected');
+}
+
+/// Appends a GitHub-flavored markdown alert to [buffer]
+/// if sampling was prematurely interrupted.
 void writeSamplingWarningIfInterrupted(
   SamplingResult result,
   StringSink buffer, {
@@ -21,15 +29,16 @@ void writeSamplingWarningIfInterrupted(
     final reason = result.interruptReason ?? 'disconnected';
     buffer.writeln('> [!WARNING]');
     buffer.writeln(
-      '> Sampling interrupted after ${elapsedSec}s (requested ${requestedSeconds}s). Reason: $reason. Partial $dataName follow.\n',
+      '> Sampling interrupted after ${elapsedSec}s (requested ${requestedSeconds}s). '
+      'Reason: $reason. Partial $dataName follow.\n',
     );
   }
 }
 
-/// Waits for [duration] but terminates early if [vmService] closes or disconnects.
+/// Waits for [duration], terminating early if [vmService] closes or disconnects.
 ///
-/// If [vmService] is `null`, waits for [duration] and returns a completed [SamplingResult].
-/// Returns a [SamplingResult] containing completion status and actual elapsed time.
+/// Converts the completion listener into a stream subscription and cancels it
+/// when the window resolves to avoid holding references to long-lived objects.
 Future<SamplingResult> safeSamplingWindow({
   required VmService? vmService,
   required Duration duration,
@@ -51,24 +60,25 @@ Future<SamplingResult> safeSamplingWindow({
     }
   });
 
-  void completeDisconnected() {
+  void handlePrematureDisconnection() {
     if (!completer.isCompleted) {
       timer.cancel();
       stopwatch.stop();
       completer.complete((
         completed: false,
         elapsed: stopwatch.elapsed,
-        interruptReason: 'vm_service_disconnected',
+        interruptReason: InterruptionReason.vmDisconnected.value,
       ));
     }
   }
 
-  unawaited(
-    vmService.onDone.then(
-      (_) => completeDisconnected(),
-      onError: (_) => completeDisconnected(),
-    ),
-  );
+  final disconnectSub = vmService.onDone.asStream().listen(
+        (_) => handlePrematureDisconnection(),
+        onError: (_) => handlePrematureDisconnection(),
+      );
 
-  return completer.future;
+  return completer.future.whenComplete(() {
+    timer.cancel();
+    unawaited(disconnectSub.cancel());
+  });
 }
