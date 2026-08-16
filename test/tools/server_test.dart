@@ -371,7 +371,7 @@ void main() {
           name: McpTool.debugFlag.name,
           arguments: const {
             'action': 'toggle',
-            'flag_name': 'debugPaintSizeEnabled',
+            'flagName': 'debugPaintSizeEnabled',
             'value': 'true',
           },
         ),
@@ -397,7 +397,7 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'get_snapshot',
+            'action': 'getSnapshot',
             'topN': 5,
           },
         ),
@@ -419,8 +419,8 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'diff_allocations',
-            'duration_seconds': 0, // 0 for instantaneous test
+            'action': 'diffAllocations',
+            'durationSeconds': 0, // 0 for instantaneous test
             'expression': '1 + 1',
           },
         ),
@@ -441,7 +441,7 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'force_gc',
+            'action': 'forceGc',
           },
         ),
       );
@@ -462,7 +462,7 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'start_gc_stream',
+            'action': 'startGcStream',
           },
         ),
       );
@@ -476,7 +476,7 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'stop_gc_stream',
+            'action': 'stopGcStream',
           },
         ),
       );
@@ -494,8 +494,8 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'get_memory_timeline',
-            'duration_seconds': 1,
+            'action': 'getMemoryTimeline',
+            'durationSeconds': 1,
           },
         ),
       );
@@ -515,8 +515,8 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'watch_gc_pressure',
-            'duration_seconds': 1,
+            'action': 'watchGcPressure',
+            'durationSeconds': 1,
           },
         ),
       );
@@ -537,7 +537,7 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'explain_memory_breakdown',
+            'action': 'explainMemoryBreakdown',
           },
         ),
       );
@@ -559,7 +559,7 @@ void main() {
       final res1 = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {'action': 'start_gc_stream'},
+          arguments: const {'action': 'startGcStream'},
         ),
       );
       expect(res1.isError, isNot(isTrue));
@@ -568,7 +568,7 @@ void main() {
       final res2 = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {'action': 'start_gc_stream'},
+          arguments: const {'action': 'startGcStream'},
         ),
       );
       expect(res2.isError, isNot(isTrue));
@@ -577,7 +577,7 @@ void main() {
       await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {'action': 'stop_gc_stream'},
+          arguments: const {'action': 'stopGcStream'},
         ),
       );
     });
@@ -592,7 +592,7 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {'action': 'stop_gc_stream'},
+          arguments: const {'action': 'stopGcStream'},
         ),
       );
 
@@ -609,7 +609,7 @@ void main() {
       await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {'action': 'start_gc_stream'},
+          arguments: const {'action': 'startGcStream'},
         ),
       );
 
@@ -623,7 +623,7 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'stop_gc_stream',
+            'action': 'stopGcStream',
             'limit': 2,
           },
         ),
@@ -644,8 +644,8 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'get_memory_timeline',
-            'duration_seconds': -10, // Clamped to 1s
+            'action': 'getMemoryTimeline',
+            'durationSeconds': -10, // Clamped to 1s
           },
         ),
       );
@@ -665,8 +665,8 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'watch_gc_pressure',
-            'duration_seconds': 1,
+            'action': 'watchGcPressure',
+            'durationSeconds': 1,
             'limit': 10,
           },
         ),
@@ -695,7 +695,7 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'explain_memory_breakdown',
+            'action': 'explainMemoryBreakdown',
           },
         ),
       );
@@ -716,8 +716,8 @@ void main() {
         CallToolRequest(
           name: McpTool.profiling.name,
           arguments: const {
-            'action': 'get_cpu',
-            'duration_seconds': 0, // Instant
+            'action': 'getCpu',
+            'durationSeconds': 0, // Instant
           },
         ),
       );
@@ -759,7 +759,7 @@ void main() {
           name: McpTool.breakpoint.name,
           arguments: const {
             'action': 'add',
-            'file_path': 'lib/main.dart',
+            'filePath': 'lib/main.dart',
             'line': 42,
           },
         ),
@@ -781,7 +781,7 @@ void main() {
           name: McpTool.breakpoint.name,
           arguments: const {
             'action': 'remove',
-            'breakpoint_id': 'bp_1',
+            'breakpointId': 'bp_1',
           },
         ),
       );
@@ -816,7 +816,7 @@ void main() {
         CallToolRequest(
           name: McpTool.widget.name,
           arguments: const {
-            'action': 'get_tree',
+            'action': 'getTree',
             'maxDepth': 2,
           },
         ),
@@ -892,7 +892,7 @@ void main() {
         CallToolRequest(
           name: McpTool.widget.name,
           arguments: const {
-            'action': 'get_tree',
+            'action': 'getTree',
             'maxDepth': 2,
           },
         ),
@@ -914,7 +914,7 @@ void main() {
         CallToolRequest(
           name: McpTool.widget.name,
           arguments: const {
-            'action': 'get_tree',
+            'action': 'getTree',
             'maxDepth': 2,
           },
         ),
@@ -932,7 +932,7 @@ void main() {
         CallToolRequest(
           name: McpTool.widget.name,
           arguments: const {
-            'action': 'get_tree',
+            'action': 'getTree',
           },
         ),
       );
@@ -957,7 +957,7 @@ void main() {
         CallToolRequest(
           name: McpTool.widget.name,
           arguments: const {
-            'action': 'get_tree',
+            'action': 'getTree',
           },
         ),
       );
@@ -983,7 +983,7 @@ void main() {
         CallToolRequest(
           name: McpTool.widget.name,
           arguments: const {
-            'action': 'get_tree',
+            'action': 'getTree',
           },
         ),
       );
@@ -1029,7 +1029,7 @@ void main() {
     });
 
     test(
-        'screenshot compare with invalid baseline_name returns validation error',
+        'screenshot compare with invalid baselineName returns validation error',
         () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';
@@ -1041,13 +1041,13 @@ void main() {
           name: McpTool.screenshot.name,
           arguments: const {
             'action': 'compare',
-            'baseline_name': '../../invalid_name',
+            'baselineName': '../../invalid_name',
           },
         ),
       );
       expect(result.isError, isTrue);
       expect((result.content.first as TextContent).text,
-          contains('Invalid baseline_name'));
+          contains('Invalid baselineName'));
     });
 
     test('memory with invalid action returns error', () async {
@@ -1129,7 +1129,7 @@ void main() {
         CallToolRequest(
           name: McpTool.memory.name,
           arguments: const {
-            'action': 'get_snapshot',
+            'action': 'getSnapshot',
           },
         ),
       );
@@ -1200,7 +1200,7 @@ void main() {
           name: McpTool.consoleLogs.name,
           arguments: const {
             'action': 'watch',
-            'duration_seconds': 1,
+            'durationSeconds': 1,
             'filter': 'Test live',
           },
         ),
@@ -1220,9 +1220,9 @@ void main() {
           name: McpTool.network.name,
           arguments: const {
             'action': 'watch',
-            'duration_seconds': 1,
-            'slow_threshold_ms': 500,
-            'include_details': true,
+            'durationSeconds': 1,
+            'slowThresholdMs': 500,
+            'includeDetails': true,
           },
         ),
       );

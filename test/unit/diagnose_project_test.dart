@@ -40,7 +40,7 @@ void main() {
       );
       expect(result.isError, isTrue);
       expect((result.content.first as TextContent).text,
-          contains('Unknown action'));
+          contains('Unknown diagnose_project action'));
     });
 
     test('bundle_size action with path traversal rejects input', () async {
@@ -49,8 +49,8 @@ void main() {
         CallToolRequest(
           name: 'diagnose_project',
           arguments: const {
-            'action': 'bundle_size',
-            'analysis_path': '../../etc/passwd',
+            'action': 'bundleSize',
+            'analysisPath': '../../etc/passwd',
           },
         ),
       );
@@ -66,7 +66,7 @@ void main() {
         CallToolRequest(
           name: 'diagnose_project',
           arguments: const {
-            'action': 'deep_links',
+            'action': 'deepLinks',
             'platform': 'android',
           },
         ),
@@ -83,7 +83,7 @@ void main() {
         CallToolRequest(
           name: 'diagnose_project',
           arguments: const {
-            'action': 'deep_links',
+            'action': 'deepLinks',
           },
         ),
       );
@@ -100,9 +100,9 @@ void main() {
         CallToolRequest(
           name: 'diagnose_project',
           arguments: const {
-            'action': 'bundle_size',
-            'build_target': 'apk',
-            'analysis_path': 'build/app-size-analysis.json',
+            'action': 'bundleSize',
+            'buildTarget': 'apk',
+            'analysisPath': 'build/app-size-analysis.json',
           },
         ),
       );
@@ -119,8 +119,8 @@ void main() {
         CallToolRequest(
           name: 'diagnose_project',
           arguments: const {
-            'action': 'bundle_size',
-            'build_target': 'apk',
+            'action': 'bundleSize',
+            'buildTarget': 'apk',
           },
         ),
       );
@@ -137,7 +137,7 @@ void main() {
         CallToolRequest(
           name: 'diagnose_project',
           arguments: const {
-            'action': 'deep_links',
+            'action': 'deepLinks',
             'platform': 'windows', // Unsupported
           },
         ),
@@ -160,8 +160,8 @@ void main() {
           CallToolRequest(
             name: 'diagnose_project',
             arguments: {
-              'action': 'bundle_size',
-              'analysis_path': tempFile.path,
+              'action': 'bundleSize',
+              'analysisPath': tempFile.path,
             },
           ),
         );
@@ -174,22 +174,21 @@ void main() {
       }
     });
 
-    test('deep_links action with invalid build_variant rejects input',
-        () async {
+    test('deep_links action with invalid buildVariant rejects input', () async {
       mock.workspaceRoot = '/some/workspace';
       final result = await mock.callTool(
         CallToolRequest(
           name: 'diagnose_project',
           arguments: const {
-            'action': 'deep_links',
+            'action': 'deepLinks',
             'platform': 'android',
-            'build_variant': '--inject-flag',
+            'buildVariant': '--inject-flag',
           },
         ),
       );
       expect(result.isError, isTrue);
       expect((result.content.first as TextContent).text,
-          contains('Invalid build_variant value'));
+          contains('Invalid buildVariant value'));
     });
 
     test('deep_links action with invalid configuration rejects input',
@@ -199,7 +198,7 @@ void main() {
         CallToolRequest(
           name: 'diagnose_project',
           arguments: const {
-            'action': 'deep_links',
+            'action': 'deepLinks',
             'platform': 'ios',
             'configuration': 'Release; inject_cmd',
           },
@@ -216,7 +215,7 @@ void main() {
         CallToolRequest(
           name: 'diagnose_project',
           arguments: const {
-            'action': 'deep_links',
+            'action': 'deepLinks',
             'platform': 'ios',
             'configuration': 'Release',
             'target': '../escaped_path',

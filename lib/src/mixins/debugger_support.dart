@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/breakpoint_action.dart';
 import 'package:flutter_agent_lens/src/enums/exception_pause_mode.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/utils/string_utils.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:vm_service/vm_service.dart' hide ExceptionPauseMode;
 
 /// Support mixin providing debugger capabilities including call stack retrieval,
@@ -62,7 +64,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'action': StringSchema(
               description: 'Action to perform: add, remove.',
             ),
-            'file_path': StringSchema(
+            'filePath': StringSchema(
               description:
                   'The absolute path or file URI of the target source file (for add).',
             ),
@@ -72,7 +74,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'column': IntegerSchema(
               description: 'The optional 1-based column number (for add).',
             ),
-            'breakpoint_id': StringSchema(
+            'breakpointId': StringSchema(
               description:
                   'The unique ID of the breakpoint to remove (for remove).',
             ),
@@ -98,7 +100,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'expression': StringSchema(
               description: 'The Dart expression to evaluate.',
             ),
-            'frame_index': IntegerSchema(
+            'frameIndex': IntegerSchema(
               description:
                   'Optional frame index to evaluate the expression in (if the app is paused at a breakpoint).',
             ),
@@ -182,7 +184,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the add_breakpoint tool request.
   Future<CallToolResult> _handleAddBreakpoint(CallToolRequest req) async {
-    final filePath = req.requireArg<String>('file_path');
+    final filePath = req.requireArg<String>('filePath');
     final line = (req.requireArg<num>('line')).toInt();
     final column = (req.arg<num>('column'))?.toInt();
     stderr
@@ -216,17 +218,17 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       markdownBody: md.toString(),
       structuredData: {
         'id': bpId,
-        'file_path': filePath,
+        'filePath': filePath,
         'line': line,
         'resolved': bp.resolved ?? false,
-        'raw_response': bp.json,
+        'rawResponse': bp.json,
       },
     );
   }
 
   /// Handles the remove_breakpoint tool request.
   Future<CallToolResult> _handleRemoveBreakpoint(CallToolRequest req) async {
-    final breakpointId = req.requireArg<String>('breakpoint_id');
+    final breakpointId = req.requireArg<String>('breakpointId');
     stderr
         .writeln('[mcp:remove_breakpoint] Removing breakpoint: $breakpointId');
 
@@ -249,7 +251,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Handles the evaluate_expression tool request.
   Future<CallToolResult> _handleEvalExpression(CallToolRequest req) async {
     final expression = req.requireArg<String>('expression');
-    final frameIndex = (req.arg<num>('frame_index'))?.toInt();
+    final frameIndex = (req.arg<num>('frameIndex'))?.toInt();
 
     if (frameIndex != null) {
       stderr.writeln(
@@ -283,14 +285,18 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the breakpoint composite tool request.
   Future<CallToolResult> _handleBreakpoint(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
+    final actionStr = req.requireArg<String>('action');
+    final action = BreakpointAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        BreakpointAction.values,
+        'breakpoint',
+      );
+    }
     return switch (action) {
-      'add' => _handleAddBreakpoint(req),
-      'remove' => _handleRemoveBreakpoint(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown breakpoint action: $action')],
-          isError: true,
-        ),
+      BreakpointAction.add => _handleAddBreakpoint(req),
+      BreakpointAction.remove => _handleRemoveBreakpoint(req),
     };
   }
 }

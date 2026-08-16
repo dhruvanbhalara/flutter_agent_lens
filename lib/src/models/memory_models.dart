@@ -163,11 +163,11 @@ final class MemoryTimelineSample {
   factory MemoryTimelineSample.fromMap(Map<String, dynamic> map) {
     return MemoryTimelineSample(
       timestamp: (map['timestamp'] as num?)?.toInt() ?? 0,
-      heapUsed: (map['heap_used'] as num?)?.toInt() ?? 0,
-      heapCapacity: (map['heap_capacity'] as num?)?.toInt() ?? 0,
-      externalUsage: (map['external_usage'] as num?)?.toInt() ?? 0,
+      heapUsed: (map['heapUsed'] as num?)?.toInt() ?? 0,
+      heapCapacity: (map['heapCapacity'] as num?)?.toInt() ?? 0,
+      externalUsage: (map['externalUsage'] as num?)?.toInt() ?? 0,
       rss: (map['rss'] as num?)?.toInt() ?? 0,
-      gcEventsInInterval: (map['gc_events_in_interval'] as num?)?.toInt() ?? 0,
+      gcEventsInInterval: (map['gcEventsInInterval'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -192,11 +192,11 @@ final class MemoryTimelineSample {
   /// Serializes the timeline sample to a Map.
   Map<String, dynamic> toMap() => {
         'timestamp': timestamp,
-        'heap_used': heapUsed,
-        'heap_capacity': heapCapacity,
-        'external_usage': externalUsage,
+        'heapUsed': heapUsed,
+        'heapCapacity': heapCapacity,
+        'externalUsage': externalUsage,
         'rss': rss,
-        'gc_events_in_interval': gcEventsInInterval,
+        'gcEventsInInterval': gcEventsInInterval,
       };
 
   @override

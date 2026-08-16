@@ -79,7 +79,7 @@ void main() {
       final result = await mock.callTool(
         CallToolRequest(
           name: 'network',
-          arguments: const {'action': 'get_request_details'},
+          arguments: const {'action': 'getRequestDetails'},
         ),
       );
 
@@ -118,7 +118,7 @@ void main() {
       final result = await mock.callTool(
         CallToolRequest(
           name: 'network',
-          arguments: const {'action': 'get_request_details'},
+          arguments: const {'action': 'getRequestDetails'},
         ),
       );
 
@@ -139,7 +139,7 @@ void main() {
         CallToolRequest(
           name: 'network',
           arguments: const {
-            'action': 'get_request_details',
+            'action': 'getRequestDetails',
             'requestId': '101',
           },
         ),
@@ -184,7 +184,7 @@ void main() {
         CallToolRequest(
           name: 'network',
           arguments: const {
-            'action': 'get_request_details',
+            'action': 'getRequestDetails',
             'requestId': '101',
           },
         ),

@@ -79,11 +79,11 @@ void main() {
 
   group('ScreenshotType Enum Tests', () {
     test('ScreenshotAction and ScreenshotType parsed successfully', () {
-      expect(ScreenshotAction.fromString('capture_baseline'),
+      expect(ScreenshotAction.fromString('captureBaseline'),
           equals(ScreenshotAction.captureBaseline));
       expect(ScreenshotAction.fromString('compare'),
           equals(ScreenshotAction.compare));
-      expect(() => ScreenshotAction.fromString('invalid'), throwsArgumentError);
+      expect(ScreenshotAction.fromString('invalid'), isNull);
 
       expect(
           ScreenshotType.fromString('device'), equals(ScreenshotType.device));

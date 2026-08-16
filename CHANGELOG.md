@@ -1,3 +1,14 @@
+## [Unreleased]
+
+### Breaking Changes
+- Standardised all MCP tool input schema **parameter keys** to `lowerCamelCase` (e.g., `workspaceRoot`, `className`, `durationSeconds`, `forceGc`, `baselineName`).
+- Standardised all multi-action tool **action values** to `lowerCamelCase` (e.g., `getSnapshot`, `captureBaseline`, `togglePackageWidgets`, `getCpu`, `diagnoseJank`, `getTree`, `getRequestDetails`).
+- Existing MCP clients must update parameter keys and action values in their tool calls after updating to this version.
+
+### Refactor
+- Refactored action dispatch across all 11 mixins to use compile-time safe, exhaustive Dart `enum` types (`MemoryAction`, `NetworkAction`, `ProfilingAction`, `RebuildTrackingAction`, `WidgetAction`, `DebugFlagAction`, `ConnectionAction`, `ConsoleLogAction`, `BreakpointAction`, `DiagnoseAction`, `ScreenshotAction`).
+- Maintained `snake_case` tool names (`discover_apps`, `console_logs`, `debug_flag`, etc.) in accordance with team convention and MCP spec SEP-986.
+
 ## 1.7.3
 
 ### Fixed

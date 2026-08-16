@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/enums/diagnose_action.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/enums/target_platform.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/utils/process_runner.dart';
 import 'package:flutter_agent_lens/src/utils/string_utils.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:path/path.dart' as p;
 
 /// Support mixin providing tools for analyzing application bundle sizes and validating deep links.
@@ -27,24 +29,24 @@ base mixin DiagnoseProjectSupport
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
-              description: 'Operation (bundle_size, deep_links).',
+              description: 'Operation (bundleSize, deepLinks).',
             ),
-            'build_target': StringSchema(
+            'buildTarget': StringSchema(
               description:
                   'Target format (apk, appbundle, ios, web; default: apk).',
             ),
-            'target_platform': StringSchema(
+            'targetPlatform': StringSchema(
               description:
                   'Target platform (e.g. android-arm64). Android only.',
             ),
-            'analysis_path': StringSchema(
+            'analysisPath': StringSchema(
               description: 'Optional path to code-size JSON file.',
             ),
             'platform': StringSchema(
               description:
-                  'Platform for deep link checks (android, ios; required for action: deep_links).',
+                  'Platform for deep link checks (android, ios; required for action: deepLinks).',
             ),
-            'build_variant': StringSchema(
+            'buildVariant': StringSchema(
               description: 'Android build variant (debug, release).',
             ),
             'configuration': StringSchema(
@@ -68,14 +70,18 @@ base mixin DiagnoseProjectSupport
 
   /// Consolidated project diagnostics handler.
   Future<CallToolResult> _handleDiagnoseProject(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
+    final actionStr = req.requireArg<String>('action');
+    final action = DiagnoseAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        DiagnoseAction.values,
+        'diagnose_project',
+      );
+    }
     return switch (action) {
-      'bundle_size' => _handleAnalyzeBundleSize(req),
-      'deep_links' => _handleValidateDeepLinks(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown action: $action')],
-          isError: true,
-        ),
+      DiagnoseAction.bundleSize => _handleAnalyzeBundleSize(req),
+      DiagnoseAction.deepLinks => _handleValidateDeepLinks(req),
     };
   }
 
@@ -113,15 +119,15 @@ base mixin DiagnoseProjectSupport
       }
     }
 
-    final target = req.arg<String>('build_target') ?? defaultTarget;
-    final targetPlatform = req.arg<String>('target_platform') ??
+    final target = req.arg<String>('buildTarget') ?? defaultTarget;
+    final targetPlatform = req.arg<String>('targetPlatform') ??
         ((target == 'apk' || target == 'appbundle') ? 'android-arm64' : '');
 
     stderr.writeln(
         '[mcp:bundle_size] Analyzing bundle size, target=$target, platform=$targetPlatform');
 
     File? sizeFile;
-    final analysisPath = req.arg<String>('analysis_path');
+    final analysisPath = req.arg<String>('analysisPath');
 
     if (analysisPath != null && analysisPath.isNotEmpty) {
       if (analysisPath.contains('..') || analysisPath.contains('\x00')) {
@@ -291,7 +297,7 @@ base mixin DiagnoseProjectSupport
       } else if (value is num) {
         leafComponents.add({
           'name': name,
-          'size_bytes': value.toInt(),
+          'sizeBytes': value.toInt(),
         });
       }
     }
@@ -300,10 +306,10 @@ base mixin DiagnoseProjectSupport
 
     // Sort by size descending
     leafComponents.sort(
-        (a, b) => (b['size_bytes'] as int).compareTo(a['size_bytes'] as int));
+        (a, b) => (b['sizeBytes'] as int).compareTo(a['sizeBytes'] as int));
 
     final totalSizeBytes = leafComponents.fold<int>(
-        0, (sum, item) => sum + (item['size_bytes'] as int));
+        0, (sum, item) => sum + (item['sizeBytes'] as int));
 
     final md =
         StringBuffer('Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
@@ -321,7 +327,7 @@ base mixin DiagnoseProjectSupport
 
     final limit = (req.arg<num>('limit'))?.toInt() ?? 25;
     for (final item in leafComponents.take(limit)) {
-      final bytes = item['size_bytes'] as int;
+      final bytes = item['sizeBytes'] as int;
       final sizeStr = formatBytes(bytes);
       final pct = totalSizeBytes > 0 ? (bytes / totalSizeBytes) * 100 : 0.0;
       md.writeln(
@@ -337,8 +343,8 @@ base mixin DiagnoseProjectSupport
       title: 'Application Bundle Size Details',
       markdownBody: md.toString(),
       structuredData: {
-        'file_analyzed': sizeFile.path,
-        'total_bytes': totalSizeBytes,
+        'fileAnalyzed': sizeFile.path,
+        'totalBytes': totalSizeBytes,
         'components': leafComponents.take(limit).toList(),
       },
     );
@@ -369,7 +375,7 @@ base mixin DiagnoseProjectSupport
       );
     }
 
-    final buildVariant = req.arg<String>('build_variant');
+    final buildVariant = req.arg<String>('buildVariant');
     final configuration = req.arg<String>('configuration');
     final target = req.arg<String>('target') ?? 'Runner';
 
@@ -379,7 +385,7 @@ base mixin DiagnoseProjectSupport
         (buildVariant.startsWith('-') ||
             !alphaNumericHyphenUnderscore.hasMatch(buildVariant))) {
       return CallToolResult(
-        content: [TextContent(text: 'Invalid build_variant value.')],
+        content: [TextContent(text: 'Invalid buildVariant value.')],
         isError: true,
       );
     }
@@ -473,7 +479,7 @@ base mixin DiagnoseProjectSupport
       structuredData: {
         'platform': platform.value,
         'arguments': args,
-        'exit_code': result.exitCode,
+        'exitCode': result.exitCode,
         'stdout': output,
         'stderr': result.stderr.toString(),
       },

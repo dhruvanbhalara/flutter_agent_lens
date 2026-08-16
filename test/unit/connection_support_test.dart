@@ -64,7 +64,7 @@ void main() {
       );
       expect(result.isError, isTrue);
       expect((result.content.first as TextContent).text,
-          contains('Unknown action:'));
+          contains('Unknown connection action'));
     });
 
     test(

@@ -41,10 +41,9 @@ final class NetworkWatchManager {
       'method': reqMap['method']?.toString() ?? 'GET',
       'uri': reqMap['uri']?.toString() ?? 'unknown',
       'statusCode': responseData?['statusCode'] ?? 'Pending',
-      'duration_ms': durationVal,
-      'request_size_bytes':
-          (requestData?['contentLength'] as num?)?.toInt() ?? 0,
-      'response_size_bytes':
+      'durationMs': durationVal,
+      'requestSizeBytes': (requestData?['contentLength'] as num?)?.toInt() ?? 0,
+      'responseSizeBytes':
           (responseData?['contentLength'] as num?)?.toInt() ?? 0,
     };
   }

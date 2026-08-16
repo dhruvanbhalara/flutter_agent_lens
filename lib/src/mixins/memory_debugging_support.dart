@@ -3,11 +3,13 @@ import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/memory_action.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:flutter_agent_lens/src/utils/string_utils.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for analyzing heap usage, tracking class instances,
@@ -37,49 +39,49 @@ base mixin MemoryDebuggingSupport
         description:
             'Manage memory snapshots, heap diffs, class memory audits, retaining path traces, '
             'GC triggers, GC streams, memory timelines, and memory explanations. '
-            'Actions: get_snapshot (heap overview), save (named snapshot), compare (diff two snapshots), '
-            'list (show saved), audit_leak (inspect class instances), diff_allocations (delta heap over time), '
-            'get_referrers (trace object retaining path), force_gc (trigger GC & report freed memory), '
-            'start_gc_stream (subscribe to GC events), stop_gc_stream (end GC subscription & get events), '
-            'get_memory_timeline (record RSS/heap/GC over duration), watch_gc_pressure (monitor GC frequency), '
-            'explain_memory_breakdown (plain English RSS/heap/external/raster overview).',
+            'Actions: getSnapshot (heap overview), save (named snapshot), compare (diff two snapshots), '
+            'list (show saved), auditLeak (inspect class instances), diffAllocations (delta heap over time), '
+            'getReferrers (trace object retaining path), forceGc (trigger GC & report freed memory), '
+            'startGcStream (subscribe to GC events), stopGcStream (end GC subscription & get events), '
+            'getMemoryTimeline (record RSS/heap/GC over duration), watchGcPressure (monitor GC frequency), '
+            'explainMemoryBreakdown (plain English RSS/heap/external/raster overview).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
               description:
-                  'The memory action: get_snapshot, save, compare, list, audit_leak, diff_allocations, '
-                  'get_referrers, force_gc, start_gc_stream, stop_gc_stream, get_memory_timeline, '
-                  'watch_gc_pressure, explain_memory_breakdown.',
+                  'The memory action: getSnapshot, save, compare, list, auditLeak, diffAllocations, '
+                  'getReferrers, forceGc, startGcStream, stopGcStream, getMemoryTimeline, '
+                  'watchGcPressure, explainMemoryBreakdown.',
             ),
             'name': StringSchema(description: 'Snapshot name (for save).'),
             'before':
                 StringSchema(description: 'Before snapshot (for compare).'),
             'after': StringSchema(description: 'After snapshot (for compare).'),
-            'forceGC': BooleanSchema(
+            'forceGc': BooleanSchema(
                 description:
-                    'Force GC before action (default: false for get_snapshot, true for diff_allocations).'),
+                    'Force GC before action (default: false for getSnapshot, true for diffAllocations).'),
             'topN': IntegerSchema(description: 'Top N classes (default: 20).'),
-            'class_name': StringSchema(
+            'className': StringSchema(
               description:
-                  'Name of the class to inspect (required for audit_leak, e.g. _MyHomePageState).',
+                  'Name of the class to inspect (required for auditLeak, e.g. _MyHomePageState).',
             ),
             'limit': limitSchema(defaultValue: 100),
-            'duration_seconds': durationSchema(),
+            'durationSeconds': durationSchema(),
             'expression': StringSchema(
               description:
-                  'Optional expression to execute during diff_allocations.',
+                  'Optional expression to execute during diffAllocations.',
             ),
-            'object_id': StringSchema(
+            'objectId': StringSchema(
               description:
-                  'The VM ID of the object to trace (required for get_referrers).',
+                  'The VM ID of the object to trace (required for getReferrers).',
             ),
             'includeRawResponse': BooleanSchema(
               description:
-                  'Whether to include the raw response in structured data (for get_referrers).',
+                  'Whether to include the raw response in structured data (for getReferrers).',
             ),
-            'filter_zero_deltas': BooleanSchema(
+            'filterZeroDeltas': BooleanSchema(
               description:
-                  'Whether to filter out zero-delta classes (for diff_allocations).',
+                  'Whether to filter out zero-delta classes (for diffAllocations).',
             ),
           },
           required: ['action'],
@@ -184,7 +186,7 @@ base mixin MemoryDebuggingSupport
   /// Handles the audit_class_memory_leak tool request.
   Future<CallToolResult> _handleAuditClassMemoryLeak(
       CallToolRequest req) async {
-    final className = req.requireArg<String>('class_name');
+    final className = req.requireArg<String>('className');
     final limit = (req.arg<num>('limit'))?.toInt() ?? 100;
     stderr.writeln(
         '[mcp:audit_memory] Auditing class: $className (limit=$limit)');
@@ -212,7 +214,7 @@ base mixin MemoryDebuggingSupport
 
     final instancesResponse =
         await vmService!.getInstances(isolateId!, classRef.id!, limit);
-    final instances = instancesResponse.instances ?? [];
+    final instances = instancesResponse.instances ?? const <InstanceRef>[];
 
     final reports = <Map<String, dynamic>>[];
     final mdBuffer = StringBuffer();
@@ -261,15 +263,15 @@ base mixin MemoryDebuggingSupport
             }
           }
           retainingPathResults.add({
-            'instance_id': instanceId,
+            'instanceId': instanceId,
             'mounted': false,
-            'retaining_path': pathElements,
+            'retainingPath': pathElements,
           });
         } catch (e) {
           retainingPathResults.add({
-            'instance_id': instanceId,
+            'instanceId': instanceId,
             'mounted': false,
-            'retaining_path': ['Error retrieving retaining path: $e'],
+            'retainingPath': ['Error retrieving retaining path: $e'],
           });
         }
       }
@@ -284,11 +286,11 @@ base mixin MemoryDebuggingSupport
           'Warning: Detected ${reports.length} leaked instances for `$className`!');
       for (var i = 0; i < reports.length; i++) {
         mdBuffer.writeln(
-            '\n#### Leaked Instance #${i + 1} (${reports[i]['instance_id']})');
+            '\n#### Leaked Instance #${i + 1} (${reports[i]['instanceId']})');
         mdBuffer.writeln(
             '- Disposed State: mounted == false but retained in memory.');
         mdBuffer.writeln('- Retention Path:');
-        for (final node in reports[i]['retaining_path'] as List<String>) {
+        for (final node in reports[i]['retainingPath'] as List<String>) {
           mdBuffer.writeln('  - $node');
         }
       }
@@ -298,10 +300,10 @@ base mixin MemoryDebuggingSupport
       title: 'Memory Leak Audit: $className',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'class_name': className,
-        'total_instances': instances.length,
+        'className': className,
+        'totalInstances': instances.length,
         'instances': instances.map((i) => i.id).whereType<String>().toList(),
-        'leaked_count': reports.length,
+        'leakedCount': reports.length,
         'leaks': reports,
       },
     );
@@ -383,10 +385,9 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the diff_heap_allocations tool request.
   Future<CallToolResult> _handleDiffHeapAllocations(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final duration = (req.arg<num>('durationSeconds'))?.toInt() ?? 3;
     final expression = req.arg<String>('expression');
-    final forceGc =
-        req.arg<bool>('force_gc') ?? req.arg<bool>('forceGC') ?? true;
+    final forceGc = req.arg<bool>('forceGc') ?? true;
 
     stderr.writeln(
         '[mcp:diff_heap] Starting heap profiling (duration=${duration}s, forceGc=$forceGc)');
@@ -445,7 +446,7 @@ base mixin MemoryDebuggingSupport
       final instanceDelta = currentInstances - baselineInstances;
       final bytesDelta = currentBytes - baselineBytes;
 
-      final filterZeroDeltas = req.arg<bool>('filter_zero_deltas') ?? false;
+      final filterZeroDeltas = req.arg<bool>('filterZeroDeltas') ?? false;
       if (filterZeroDeltas && instanceDelta == 0 && bytesDelta == 0) {
         continue;
       }
@@ -459,18 +460,18 @@ base mixin MemoryDebuggingSupport
         }
         deltas.add({
           'class': className,
-          'instances_before': baselineInstances,
-          'instances_after': currentInstances,
-          'instances_delta': instanceDelta,
-          'bytes_before': baselineBytes,
-          'bytes_after': currentBytes,
-          'bytes_delta': bytesDelta,
+          'instancesBefore': baselineInstances,
+          'instancesAfter': currentInstances,
+          'instancesDelta': instanceDelta,
+          'bytesBefore': baselineBytes,
+          'bytesAfter': currentBytes,
+          'bytesDelta': bytesDelta,
         });
       }
     }
 
     final limit = (req.arg<num>('limit'))?.toInt() ?? 20;
-    _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
+    _sortDeltas(deltas, 'instancesDelta', 'bytesDelta');
 
     final md = StringBuffer();
     writeSamplingWarningIfInterrupted(
@@ -486,9 +487,9 @@ base mixin MemoryDebuggingSupport
       title: 'Memory Delta Analysis',
       markdownBody: md.toString(),
       structuredData: {
-        'duration_seconds': duration,
-        'expression_run': expression,
-        'force_gc': forceGc,
+        'durationSeconds': duration,
+        'expressionRun': expression,
+        'forceGc': forceGc,
         'deltas': deltas.take(limit).toList(),
       },
     );
@@ -496,7 +497,7 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the get_object_referrers tool request.
   Future<CallToolResult> _handleGetObjectReferrers(CallToolRequest req) async {
-    final objectId = req.requireArg<String>('object_id');
+    final objectId = req.requireArg<String>('objectId');
     final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
     final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     stderr.writeln(
@@ -533,10 +534,10 @@ base mixin MemoryDebuggingSupport
       title: 'Retaining Path / Leak Trace Report',
       markdownBody: md.toString(),
       structuredData: {
-        'object_id': objectId,
-        'path_length': pathElements.length,
-        'retaining_path': pathElements,
-        if (includeRawResponse) 'raw_response': retainingPath.json,
+        'objectId': objectId,
+        'pathLength': pathElements.length,
+        'retainingPath': pathElements,
+        if (includeRawResponse) 'rawResponse': retainingPath.json,
       },
     );
   }
@@ -544,7 +545,7 @@ base mixin MemoryDebuggingSupport
   /// Handles the save_snapshot tool request.
   Future<CallToolResult> _handleSaveSnapshot(CallToolRequest req) async {
     final name = req.requireArg<String>('name');
-    final forceGc = req.arg<bool>('forceGC') ?? true;
+    final forceGc = req.arg<bool>('forceGc') ?? true;
 
     final snapshot = await _takeSnapshot(name, forceGc);
     final maxSnapshots = req.intArg('limit') ?? 10;
@@ -698,9 +699,9 @@ base mixin MemoryDebuggingSupport
       structuredData: {
         'before': before,
         'after': after,
-        'heap_diff_bytes': heapDiff,
-        'heap_pct_change': _pctChange(snap1.heapUsage, snap2.heapUsage),
-        'time_diff_seconds': double.tryParse(timeDiffS) ?? 0.0,
+        'heapDiffBytes': heapDiff,
+        'heapPctChange': _pctChange(snap1.heapUsage, snap2.heapUsage),
+        'timeDiffSeconds': double.tryParse(timeDiffS) ?? 0.0,
         'grew': grew.take(topN).toList(),
         'shrank': shrank.take(topN).toList(),
       },
@@ -780,7 +781,7 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the get_memory_snapshot tool request.
   Future<CallToolResult> _handleGetMemorySnapshot(CallToolRequest req) async {
-    final forceGc = req.arg<bool>('forceGC') ?? false;
+    final forceGc = req.arg<bool>('forceGc') ?? false;
     final topN = (req.arg<num>('topN'))?.toInt() ?? 20;
 
     stderr.writeln(
@@ -887,7 +888,7 @@ base mixin MemoryDebuggingSupport
       'heapCapacity': heapCapacity,
       'externalUsage': externalUsage,
       'heapUtilization': heapUtilization,
-      'top_classes': sortedBySizeFiltered
+      'topClasses': sortedBySizeFiltered
           .take(topN)
           .map((m) => {
                 'class': m.classRef?.name ?? 'Unknown',
@@ -895,7 +896,7 @@ base mixin MemoryDebuggingSupport
                 'instances': m.instancesCurrent ?? 0,
               })
           .toList(),
-      'top_instances': sortedByInstancesFiltered
+      'topInstances': sortedByInstancesFiltered
           .take(10)
           .map((m) => {
                 'class': m.classRef?.name ?? 'Unknown',
@@ -903,7 +904,7 @@ base mixin MemoryDebuggingSupport
                 'instances': m.instancesCurrent ?? 0,
               })
           .toList(),
-      'app_classes': appClasses
+      'appClasses': appClasses
           .take(20)
           .map((m) => {
                 'class': m.classRef?.name ?? 'Unknown',
@@ -945,8 +946,8 @@ base mixin MemoryDebuggingSupport
         '| Class | Instances Delta | Bytes Delta | Before (Count / Size) | After (Count / Size) |');
     md.writeln('| :--- | :--- | :--- | :--- | :--- |');
     for (final d in deltas.take(limit)) {
-      final instDelta = d['instances_delta'] as int;
-      final bytesDelta = d['bytes_delta'] as int;
+      final instDelta = d['instancesDelta'] as int;
+      final bytesDelta = d['bytesDelta'] as int;
       final instDeltaStr = instDelta > 0 ? '+$instDelta' : '$instDelta';
       final byteDeltaStr = bytesDelta > 0
           ? '+${formatBytes(bytesDelta)}'
@@ -954,8 +955,8 @@ base mixin MemoryDebuggingSupport
 
       md.writeln(
         '| ${d['class']} | $instDeltaStr | $byteDeltaStr | '
-        '${d['instances_before']} / ${formatBytes(d['bytes_before'] as int)} | '
-        '${d['instances_after']} / ${formatBytes(d['bytes_after'] as int)} |',
+        '${d['instancesBefore']} / ${formatBytes(d['bytesBefore'] as int)} | '
+        '${d['instancesAfter']} / ${formatBytes(d['bytesAfter'] as int)} |',
       );
     }
     if (deltas.length > limit) {
@@ -985,15 +986,15 @@ base mixin MemoryDebuggingSupport
           '| **External Usage** | ${formatBytes(before.externalUsage)} | ${formatBytes(after.externalUsage)} | ${formatBytes(after.externalUsage - before.externalUsage)} |');
 
     final data = {
-      'action': 'force_gc',
-      'heap_before': before.heapUsage,
-      'heap_after': after.heapUsage,
-      'freed_bytes': freedBytes,
-      'freed_percentage': freedPct,
-      'capacity_before': before.heapCapacity,
-      'capacity_after': after.heapCapacity,
-      'external_before': before.externalUsage,
-      'external_after': after.externalUsage,
+      'action': 'forceGc',
+      'heapBefore': before.heapUsage,
+      'heapAfter': after.heapUsage,
+      'freedBytes': freedBytes,
+      'freedPercentage': freedPct,
+      'capacityBefore': before.heapCapacity,
+      'capacityAfter': after.heapCapacity,
+      'externalBefore': before.externalUsage,
+      'externalAfter': after.externalUsage,
     };
 
     return serializeDualFormat(
@@ -1011,9 +1012,9 @@ base mixin MemoryDebuggingSupport
       markdownBody:
           'Now collecting garbage collection events on stream `${EventStreams.kGC}`.',
       structuredData: {
-        'action': 'start_gc_stream',
+        'action': 'startGcStream',
         'status': 'active',
-        'start_timestamp': _gcStreamStartTime,
+        'startTimestamp': _gcStreamStartTime,
       },
     );
   }
@@ -1043,10 +1044,10 @@ base mixin MemoryDebuggingSupport
     }
 
     final data = {
-      'action': 'stop_gc_stream',
+      'action': 'stopGcStream',
       'status': 'stopped',
-      'duration_ms': durationMs,
-      'total_events': count,
+      'durationMs': durationMs,
+      'totalEvents': count,
       'events': returnedEvents,
     };
 
@@ -1061,7 +1062,7 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the get_memory_timeline tool request.
   Future<CallToolResult> _handleGetMemoryTimeline(CallToolRequest req) async {
-    final rawDuration = req.arg<num>('duration_seconds')?.toInt() ?? 5;
+    final rawDuration = req.arg<num>('durationSeconds')?.toInt() ?? 5;
     final duration = rawDuration.clamp(1, 60);
 
     final wasActive = _gcStreamActive;
@@ -1135,9 +1136,9 @@ base mixin MemoryDebuggingSupport
     }
 
     final data = {
-      'action': 'get_memory_timeline',
-      'duration_seconds': duration,
-      'sample_count': samples.length,
+      'action': 'getMemoryTimeline',
+      'durationSeconds': duration,
+      'sampleCount': samples.length,
       'samples': samples.map((s) => s.toMap()).toList(),
     };
 
@@ -1150,7 +1151,7 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the watch_gc_pressure tool request.
   Future<CallToolResult> _handleWatchGcPressure(CallToolRequest req) async {
-    final rawDuration = req.arg<num>('duration_seconds')?.toInt() ?? 10;
+    final rawDuration = req.arg<num>('durationSeconds')?.toInt() ?? 10;
     final duration = rawDuration.clamp(1, 60);
     final limit = req.arg<num>('limit')?.toInt() ?? 50;
 
@@ -1224,13 +1225,13 @@ base mixin MemoryDebuggingSupport
     final returnedEvents = newEvents.take(limit).toList();
 
     final data = {
-      'action': 'watch_gc_pressure',
-      'duration_seconds': duration,
-      'pressure_level': pressureLevel,
-      'gc_count': gcCount,
-      'gc_frequency_per_sec': gcPerSec,
-      'avg_interval_seconds': avgInterval,
-      'gc_type_distribution': typeCounts,
+      'action': 'watchGcPressure',
+      'durationSeconds': duration,
+      'pressureLevel': pressureLevel,
+      'gcCount': gcCount,
+      'gcFrequencyPerSec': gcPerSec,
+      'avgIntervalSeconds': avgInterval,
+      'gcTypeDistribution': typeCounts,
       'events': returnedEvents,
     };
 
@@ -1289,12 +1290,12 @@ base mixin MemoryDebuggingSupport
     }
 
     final data = {
-      'action': 'explain_memory_breakdown',
-      'rss_bytes': rss,
-      'heap_used_bytes': heap.heapUsage,
-      'heap_capacity_bytes': heap.heapCapacity,
-      'external_bytes': heap.externalUsage,
-      if (rasterBytes != null) 'raster_cache_bytes': rasterBytes,
+      'action': 'explainMemoryBreakdown',
+      'rssBytes': rss,
+      'heapUsedBytes': heap.heapUsage,
+      'heapCapacityBytes': heap.heapCapacity,
+      'externalBytes': heap.externalUsage,
+      if (rasterBytes != null) 'rasterCacheBytes': rasterBytes,
     };
 
     return serializeDualFormat(
@@ -1306,28 +1307,33 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the memory composite tool request.
   Future<CallToolResult> _handleMemory(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
-    if (action != 'list' && (vmService == null || isolateId == null)) {
+    final actionStr = req.requireArg<String>('action');
+    final action = MemoryAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        MemoryAction.values,
+        'memory',
+      );
+    }
+    if (action != MemoryAction.list &&
+        (vmService == null || isolateId == null)) {
       return notConnected();
     }
     return switch (action) {
-      'get_snapshot' => _handleGetMemorySnapshot(req),
-      'save' => _handleSaveSnapshot(req),
-      'compare' => _handleCompareSnapshots(req),
-      'list' => _handleListSnapshots(req),
-      'audit_leak' => _handleAuditClassMemoryLeak(req),
-      'diff_allocations' => _handleDiffHeapAllocations(req),
-      'get_referrers' => _handleGetObjectReferrers(req),
-      'force_gc' => _handleForceGc(req),
-      'start_gc_stream' => _handleStartGcStream(req),
-      'stop_gc_stream' => _handleStopGcStream(req),
-      'get_memory_timeline' => _handleGetMemoryTimeline(req),
-      'watch_gc_pressure' => _handleWatchGcPressure(req),
-      'explain_memory_breakdown' => _handleExplainMemoryBreakdown(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown memory action: $action')],
-          isError: true,
-        ),
+      MemoryAction.getSnapshot => _handleGetMemorySnapshot(req),
+      MemoryAction.save => _handleSaveSnapshot(req),
+      MemoryAction.compare => _handleCompareSnapshots(req),
+      MemoryAction.list => _handleListSnapshots(req),
+      MemoryAction.auditLeak => _handleAuditClassMemoryLeak(req),
+      MemoryAction.diffAllocations => _handleDiffHeapAllocations(req),
+      MemoryAction.getReferrers => _handleGetObjectReferrers(req),
+      MemoryAction.forceGc => _handleForceGc(req),
+      MemoryAction.startGcStream => _handleStartGcStream(req),
+      MemoryAction.stopGcStream => _handleStopGcStream(req),
+      MemoryAction.getMemoryTimeline => _handleGetMemoryTimeline(req),
+      MemoryAction.watchGcPressure => _handleWatchGcPressure(req),
+      MemoryAction.explainMemoryBreakdown => _handleExplainMemoryBreakdown(req),
     };
   }
 }

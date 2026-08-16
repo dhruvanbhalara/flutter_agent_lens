@@ -4,9 +4,11 @@ import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/enums/rebuild_tracking_action.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
 
@@ -38,18 +40,18 @@ base mixin RebuildTrackingSupport
         name: McpTool.rebuildTracking.name,
         description: 'Track widget rebuild frequencies. '
             'Actions: start (begin tracking), stop (end and get report), '
-            'get_counts (one-shot rebuild count snapshot).',
+            'getCounts (one-shot rebuild count snapshot).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
-              description: 'Action to perform: start, stop, get_counts.',
+              description: 'Action to perform: start, stop, getCounts.',
             ),
-            'duration_seconds': durationSchema(),
+            'durationSeconds': durationSchema(),
             'topN': IntegerSchema(
               description:
                   'Number of top rebuilding widgets to list (default: 30).',
             ),
-            'exclude_flutter_widgets': BooleanSchema(
+            'excludeFlutterWidgets': BooleanSchema(
               description:
                   'Whether to exclude built-in Flutter/SDK widgets (default: true).',
             ),
@@ -113,9 +115,9 @@ base mixin RebuildTrackingSupport
   }
 
   Future<CallToolResult> _handleWidgetRebuildCounts(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    final duration = (req.arg<num>('durationSeconds'))?.toInt() ?? 3;
     final topN = (req.arg<num>('topN'))?.toInt() ?? 30;
-    final excludeBuiltIn = req.arg<bool>('exclude_flutter_widgets') ?? true;
+    final excludeBuiltIn = req.arg<bool>('excludeFlutterWidgets') ?? true;
     final projectName = excludeBuiltIn ? await getProjectPackageName() : null;
 
     stderr.writeln(
@@ -213,7 +215,7 @@ base mixin RebuildTrackingSupport
     mdBuffer.writeln('Top Rebuilding Widgets\n');
     if (excludeBuiltIn) {
       mdBuffer.writeln(
-          '_Note: Built-in Flutter/SDK widgets excluded. Pass `exclude_flutter_widgets: false` to include them._\n');
+          '_Note: Built-in Flutter/SDK widgets excluded. Pass `excludeFlutterWidgets: false` to include them._\n');
     }
     if (widgets.isEmpty) {
       mdBuffer.writeln(
@@ -231,8 +233,8 @@ base mixin RebuildTrackingSupport
       title: 'Widget Rebuilt Counts Analysis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'total_recorded_widgets': widgetCounts.length,
-        'filtered_count': widgets.length,
+        'totalRecordedWidgets': widgetCounts.length,
+        'filteredCount': widgets.length,
         'widgets': widgets.take(topN).toList(),
       },
     );
@@ -318,7 +320,7 @@ base mixin RebuildTrackingSupport
     }
 
     final topN = (req.arg<num>('topN'))?.toInt() ?? 30;
-    final excludeBuiltIn = req.arg<bool>('exclude_flutter_widgets') ?? true;
+    final excludeBuiltIn = req.arg<bool>('excludeFlutterWidgets') ?? true;
     final projectName = excludeBuiltIn ? await getProjectPackageName() : null;
 
     stderr.writeln(
@@ -441,10 +443,10 @@ base mixin RebuildTrackingSupport
       title: 'Widget Rebuild Report',
       markdownBody: output.join('\n'),
       structuredData: {
-        'duration_seconds': double.tryParse(durationSec) ?? 0.0,
-        'total_recorded_widgets': rebuildCounts.length,
-        'filtered_count': widgets.length,
-        'total_rebuilds': totalRebuilds,
+        'durationSeconds': double.tryParse(durationSec) ?? 0.0,
+        'totalRecordedWidgets': rebuildCounts.length,
+        'filteredCount': widgets.length,
+        'totalRebuilds': totalRebuilds,
         'rebuilds': widgets.take(topN).toList(),
       },
     );
@@ -542,17 +544,19 @@ base mixin RebuildTrackingSupport
 
   /// Handles the rebuild_tracking composite tool request.
   Future<CallToolResult> _handleRebuildTracking(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
+    final actionStr = req.requireArg<String>('action');
+    final action = RebuildTrackingAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        RebuildTrackingAction.values,
+        'rebuild_tracking',
+      );
+    }
     return switch (action) {
-      'start' => _handleStartTrackingRebuilds(req),
-      'stop' => _handleStopTrackingRebuilds(req),
-      'get_counts' => _handleWidgetRebuildCounts(req),
-      _ => CallToolResult(
-          content: [
-            TextContent(text: 'Unknown rebuild tracking action: $action')
-          ],
-          isError: true,
-        ),
+      RebuildTrackingAction.start => _handleStartTrackingRebuilds(req),
+      RebuildTrackingAction.stop => _handleStopTrackingRebuilds(req),
+      RebuildTrackingAction.getCounts => _handleWidgetRebuildCounts(req),
     };
   }
 }

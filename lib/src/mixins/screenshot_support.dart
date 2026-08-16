@@ -7,6 +7,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/enums/screenshot_types.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
@@ -18,31 +19,31 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       Tool(
         name: McpTool.screenshot.name,
         description: 'Manage application screenshots and visual comparisons. '
-            'Actions: take (capture a screenshot), capture_baseline (save a reference layout), '
+            'Actions: take (capture a screenshot), captureBaseline (save a reference layout), '
             'compare (perform a pixel-diff against a baseline).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
               description:
-                  'The screenshot action to perform: take, capture_baseline, compare.',
+                  'The screenshot action to perform: take, captureBaseline, compare.',
             ),
-            'baseline_name': StringSchema(
+            'baselineName': StringSchema(
               description:
-                  'The filename prefix for the baseline screenshot (required for capture_baseline and compare).',
+                  'The filename prefix for the baseline screenshot (required for captureBaseline and compare).',
             ),
             'threshold': NumberSchema(
               description:
                   'The similarity pass threshold from 0.0 to 1.0 (default: 0.98, for compare).',
             ),
-            'screenshot_type': StringSchema(
+            'screenshotType': StringSchema(
               description:
                   'The format/method to capture (device = native screenshot, skia = Skia Picture via VM service; default: device).',
             ),
-            'device_id': StringSchema(
+            'deviceId': StringSchema(
               description:
                   'Target device ID or name if multiple devices are connected (prefixes allowed).',
             ),
-            'output_path': StringSchema(
+            'outputPath': StringSchema(
               description:
                   'Optional destination file path (only applicable for action: take).',
             ),
@@ -60,14 +61,20 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Delegates screenshot actions to respective handlers.
   Future<CallToolResult> _handleScreenshot(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
+    final actionStr = req.requireArg<String>('action');
+    final action = ScreenshotAction.fromString(actionStr);
+    if (action == null) {
+      return unknownActionError(
+        actionStr,
+        ScreenshotAction.values,
+        'screenshot',
+      );
+    }
     return switch (action) {
-      'take' => _handleTakeScreenshot(req),
-      'capture_baseline' || 'compare' => _handleCompareLayoutScreenshots(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown screenshot action: $action')],
-          isError: true,
-        ),
+      ScreenshotAction.take => _handleTakeScreenshot(req),
+      ScreenshotAction.captureBaseline ||
+      ScreenshotAction.compare =>
+        _handleCompareLayoutScreenshots(req),
     };
   }
 
@@ -86,13 +93,13 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     }
 
-    final baselineName = req.requireArg<String>('baseline_name');
+    final baselineName = req.requireArg<String>('baselineName');
     if (!RegExp(r'^[a-zA-Z0-9_\-]+$').hasMatch(baselineName)) {
       return CallToolResult(
         content: [
           TextContent(
             text:
-                'Invalid baseline_name: Only alphanumeric characters, underscores, and hyphens are allowed.',
+                'Invalid baselineName: Only alphanumeric characters, underscores, and hyphens are allowed.',
           )
         ],
         isError: true,
@@ -100,15 +107,13 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     }
     final actionStr = req.requireArg<String>('action');
     final threshold = (req.arg<num>('threshold'))?.toDouble() ?? 0.98;
-    final screenshotTypeStr = req.arg<String>('screenshot_type');
-    final deviceId = req.arg<String>('device_id');
+    final screenshotTypeStr = req.arg<String>('screenshotType');
+    final deviceId = req.arg<String>('deviceId');
 
-    final ScreenshotAction action;
-    try {
-      action = ScreenshotAction.fromString(actionStr);
-    } catch (e) {
+    final action = ScreenshotAction.fromString(actionStr);
+    if (action == null) {
       return CallToolResult(
-        content: [TextContent(text: e.toString())],
+        content: [TextContent(text: 'Invalid screenshot action: $actionStr')],
         isError: true,
       );
     }
@@ -163,7 +168,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           content: [
             TextContent(
                 text:
-                    'Baseline screenshot not found for "$baselineName". Run capture_baseline first.')
+                    'Baseline screenshot not found for "$baselineName". Run captureBaseline first.')
           ],
           isError: true,
         );
@@ -260,15 +265,15 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         title: 'Visual Layout Comparison Report',
         markdownBody: md.toString(),
         structuredData: {
-          'baseline_name': baselineName,
-          'similarity_ratio': similarity,
+          'baselineName': baselineName,
+          'similarityRatio': similarity,
           'threshold': threshold,
           'passed': passed,
-          'total_pixels': totalPixels,
-          'matching_pixels': matchingPixels,
-          'baseline_path': baselinePath,
-          'current_path': currentPath,
-          'diff_path': diffPath,
+          'totalPixels': totalPixels,
+          'matchingPixels': matchingPixels,
+          'baselinePath': baselinePath,
+          'currentPath': currentPath,
+          'diffPath': diffPath,
         },
       );
     }
@@ -287,9 +292,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     }
 
-    final screenshotTypeStr = req.arg<String>('screenshot_type');
-    final deviceId = req.arg<String>('device_id');
-    final outputPath = req.arg<String>('output_path');
+    final screenshotTypeStr = req.arg<String>('screenshotType');
+    final deviceId = req.arg<String>('deviceId');
+    final outputPath = req.arg<String>('outputPath');
 
     final screenshotType = ScreenshotType.fromString(screenshotTypeStr);
 

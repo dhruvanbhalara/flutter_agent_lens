@@ -1,14 +1,19 @@
+import 'package:flutter_agent_lens/src/enums/action_enum.dart';
+
 /// The visual screenshot comparison action.
-enum ScreenshotAction {
+enum ScreenshotAction implements ActionEnum {
+  /// Capture an on-demand screenshot.
+  take('take'),
+
   /// Capture baseline screenshot.
-  captureBaseline('capture_baseline'),
+  captureBaseline('captureBaseline'),
 
   /// Compare visual screen with baseline screenshot.
   compare('compare');
 
   const ScreenshotAction(this.value);
 
-  /// The raw String identifier of the action.
+  @override
   final String value;
 
   static final Map<String, ScreenshotAction> _lookup = {
@@ -16,13 +21,10 @@ enum ScreenshotAction {
   };
 
   /// Resolves the action from a raw string.
-  /// Throws an [ArgumentError] if the action is unsupported.
-  static ScreenshotAction fromString(String val) {
-    final match = _lookup[val.toLowerCase()];
-    if (match == null) {
-      throw ArgumentError('Unsupported action: $val');
-    }
-    return match;
+  /// Returns `null` if the action is null or unsupported.
+  static ScreenshotAction? fromString(String? val) {
+    if (val == null) return null;
+    return _lookup[val.toLowerCase()];
   }
 }
 

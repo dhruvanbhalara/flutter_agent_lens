@@ -58,9 +58,9 @@ This server groups functions into action-based tools to keep the schema footprin
 
 | Tool | Action Option | Description |
 | :--- | :--- | :--- |
-| `connection` | `connect`<br>`connect_dtd`<br>`disconnect` | Connect to the VM Service, Dart Tooling Daemon (DTD), or disconnect. |
+| `connection` | `connect`<br>`connectDtd`<br>`disconnect` | Connect to the VM Service, Dart Tooling Daemon (DTD), or disconnect. |
 | `discover_apps` | *N/A* | Find running Flutter apps on this machine. |
-| `diagnose_project` | `bundle_size`<br>`deep_links` | Run local build size analysis or check platform deep links. |
+| `diagnose_project` | `bundleSize`<br>`deepLinks` | Run local build size analysis or check platform deep links. |
 | `set_response_format`| *N/A* | Choose output format (`markdown` or `json`). |
 
 ### Connected Tools (Requires Active Connection)
@@ -69,57 +69,128 @@ This server groups functions into action-based tools to keep the schema footprin
 | :--- | :--- | :--- | :--- |
 | **App Info** | `get_app_info` | *N/A* | Get VM version details, isolates, and service extensions. |
 | **DTD Integration**| `get_active_location`| *N/A* | Find active editor path and cursor line (requires DTD). |
-| **Memory** | `memory` | `get_snapshot`, `save`, `compare`, `list`, `audit_leak`, `diff_allocations`, `get_referrers`, `force_gc`, `start_gc_stream`, `stop_gc_stream`, `get_memory_timeline`, `watch_gc_pressure`, `explain_memory_breakdown` | Monitor heap, save snapshots, diff allocations, find memory leaks, trigger GC, stream GC events, sample memory timelines, and trace object references. |
-| **Diagnostics** | `profiling` | `start`, `stop`, `get_cpu`, `diagnose_jank` | Track render times, find CPU hotspots, and diagnose UI lag. |
-| | `rebuild_tracking` | `start`, `stop`, `get_counts` | Track widget rebuild cycles and counts. |
-| **Logs & Network** | `network` | `start`, `stop`, `get_profile`, `watch`, `get_request_details` | Capture HTTP network calls, stream requests over duration window, inspect headers and bodies. |
+| **Memory** | `memory` | `getSnapshot`, `save`, `compare`, `list`, `auditLeak`, `diffAllocations`, `getReferrers`, `forceGc`, `startGcStream`, `stopGcStream`, `getMemoryTimeline`, `watchGcPressure`, `explainMemoryBreakdown` | Monitor heap, save snapshots, diff allocations, find memory leaks, trigger GC, stream GC events, sample memory timelines, and trace object references. |
+| **Diagnostics** | `profiling` | `start`, `stop`, `getCpu`, `diagnoseJank` | Track render times, find CPU hotspots, and diagnose UI lag. |
+| | `rebuild_tracking` | `start`, `stop`, `getCounts` | Track widget rebuild cycles and counts. |
+| **Logs & Network** | `network` | `start`, `stop`, `getProfile`, `watch`, `getRequestDetails` | Capture HTTP network calls, stream requests over duration window, inspect headers and bodies. |
 | | `console_logs` | `fetch`, `watch` | Read buffered console logs or stream live stdout/stderr/developer logs. |
 | | `trigger_scroll_gesture` | *N/A* | Scroll the application viewport. |
-| **Widget Inspector** | `widget` | `inspect`, `toggle_selection`, `get_tree` | Find widget tree structure, get layout details, and toggle device inspector. |
+| **Widget Inspector** | `widget` | `inspect`, `toggleSelection`, `getTree` | Find widget tree structure, get layout details, and toggle device inspector. |
 | | `get_navigation_stack` | *N/A* | Inspect active Flutter Router and Navigator route tree, current URL, and depth. |
-| | `debug_flag` | `toggle`, `toggle_package_widgets` | Change debug settings (e.g. paint size) or toggle package widget visibility. |
-| **Screenshots** | `screenshot` | `take`, `capture_baseline`, `compare` | Take screen capture or run visual regression comparisons. |
+| | `debug_flag` | `toggle`, `togglePackageWidgets` | Change debug settings (e.g. paint size) or toggle package widget visibility. |
+| **Screenshots** | `screenshot` | `take`, `captureBaseline`, `compare` | Take screen capture or run visual regression comparisons. |
 | **Hot Reload** | `hot_reload` / `hot_restart`| *N/A* | Trigger hot reload or hot restart. |
 | **Debugger** | `breakpoint` | `add`, `remove` | Add or remove code breakpoints. |
 | | `get_call_stack` | *N/A* | Get active stack frames when application is paused. |
 | | `set_exception_pause_mode`| *N/A* | Choose when to pause on exceptions. |
 | | `evaluate_expression`| *N/A* | Run a Dart expression inside an isolate. |
 
-### Configurable Parameters & Options
+### Tool Parameters Reference
 
-To keep payloads light, these settings are supported:
+#### `connection`
+- `action` (required): `connect` | `connectDtd` | `disconnect`
+- `uri`: WebSocket/HTTP URI of running debug target or DTD
+- `workspaceRoot`: Absolute path to target Flutter project root directory
+- `autoConnect`: boolean (default: `true`)
+- `vmServiceUri`: string alias for VM Service URI
 
-- **Limits (`limit` / `topN`)**:
-  - `limit` in `diagnose_project` (action: `deep_links`): Sets max deep links checked.
-  - `limit` in `network` (action: `get_profile`): Sets the max HTTP requests returned (default: `30`).
-  - `limit` in `profiling` (action: `diagnose_jank`): Sets max frames returned (default: `15`).
-  - `limit` in `profiling` (action: `get_cpu`): Sets max CPU hotspots returned (default: `15`).
-  - `limit` in `diagnose_project` (action: `bundle_size`): Sets max components shown (default: `25`).
-  - `limit` in `memory` (action: `audit_leak`, `get_referrers`, `stop_gc_stream`, `watch_gc_pressure`): Sets max instances, path depth, or returned GC events (default: `50`-`100`).
-  - `duration_seconds` in `console_logs` (`watch`), `network` (`watch`), `memory` (`get_memory_timeline`, `watch_gc_pressure`): Sets sampling or monitoring duration in seconds (default: `5.0`, max: `30`).
-  - `slow_threshold_ms` in `network` (action: `watch`): Threshold in ms to flag slow requests (default: `500`).
-  - `filter` in `console_logs` (action: `watch`): Optional text filter substring for live logs.
-  - `topN` in `memory` (action: `compare`): Sets max class differences returned (default: `10`).
-  - `topN` in `memory` (action: `get_snapshot`): Sets max classes by size (default: `20`).
-  - `topN` in `rebuild_tracking` (action: `stop` / `get_counts`): Sets max rebuild entries shown (default: `30`).
+#### `discover_apps`
+- `autoConnect`: boolean (default: `true`)
+- `workspaceRoot`: Absolute path to target Flutter project root directory
 
+#### `diagnose_project`
+- `action` (required): `bundleSize` | `deepLinks`
+- `buildTarget`: `apk` | `appbundle` | `ios` | `web` (default: `apk`)
+- `targetPlatform`: string (e.g. `android-arm64`)
+- `analysisPath`: string (optional path to size analysis JSON file)
+- `platform`: `android` | `ios` (required for `deepLinks`)
+- `buildVariant`: string (e.g. `release`, `debug`)
+- `limit`: int (max entries, default: `25`)
 
-- **Layout Controls**:
-  - `maxDepth` in `widget` (action: `get_tree`): Sets widget tree depth (default: `8`).
-  - `projectOnly` in `widget` (action: `get_tree`): Filters out non-user-project widgets (default: `true`).
-  - `exclude_flutter_widgets` in `rebuild_tracking` (action: `stop` / `get_counts`): Excludes built-in Flutter/SDK and dependency widgets from the rebuild list (default: `true`).
+#### `set_response_format`
+- `format`: `markdown` | `json` (default: `markdown`)
 
-- **Platform Settings**:
-  - `platform` in `diagnose_project` (action: `deep_links`): Platform target (e.g. `android` or `ios`, required).
+#### `get_app_info`
+- `includeExtensions`: boolean (default: `false`)
 
-- **Payload Settings**:
-  - `include_details` in `network` (`watch` / `stop` / `get_profile`): Includes full request & response headers, cookies, and bodies (default: `false`).
-  - `includeRawResponse` in `memory` and `network`: Hides raw JSON payloads when false (default: `false`).
-  - `includeExtensions` in `get_app_info`: Hides the full service extensions list when false (default: `false`).
-  - `includeRawNode` in `widget` (action: `inspect`): Hides raw JSON layout nodes when false (default: `false`).
+#### `memory`
+- `action` (required): `getSnapshot` | `save` | `compare` | `list` | `auditLeak` | `diffAllocations` | `getReferrers` | `forceGc` | `startGcStream` | `stopGcStream` | `getMemoryTimeline` | `watchGcPressure` | `explainMemoryBreakdown`
+- `className`: string (target class name for `auditLeak`)
+- `objectId`: string (target VM object ID for `getReferrers`)
+- `name`: string (snapshot label for `save`)
+- `before`: string (baseline snapshot name for `compare`)
+- `after`: string (target snapshot name for `compare`)
+- `durationSeconds`: int (sample duration in seconds, default: `5`)
+- `filterZeroDeltas`: boolean (filter out unchanged classes in `diffAllocations`, default: `false`)
+- `expression`: string (optional Dart expression to evaluate during `diffAllocations`)
+- `forceGc`: boolean (trigger GC before taking snapshot, default: `false`)
+- `limit`: int (max results returned, default: `50`-`100`)
+- `topN`: int (top classes limit, default: `20`)
 
-- **State Options**:
-  - `forceGC` in `memory` (action: `get_snapshot` / `save` / `diff_allocations`): Runs garbage collection before inspection (default: `true`/`false`).
+#### `profiling`
+- `action` (required): `start` | `stop` | `getCpu` | `diagnoseJank`
+- `durationSeconds`: int (recording window in seconds, default: `5`)
+- `limit`: int (max hotspots or jank frames returned, default: `15`)
+
+#### `rebuild_tracking`
+- `action` (required): `start` | `stop` | `getCounts`
+- `durationSeconds`: int (tracking window in seconds)
+- `excludeFlutterWidgets`: boolean (exclude built-in SDK widgets, default: `true`)
+- `topN`: int (top rebuild entries limit, default: `30`)
+
+#### `network`
+- `action` (required): `start` | `stop` | `getProfile` | `watch` | `getRequestDetails`
+- `durationSeconds`: int (watch duration in seconds, default: `5`)
+- `slowThresholdMs`: int (threshold to flag slow requests in ms, default: `500`)
+- `includeDetails`: boolean (include full request/response headers & bodies, default: `false`)
+- `includeRawResponse`: boolean (include raw VM Service JSON response, default: `false`)
+- `limit`: int (max requests returned, default: `30`)
+
+#### `console_logs`
+- `action` (required): `fetch` | `watch`
+- `limit`: int (max log entries returned, default: `50`)
+- `durationSeconds`: int (watch window in seconds, default: `5`)
+- `filter`: string (optional text filter substring)
+
+#### `widget`
+- `action` (required): `inspect` | `toggleSelection` | `getTree`
+- `enabled`: boolean (enable inspector mode for `toggleSelection`)
+- `maxDepth`: int (max tree depth for `getTree`, default: `8`)
+- `projectOnly`: boolean (filter out non-user-project widgets, default: `true`)
+
+#### `trigger_scroll_gesture`
+- `offset`: double (scroll delta in logical pixels, default: `300.0`)
+- `axis`: `vertical` | `horizontal` (default: `vertical`)
+- `scrollControllerExpression`: string (optional expression targeting specific ScrollController)
+
+#### `debug_flag`
+- `action` (required): `toggle` | `togglePackageWidgets`
+- `flagName`: string (flag identifier, e.g. `debugPaintSizeEnabled`, `timeDilation`)
+- `value`: string or boolean value (e.g. `'true'`, `'5.0'`)
+
+#### `screenshot`
+- `action` (required): `take` | `captureBaseline` | `compare`
+- `baselineName`: string (baseline snapshot name for `captureBaseline` or `compare`)
+- `screenshotType`: `device` | `skia` (default: `device`)
+- `deviceId`: string (optional target device ID)
+- `outputPath`: string (optional file destination path)
+- `threshold`: double (similarity match threshold ratio, default: `0.98`)
+
+#### `breakpoint`
+- `action` (required): `add` | `remove`
+- `filePath`: string (relative or absolute Dart file path)
+- `line`: int (line number)
+- `breakpointId`: string (breakpoint ID required for `remove`)
+
+#### `get_call_stack`
+- `limit`: int (max frames returned, default: `20`)
+
+#### `set_exception_pause_mode`
+- `mode` (required): `None` | `All` | `Unhandled`
+
+#### `evaluate_expression`
+- `expression` (required): string (Dart code snippet)
+- `frameIndex`: int (optional stack frame index)
 
 ---
 
@@ -129,9 +200,9 @@ To keep payloads light, these settings are supported:
 - Ensure your Flutter application is running in debug or profile mode. Release builds disable the VM Service.
 - Check that the port is accessible. If running on physical devices or emulators, you may need to map ports using ADB: `adb reverse tcp:8181 tcp:8181`.
 - If `discover_apps` fails to connect, verify that your application has initialized the Dart Development Service (DDS). You can check by running `discover_apps` with `autoConnect: false` to list active endpoints.
- 
+
 ### Layout File Path Mapping Fails
-- When connecting via `connect`, ensure you provide the absolute path to your local Flutter project directory in the `workspace_root` argument. This allows the path resolver to match package references back to your local files.
+- When connecting via `connect`, ensure you provide the absolute path to your local Flutter project directory in the `workspaceRoot` argument. This allows the path resolver to match package references back to your local files.
 
 ---
 

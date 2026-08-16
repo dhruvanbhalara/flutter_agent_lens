@@ -6,11 +6,11 @@ void main() {
     test('fromMap and toMap round-trip', () {
       final json = {
         'timestamp': 1717171717,
-        'heap_used': 5000000,
-        'heap_capacity': 10000000,
-        'external_usage': 1000000,
+        'heapUsed': 5000000,
+        'heapCapacity': 10000000,
+        'externalUsage': 1000000,
         'rss': 25000000,
-        'gc_events_in_interval': 2,
+        'gcEventsInInterval': 2,
       };
 
       final sample = MemoryTimelineSample.fromMap(json);
