@@ -60,7 +60,7 @@ void main() {
           name: 'debug_flag',
           arguments: const {
             'action': 'toggle',
-            'flag_name': 'debugPaintSizeEnabled',
+            'flagName': 'debugPaintSizeEnabled',
             'value': 'true',
           },
         ),
@@ -77,7 +77,7 @@ void main() {
           name: 'debug_flag',
           arguments: const {
             'action': 'toggle',
-            'flag_name': 'debugPaintBaselinesEnabled',
+            'flagName': 'debugPaintBaselinesEnabled',
             'value': 'false',
           },
         ),
@@ -95,7 +95,7 @@ void main() {
           name: 'debug_flag',
           arguments: const {
             'action': 'toggle',
-            'flag_name': 'repaintRainbow',
+            'flagName': 'repaintRainbow',
             'value': 'true',
           },
         ),
@@ -112,7 +112,7 @@ void main() {
           name: 'debug_flag',
           arguments: const {
             'action': 'toggle',
-            'flag_name': 'invertOversizedImages',
+            'flagName': 'invertOversizedImages',
             'value': 'true',
           },
         ),
@@ -130,7 +130,7 @@ void main() {
           name: 'debug_flag',
           arguments: const {
             'action': 'toggle',
-            'flag_name': 'timeDilation',
+            'flagName': 'timeDilation',
             'value': '5.0',
           },
         ),
@@ -148,7 +148,7 @@ void main() {
           name: 'debug_flag',
           arguments: const {
             'action': 'toggle',
-            'flag_name': 'unsupported_flag',
+            'flagName': 'unsupported_flag',
             'value': 'true',
           },
         ),
@@ -167,7 +167,7 @@ void main() {
         CallToolRequest(
           name: 'debug_flag',
           arguments: const {
-            'action': 'toggle_package_widgets',
+            'action': 'togglePackageWidgets',
             'enabled': true,
           },
         ),

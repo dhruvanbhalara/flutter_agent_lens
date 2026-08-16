@@ -72,7 +72,7 @@ void main() {
 
       final req = CallToolRequest(
         name: 'widget',
-        arguments: {'action': 'get_tree'},
+        arguments: {'action': 'getTree'},
       );
 
       final result = await mock.callTool(req);
@@ -99,7 +99,7 @@ void main() {
 
       final req = CallToolRequest(
         name: 'widget',
-        arguments: {'action': 'get_tree'},
+        arguments: {'action': 'getTree'},
       );
 
       final result = await mock.callTool(req);

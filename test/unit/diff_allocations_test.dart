@@ -87,7 +87,7 @@ class FakeVmServiceForDiffHeap extends vm_service.VmService {
 }
 
 void main() {
-  group('MemoryDebuggingSupport filter_zero_deltas Tests', () {
+  group('MemoryDebuggingSupport filterZeroDeltas Tests', () {
     late MemoryDebuggingMock mockServer;
     late FakeVmServiceForDiffHeap fakeVm;
 
@@ -99,22 +99,22 @@ void main() {
       mockServer.isolateId = 'isolate_1';
     });
 
-    test('memory tool schema contains filter_zero_deltas property', () {
+    test('memory tool schema contains filterZeroDeltas property', () {
       final tool = mockServer.registeredToolsMap[McpTool.memory.name];
       expect(tool, isNotNull);
       final schemaProps = tool!.inputSchema.properties;
       expect(schemaProps, isNotNull);
-      expect(schemaProps!['filter_zero_deltas'], isA<BooleanSchema>());
+      expect(schemaProps!['filterZeroDeltas'], isA<BooleanSchema>());
     });
 
-    test('diff_allocations filters zero deltas when filter_zero_deltas is true',
+    test('diff_allocations filters zero deltas when filterZeroDeltas is true',
         () async {
       final req = CallToolRequest(
         name: McpTool.memory.name,
         arguments: {
-          'action': 'diff_allocations',
-          'duration_seconds': 1,
-          'filter_zero_deltas': true,
+          'action': 'diffAllocations',
+          'durationSeconds': 1,
+          'filterZeroDeltas': true,
         },
       );
 

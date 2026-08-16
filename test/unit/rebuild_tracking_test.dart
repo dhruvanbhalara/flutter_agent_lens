@@ -139,8 +139,8 @@ void main() {
         CallToolRequest(
           name: 'rebuild_tracking',
           arguments: const {
-            'action': 'get_counts',
-            'duration_seconds': 1,
+            'action': 'getCounts',
+            'durationSeconds': 1,
           },
         ),
       );
@@ -168,9 +168,9 @@ void main() {
         CallToolRequest(
           name: 'rebuild_tracking',
           arguments: const {
-            'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': true,
+            'action': 'getCounts',
+            'durationSeconds': 1,
+            'excludeFlutterWidgets': true,
           },
         ),
       );
@@ -194,9 +194,9 @@ void main() {
         CallToolRequest(
           name: 'rebuild_tracking',
           arguments: const {
-            'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': false,
+            'action': 'getCounts',
+            'durationSeconds': 1,
+            'excludeFlutterWidgets': false,
           },
         ),
       );
@@ -223,9 +223,9 @@ void main() {
         CallToolRequest(
           name: 'rebuild_tracking',
           arguments: const {
-            'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': true,
+            'action': 'getCounts',
+            'durationSeconds': 1,
+            'excludeFlutterWidgets': true,
           },
         ),
       );
@@ -236,7 +236,7 @@ void main() {
     });
 
     test(
-        'Response contains total_recorded_widgets and filtered_count in JSON format',
+        'Response contains totalRecordedWidgets and filteredCount in JSON format',
         () async {
       mock.responseFormat = 'json';
 
@@ -250,23 +250,23 @@ void main() {
         CallToolRequest(
           name: 'rebuild_tracking',
           arguments: const {
-            'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': true,
+            'action': 'getCounts',
+            'durationSeconds': 1,
+            'excludeFlutterWidgets': true,
           },
         ),
       );
 
       expect(result.isError, isNot(isTrue));
       final text = (result.content.first as TextContent).text;
-      expect(text, contains('total_recorded_widgets'));
-      expect(text, contains('filtered_count'));
+      expect(text, contains('totalRecordedWidgets'));
+      expect(text, contains('filteredCount'));
 
       final data = jsonDecode(
               text.replaceFirst('```json\n', '').replaceFirst('\n```', ''))
           as Map<String, dynamic>;
-      expect(data['total_recorded_widgets'], 3);
-      expect(data['filtered_count'], 1);
+      expect(data['totalRecordedWidgets'], 3);
+      expect(data['filteredCount'], 1);
     });
 
     test(
@@ -295,7 +295,7 @@ void main() {
           name: 'rebuild_tracking',
           arguments: const {
             'action': 'stop',
-            'exclude_flutter_widgets': true,
+            'excludeFlutterWidgets': true,
           },
         ),
       );
@@ -333,7 +333,7 @@ void main() {
           name: 'rebuild_tracking',
           arguments: const {
             'action': 'stop',
-            'exclude_flutter_widgets': false,
+            'excludeFlutterWidgets': false,
           },
         ),
       );

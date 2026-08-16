@@ -104,7 +104,7 @@ void main() {
           arguments: const {
             'action': 'connect',
             'uri': 'ftp://127.0.0.1:8181', // Invalid scheme
-            'workspace_root': '/some/path',
+            'workspaceRoot': '/some/path',
           },
         ),
       );
@@ -121,7 +121,7 @@ void main() {
           name: McpTool.connection.name,
           arguments: const {
             'action': 'connect',
-            'workspace_root': '/some/path',
+            'workspaceRoot': '/some/path',
           },
         ),
       );
@@ -137,7 +137,7 @@ void main() {
         CallToolRequest(
           name: McpTool.connection.name,
           arguments: const {
-            'action': 'connect_dtd',
+            'action': 'connectDtd',
           },
         ),
       );
@@ -152,7 +152,7 @@ void main() {
         CallToolRequest(
           name: McpTool.connection.name,
           arguments: const {
-            'action': 'connect_dtd',
+            'action': 'connectDtd',
             'uri': 'ws://127.0.0.1:9999',
           },
         ),

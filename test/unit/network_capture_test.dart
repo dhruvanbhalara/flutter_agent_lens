@@ -121,7 +121,7 @@ void main() {
         CallToolRequest(
           name: 'network',
           arguments: const {
-            'action': 'get_profile',
+            'action': 'getProfile',
             'limit': 5,
           },
         ),
@@ -168,7 +168,7 @@ void main() {
           name: 'network',
           arguments: const {
             'action': 'watch',
-            'duration_seconds': 1,
+            'durationSeconds': 1,
           },
         ),
       );

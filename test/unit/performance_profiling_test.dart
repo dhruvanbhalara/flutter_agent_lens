@@ -87,8 +87,8 @@ void main() {
         CallToolRequest(
           name: 'profiling',
           arguments: const {
-            'action': 'diagnose_jank',
-            'duration_seconds': 0,
+            'action': 'diagnoseJank',
+            'durationSeconds': 0,
           },
         ),
       );
