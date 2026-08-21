@@ -21,6 +21,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         inputSchema: ObjectSchema(
           properties: {
             'limit': limitSchema(),
+            'full': fullSchema(),
           },
         ),
         annotations: ToolAnnotations(
@@ -102,6 +103,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               description:
                   'Optional frame index to evaluate the expression in (if the app is paused at a breakpoint).',
             ),
+            'full': fullSchema(),
           },
           required: ['expression'],
         ),
@@ -119,7 +121,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final currentIsolateId = isolateId;
     if (service == null || currentIsolateId == null) return notConnected();
 
-    final limit = ((req.arg<num>('limit'))?.toInt() ?? 20).clamp(1, 50);
+    final limit = req.limitArg();
     stderr.writeln('[mcp:get_call_stack] Fetching stack frames (limit=$limit)');
 
     final stack = await service.getStack(currentIsolateId, limit: limit);
@@ -145,6 +147,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Call Stack Frames',
       markdownBody: md.toString(),
       structuredData: {
@@ -231,6 +234,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       ..writeln('- Resolved: ${bp.resolved ?? false}');
 
     return serializeDualFormat(
+      req: req,
       title: 'Breakpoint Set Successfully',
       markdownBody: md.toString(),
       structuredData: {
@@ -294,7 +298,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final rawValStr = res is InstanceRef
         ? (res.valueAsString ?? res.toString())
         : res.toString();
-    final valStr = truncateString(rawValStr, maxLength: 1000);
+    final valStr = truncateString(rawValStr, maxLength: 1000, full: req.isFull);
     final kindStr = res is InstanceRef ? res.kind : 'Unknown';
     final classStr = res is InstanceRef ? res.classRef?.name : 'Unknown';
     return CallToolResult(

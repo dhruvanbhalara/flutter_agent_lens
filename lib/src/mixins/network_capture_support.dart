@@ -58,6 +58,7 @@ base mixin NetworkCaptureSupport
                   'Whether to include the raw JSON-RPC response in structured data.',
             ),
             'limit': limitSchema(defaultValue: 30),
+            'full': fullSchema(),
           },
           required: ['action'],
         ),
@@ -170,10 +171,10 @@ base mixin NetworkCaptureSupport
       return _getUnsupportedError();
     }
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 30;
+    final limit = req.limitArg(defaultValue: 30);
     var allFetched = await _getHttpRequests();
-    // Return only the most recent `limit` requests
-    if (allFetched.length > limit) {
+    // Return only the most recent `limit` requests if limit is present
+    if (limit != null && allFetched.length > limit) {
       allFetched = allFetched.sublist(allFetched.length - limit);
     }
     stderr.writeln('[mcp:network_profile] Found ${allFetched.length} requests');
@@ -247,6 +248,7 @@ base mixin NetworkCaptureSupport
 
     final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     return serializeDualFormat(
+      req: req,
       title: 'Network Diagnostics Report',
       markdownBody: md.toString(),
       structuredData: {
@@ -505,6 +507,7 @@ base mixin NetworkCaptureSupport
 
     final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     return serializeDualFormat(
+      req: req,
       title: 'Network Traffic Report',
       markdownBody: output.join('\n'),
       structuredData: {
@@ -706,8 +709,11 @@ base mixin NetworkCaptureSupport
       }
     }
 
-    final formattedReqBody =
-        truncateString(formatBody(reqBodyRaw), maxLength: 5000);
+    final isFull = req.isFull;
+    final maxBodyLength = req.maxBodyLengthArg() ?? 5000;
+
+    final formattedReqBody = truncateString(formatBody(reqBodyRaw),
+        maxLength: maxBodyLength, full: isFull);
     if (formattedReqBody != 'N/A' && formattedReqBody.isNotEmpty) {
       md.writeln('Request Body:');
       md.writeln(formattedReqBody);
@@ -725,14 +731,15 @@ base mixin NetworkCaptureSupport
       }
     }
 
-    final formattedResBody =
-        truncateString(formatBody(resBodyRaw), maxLength: 5000);
+    final formattedResBody = truncateString(formatBody(resBodyRaw),
+        maxLength: maxBodyLength, full: isFull);
     if (formattedResBody != 'N/A' && formattedResBody.isNotEmpty) {
       md.writeln('Response Body:');
       md.writeln(formattedResBody);
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'HTTP Request Details $id',
       markdownBody: md.toString(),
       structuredData: {
@@ -748,14 +755,16 @@ base mixin NetworkCaptureSupport
           'headers': reqHeaders,
           'cookies': reqCookies,
           'body': reqBodyRaw is String
-              ? truncateString(reqBodyRaw, maxLength: 5000)
+              ? truncateString(reqBodyRaw,
+                  maxLength: maxBodyLength, full: isFull)
               : reqBodyRaw,
         },
         'response': {
           'headers': resHeaders,
           'cookies': resCookies,
           'body': resBodyRaw is String
-              ? truncateString(resBodyRaw, maxLength: 5000)
+              ? truncateString(resBodyRaw,
+                  maxLength: maxBodyLength, full: isFull)
               : resBodyRaw,
         },
       },
@@ -952,6 +961,7 @@ base mixin NetworkCaptureSupport
 
     final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     return serializeDualFormat(
+      req: req,
       title: 'Live Network Watch Report',
       markdownBody: output.join('\n'),
       structuredData: {

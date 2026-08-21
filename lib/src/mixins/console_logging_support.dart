@@ -53,6 +53,7 @@ base mixin ConsoleLoggingSupport
             'filter': StringSchema(
               description: 'Optional text filter substring for watch action.',
             ),
+            'full': fullSchema(),
           },
         ),
         annotations: ToolAnnotations(
@@ -197,13 +198,13 @@ base mixin ConsoleLoggingSupport
 
   /// Handles the fetch action for console_logs.
   Future<CallToolResult> _handleFetchConsoleLogs(CallToolRequest req) async {
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 50;
-    final maxLimit = limit.clamp(1, 200);
+    final limit = req.limitArg(defaultValue: 50, max: 500);
     stderr.writeln(
-        '[mcp:console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$maxLimit');
+        '[mcp:console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$limit');
 
     final totalLines = logBuffer.length;
-    final startIndex = totalLines > maxLimit ? totalLines - maxLimit : 0;
+    final startIndex =
+        (limit != null && totalLines > limit) ? totalLines - limit : 0;
     final recentLogs = logBuffer.sublist(startIndex);
 
     final mdBuffer = StringBuffer('Recent Console Logs\n\n');
@@ -214,6 +215,7 @@ base mixin ConsoleLoggingSupport
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Console Log Cache',
       markdownBody: mdBuffer.toString(),
       structuredData: {
@@ -271,6 +273,7 @@ base mixin ConsoleLoggingSupport
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Live Console Logs',
       markdownBody: mdBuffer.toString(),
       structuredData: {
