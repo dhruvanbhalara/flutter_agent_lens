@@ -7,7 +7,7 @@ import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
-import 'package:path/path.dart' as p;
+import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for widget inspection, layout diagnostics, and widget tree retrieval.
@@ -218,7 +218,8 @@ base mixin WidgetInspectionSupport
 
   /// Handles the get_widget_tree tool request.
   Future<CallToolResult> _handleGetWidgetTree(CallToolRequest req) async {
-    final maxDepth = req.intArg('maxDepth', defaultValue: 8)!;
+    final maxDepth =
+        (req.intArg('maxDepth', defaultValue: 6) ?? 6).clamp(1, 15);
     final projectOnly = req.arg<bool>('projectOnly') ?? true;
 
     return _withInspectorGroup((objectGroup) async {
@@ -398,7 +399,12 @@ base mixin WidgetInspectionSupport
           final propName = prop['name']?.toString();
           final propDesc =
               prop['description']?.toString() ?? prop['value']?.toString();
-          if (propName != null && propDesc != null && propDesc != 'null') {
+          if (propName != null &&
+              propDesc != null &&
+              propDesc != 'null' &&
+              propDesc.isNotEmpty &&
+              propDesc != '[]' &&
+              propDesc != '{}') {
             properties.add({
               'name': propName,
               'value': propDesc,
@@ -406,8 +412,11 @@ base mixin WidgetInspectionSupport
           }
         }
       }
-      if (properties.length > 10) {
-        properties = properties.sublist(0, 10);
+      if (properties.length > 6) {
+        properties = properties.sublist(0, 6);
+      }
+      if (properties.isEmpty) {
+        properties = null;
       }
     }
 
@@ -463,24 +472,7 @@ base mixin WidgetInspectionSupport
     String? sourceFile;
     final fileUri = creationLocation['file'] as String?;
     if (fileUri != null) {
-      try {
-        final cleanFile = Uri.parse(fileUri).toFilePath();
-        final parts = p.split(cleanFile);
-        final libIndex = parts.indexOf('lib');
-        if (libIndex != -1) {
-          sourceFile = p.joinAll(parts.sublist(libIndex));
-        } else {
-          sourceFile = p.basename(cleanFile);
-        }
-      } catch (_) {
-        final cleanFile = fileUri.replaceFirst(RegExp('^file://'), '');
-        final parts = cleanFile.split('/lib/');
-        if (parts.length > 1) {
-          sourceFile = parts.last;
-        } else {
-          sourceFile = cleanFile.split('/').last;
-        }
-      }
+      sourceFile = formatRelativePath(fileUri, workspaceRoot);
     }
     final sourceLine = creationLocation['line'] as int?;
     return (sourceFile, sourceLine);
@@ -798,7 +790,8 @@ final class _FlatWidget {
       'childCount': childCount,
       if (sourceFile != null) 'sourceFile': sourceFile,
       if (sourceLine != null) 'sourceLine': sourceLine,
-      if (properties != null) 'properties': properties,
+      if (properties != null && properties!.isNotEmpty)
+        'properties': properties,
     };
   }
 }
