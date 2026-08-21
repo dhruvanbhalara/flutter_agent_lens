@@ -212,7 +212,7 @@ base mixin PerformanceProfilingSupport
         'total_frames': totalFrames,
         'janky_frames': jankyFrames,
         'jank_percentage': jankPercentage,
-        'critical_events': frameEvents,
+        'critical_events': frameEvents.take(50).toList(),
       },
     );
   }
@@ -780,7 +780,7 @@ base mixin PerformanceProfilingSupport
         'build_phase': buildPhase,
         'layout_phase': layoutPhase,
         'paint_phase': paintPhase,
-        'cpu_hotspots': cpuHotspots,
+        'cpu_hotspots': cpuHotspots.take(20).toList(),
         'recommendations': recommendations,
       },
     );
