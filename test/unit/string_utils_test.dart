@@ -165,5 +165,41 @@ void main() {
       );
       expect(req.requireArg<String?>('nullableKey'), isNull);
     });
+
+    test('CallToolRequestX handles full and limitArg correctly', () {
+      final reqDefault = CallToolRequest(name: 'test');
+      expect(reqDefault.isFull, isFalse);
+      expect(reqDefault.limitArg(), equals(20));
+
+      final reqWithLimit =
+          CallToolRequest(name: 'test', arguments: {'limit': 50});
+      expect(reqWithLimit.limitArg(), equals(50));
+
+      final reqClamped =
+          CallToolRequest(name: 'test', arguments: {'limit': 9999});
+      expect(reqClamped.limitArg(), equals(200));
+
+      final reqFull =
+          CallToolRequest(name: 'test', arguments: {'full': true, 'limit': 10});
+      expect(reqFull.isFull, isTrue);
+      expect(reqFull.limitArg(), isNull);
+    });
+
+    test('CallToolRequestX handles maxBodyLengthArg correctly', () {
+      final reqDefault = CallToolRequest(name: 'test');
+      expect(reqDefault.maxBodyLengthArg(), equals(5000));
+
+      final reqWithCustom =
+          CallToolRequest(name: 'test', arguments: {'max_body_length': 10000});
+      expect(reqWithCustom.maxBodyLengthArg(), equals(10000));
+
+      final reqClamped =
+          CallToolRequest(name: 'test', arguments: {'max_body_length': 100000});
+      expect(reqClamped.maxBodyLengthArg(), equals(50000));
+
+      final reqFull = CallToolRequest(
+          name: 'test', arguments: {'full': true, 'max_body_length': 1000});
+      expect(reqFull.maxBodyLengthArg(), isNull);
+    });
   });
 }
