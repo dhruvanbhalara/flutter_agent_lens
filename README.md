@@ -112,7 +112,9 @@ To keep payloads light, these settings are supported:
 - **Platform Settings**:
   - `platform` in `diagnose_project` (action: `deep_links`): Platform target (e.g. `android` or `ios`, required).
 
-- **Payload Settings**:
+- **Payload & Token Optimization**:
+  - `full` across all tools: When `true`, disables default token-saving safety shields (such as markdown truncation and collection compaction) to return complete, untruncated outputs (default: `false`).
+  - `max_body_length` in `network` (action: `get_request_details`): Sets max character length for request/response bodies before truncation (default: `5000`, max: `50000`).
   - `include_details` in `network` (`watch` / `stop` / `get_profile`): Includes full request & response headers, cookies, and bodies (default: `false`).
   - `includeRawResponse` in `memory` and `network`: Hides raw JSON payloads when false (default: `false`).
   - `includeExtensions` in `get_app_info`: Hides the full service extensions list when false (default: `false`).
