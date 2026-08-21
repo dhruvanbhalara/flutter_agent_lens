@@ -168,13 +168,14 @@ base mixin ConnectionSupport
 
   /// Handles the connect tool request.
   Future<CallToolResult> _handleConnect(CallToolRequest req) async {
-    if (vmService != null) {
+    final existingService = vmService;
+    if (existingService != null) {
       try {
         unregisterConnectedTools();
-      } catch (_) {}
+      } on Exception catch (_) {}
       try {
-        await vmService!.dispose();
-      } catch (_) {}
+        await existingService.dispose();
+      } on Exception catch (_) {}
       vmService = null;
       vmServiceUri = null;
       isolateId = null;
@@ -223,13 +224,14 @@ base mixin ConnectionSupport
       vmServiceUri = uriToConnect;
       final wsUri = normalizeToWsUri(uriToConnect);
       stderr.writeln('[mcp] Connecting to VM Service: $wsUri');
-      vmService = await vmServiceConnectUri(wsUri).timeout(
+      final service = await vmServiceConnectUri(wsUri).timeout(
         const Duration(seconds: 10),
         onTimeout: () => throw TimeoutException(
             'Timed out connecting to VM Service at $wsUri'),
       );
+      vmService = service;
 
-      unawaited(vmService!.onDone.then((_) {
+      unawaited(service.onDone.then((_) {
         stderr.writeln('[mcp] VM Service connection lost.');
         try {
           unregisterConnectedTools();
@@ -239,11 +241,11 @@ base mixin ConnectionSupport
         vmServiceUri = null;
       }));
 
-      final vm = await vmService!.getVM();
+      final vm = await service.getVM();
       final isolates = vm.isolates;
       if (isolates == null || isolates.isEmpty) {
         try {
-          await vmService!.dispose();
+          await service.dispose();
         } catch (_) {}
         vmService = null;
         vmServiceUri = null;
@@ -271,27 +273,27 @@ base mixin ConnectionSupport
         }
         isolateId = id;
       }
-      final ver = await vmService!.getVersion();
+      final ver = await service.getVersion();
 
       try {
-        serviceStreamSub = vmService!.onServiceEvent.listen((event) {
-          final service = event.service;
+        serviceStreamSub = service.onServiceEvent.listen((event) {
+          final sName = event.service;
           final method = event.method;
-          if (service == null || method == null) return;
+          if (sName == null || method == null) return;
           if (event.kind == EventKind.kServiceRegistered) {
-            registeredMethodsForService[service] = method;
-            stderr.writeln(
-                '[mcp:service] Registered service: $service -> $method');
+            registeredMethodsForService[sName] = method;
+            stderr
+                .writeln('[mcp:service] Registered service: $sName -> $method');
           } else if (event.kind == EventKind.kServiceUnregistered) {
-            registeredMethodsForService.remove(service);
-            stderr.writeln('[mcp:service] Unregistered service: $service');
+            registeredMethodsForService.remove(sName);
+            stderr.writeln('[mcp:service] Unregistered service: $sName');
           }
         });
-        await vmService!.streamListen(EventStreams.kService);
+        await service.streamListen(EventStreams.kService);
         await Future<void>.delayed(const Duration(milliseconds: 100));
         stderr.writeln(
             '[mcp:connect] Service stream seeded: ${registeredMethodsForService.keys.toList()}');
-      } catch (e) {
+      } on Exception catch (e) {
         stderr.writeln('[mcp:connect] Error seeding service stream: $e');
       }
 
@@ -300,12 +302,12 @@ base mixin ConnectionSupport
 
       // Enable HTTP timeline logging automatically
       try {
-        await vmService!.callServiceExtension(
+        await service.callServiceExtension(
           'ext.dart.io.httpEnableTimelineLogging',
           isolateId: isolateId,
           args: {'enabled': 'true'},
         );
-      } catch (e) {
+      } on Exception catch (e) {
         stderr
             .writeln('[mcp:connect] Error enabling HTTP timeline logging: $e');
       }
@@ -540,13 +542,14 @@ base mixin ConnectionSupport
 
   /// Handles the disconnect tool request.
   Future<CallToolResult> _handleDisconnect(CallToolRequest req) async {
+    final service = vmService;
     try {
       await dtdClient?.close();
     } catch (_) {}
     dtdClient = null;
     dtdUri = null;
 
-    if (vmService == null) {
+    if (service == null) {
       return CallToolResult(
         content: [
           TextContent(
@@ -562,8 +565,8 @@ base mixin ConnectionSupport
     await cleanupStreams();
 
     try {
-      await vmService!.dispose();
-    } catch (e) {
+      await service.dispose();
+    } on Exception catch (e) {
       stderr.writeln('[mcp:connect] Error disposing VM Service: $e');
     }
     vmService = null;
@@ -582,20 +585,22 @@ base mixin ConnectionSupport
 
   /// Handles the get_app_info tool request.
   Future<CallToolResult> _handleGetAppInfo(CallToolRequest req) async {
-    if (vmService == null || isolateId == null) {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) {
       return notConnected();
     }
-    final vm = await vmService!.getVM();
-    final isolate = await vmService!.getIsolate(isolateId!);
+    final vm = await service.getVM();
+    final isolate = await service.getIsolate(currentIsolateId);
 
     double fpsVal = 60.0;
     try {
-      final fpsResponse = await vmService!.callServiceExtension(
+      final fpsResponse = await service.callServiceExtension(
         'ext.flutter.getDisplayRefreshRate',
-        isolateId: isolateId,
+        isolateId: currentIsolateId,
       );
       fpsVal = (fpsResponse.json?['fps'] as num?)?.toDouble() ?? 60.0;
-    } catch (e) {
+    } on Exception catch (e) {
       stderr.writeln('[mcp:connect] Error getting display refresh rate: $e');
     }
 

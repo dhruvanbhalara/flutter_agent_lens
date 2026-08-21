@@ -7,6 +7,7 @@ import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
+import 'package:flutter_agent_lens/src/utils/tool_error_handler.dart';
 import 'package:vm_service/vm_service.dart';
 
 /// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
@@ -14,16 +15,16 @@ base mixin PerformanceProfilingSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
   static const int _kFrameBudgetUs = 16666;
 
-  /// Whether the CPU timeline sampling or profiling is active.
+  /// Whether a CPU timeline sampling or profiling session is currently active.
   bool isProfiling = false;
 
-  /// Timestamp in milliseconds when the performance profiling session was started.
+  /// Epoch timestamp (in milliseconds) when the current profiling session began.
   int? profilingStartTime;
 
-  /// The target display refresh rate (FPS) of the connected device.
+  /// The target display refresh rate (FPS) of the connected target device.
   double? targetFps;
 
-  /// Registers performance profiling and reload/restart tools.
+  /// Registers performance profiling and lifecycle tools with the MCP server.
   void registerPerformanceTools() {
     registerTool(
       Tool(
@@ -39,7 +40,7 @@ base mixin PerformanceProfilingSupport
             'duration_seconds': durationSchema(),
             'limit': limitSchema(defaultValue: 15),
           },
-          required: ['action'],
+          required: const ['action'],
         ),
         annotations: ToolAnnotations(
           readOnlyHint: false,
@@ -78,7 +79,7 @@ base mixin PerformanceProfilingSupport
     );
   }
 
-  /// Clears performance profiling state and resets targets.
+  /// Cleans up performance profiling state and resets VM timeline flags.
   Future<void> cleanupPerformanceProfiling() async {
     isProfiling = false;
     profilingStartTime = null;
@@ -86,57 +87,82 @@ base mixin PerformanceProfilingSupport
     final service = vmService;
     if (service != null) {
       try {
-        await service.setVMTimelineFlags([]);
-      } catch (e) {
-        stderr.writeln(
-            '[mcp:profiling] Error resetting timeline flags on cleanup: $e');
+        await service.setVMTimelineFlags(const <String>[]);
+      } on RPCError catch (e) {
+        stderr.writeln('[mcp:profiling] RPC error clearing timeline flags: $e');
+      } on Exception catch (e) {
+        stderr.writeln('[mcp:profiling] Error resetting timeline flags: $e');
       }
     }
   }
 
-  /// Handles the diagnose_jank tool request.
-  Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
-    stderr.writeln(
-        '[mcp:diagnose_jank] Starting jank diagnosis, duration=${duration}s');
+  /// Consolidated entry point for performance profiling operations.
+  Future<CallToolResult> _handleProfiling(CallToolRequest req) async {
+    final action = req.requireArg<String>('action');
+    try {
+      return await switch (action) {
+        'start' => _handleStartProfiling(req),
+        'stop' => _handleStopProfiling(req),
+        'get_cpu' => _handleGetCpuProfile(req),
+        'diagnose_jank' => _handleDiagnoseJank(req),
+        _ => CallToolResult(
+            content: [TextContent(text: 'Unknown profiling action: $action')],
+            isError: true,
+          ),
+      };
+    } on Exception catch (error, stack) {
+      return handleToolError(error, stack, 'profiling:$action');
+    }
+  }
 
-    final frameEvents = <Map<String, dynamic>>[];
-    await vmService!.setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API']);
-    await vmService!.clearVMTimeline();
+  /// Handles the `diagnose_jank` request with shadow bindings and hardened cleanup.
+  Future<CallToolResult> _handleDiagnoseJank(CallToolRequest req) async {
+    final service = vmService;
+    if (service == null) return notConnected();
+
+    final durationSeconds = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    stderr.writeln(
+      '[mcp:diagnose_jank] Starting jank diagnosis, duration=${durationSeconds}s',
+    );
+
+    await service.setVMTimelineFlags(const ['Embedder', 'Dart', 'GC', 'API']);
+    await service.clearVMTimeline();
 
     Timeline timeline;
     late final SamplingResult samplingResult;
     try {
       samplingResult = await safeSamplingWindow(
-        vmService: vmService,
-        duration: Duration(seconds: duration),
+        vmService: service,
+        duration: Duration(seconds: durationSeconds),
       );
-      timeline = await vmService!.getVMTimeline();
-    } catch (_) {
-      timeline = Timeline(traceEvents: []);
+      timeline = await service.getVMTimeline();
+    } on RPCError catch (e) {
+      stderr.writeln('[mcp:diagnose_jank] RPC error retrieving timeline: $e');
+      timeline = Timeline(traceEvents: const []);
     } finally {
       try {
-        await vmService!.setVMTimelineFlags([]);
-      } catch (e) {
+        await service.setVMTimelineFlags(const []);
+      } on Exception catch (e) {
         stderr
-            .writeln('[mcp:diagnose_jank] Error resetting timeline flags: $e');
+            .writeln('[mcp:diagnose_jank] Failed to reset timeline flags: $e');
       }
     }
-    final events = timeline.traceEvents ?? [];
+
+    final events = timeline.traceEvents ?? const [];
+    final frameEvents = <Map<String, dynamic>>[];
     var jankyFrames = 0;
     var totalFrames = 0;
 
     for (final event in events) {
       final eventName = event.json?['name'] as String?;
-      if (eventName == 'GPURasterizer::Draw' ||
-          eventName == 'Animator::BeginFrame') {
+      if (eventName case 'GPURasterizer::Draw' || 'Animator::BeginFrame') {
         totalFrames++;
-        final dur = event.json?['dur'] as num? ?? 0;
-        if (dur > _kFrameBudgetUs) {
+        final durationUs = (event.json?['dur'] as num?) ?? 0;
+        if (durationUs > _kFrameBudgetUs) {
           jankyFrames++;
           frameEvents.add({
             'event': eventName,
-            'duration_ms': dur / 1000.0,
+            'duration_ms': durationUs / 1000.0,
             'timestamp': event.json?['ts'],
           });
         }
@@ -145,35 +171,38 @@ base mixin PerformanceProfilingSupport
 
     final jankPercentage =
         totalFrames > 0 ? (jankyFrames / totalFrames) * 100 : 0.0;
-    stderr.writeln(
-        '[mcp:diagnose_jank] Collected ${events.length} timeline events, $jankyFrames janky frames');
     final mdBuffer = StringBuffer();
+
     writeSamplingWarningIfInterrupted(
       samplingResult,
       mdBuffer,
-      requestedSeconds: duration,
+      requestedSeconds: durationSeconds,
       dataName: 'timeline events',
     );
+
     mdBuffer
-      ..writeln('Jank Diagnostic Report\n')
-      ..writeln('- Total Frame Events Sampled: $totalFrames')
+      ..writeln('### Jank Diagnostic Report\n')
+      ..writeln('- **Total Frame Events Sampled:** $totalFrames')
       ..writeln(
-          '- Janky Frame Events (> 16.6ms): $jankyFrames ($jankPercentage%)')
-      ..writeln();
+        '- **Janky Frame Events (> 16.6ms):** $jankyFrames (${jankPercentage.toStringAsFixed(1)}%)\n',
+      );
 
     final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
     if (jankyFrames > 0) {
-      mdBuffer.writeln('| Event | Duration (ms) | Severity |');
-      mdBuffer.writeln('| :--- | :--- | :--- |');
+      mdBuffer
+        ..writeln('| Event | Duration (ms) | Severity |')
+        ..writeln('| :--- | :--- | :--- |');
       for (final f in frameEvents.take(limit)) {
         final dur = f['duration_ms'] as double;
         final severity = dur > 33.3 ? 'CRITICAL (>33ms)' : 'WARNING (>16ms)';
         mdBuffer.writeln(
-            '| ${f['event']} | ${dur.toStringAsFixed(2)} | $severity |');
+          '| ${f['event']} | ${dur.toStringAsFixed(2)} | $severity |',
+        );
       }
     } else {
       mdBuffer.writeln(
-          'Clean Render Cycle: No frame events exceeded the 16.6ms budget.');
+        '✨ **Clean Render Cycle:** No frame events exceeded the 16.6ms budget.',
+      );
     }
 
     return serializeDualFormat(
@@ -188,25 +217,29 @@ base mixin PerformanceProfilingSupport
     );
   }
 
-  /// Handles the hot_reload tool request, utilizing DTD if connected.
+  /// Handles triggering hot reload via DTD with graceful fallback to VM Service.
   Future<CallToolResult> handleHotReload(CallToolRequest req) async {
-    bool dtdSuccess = false;
-    if (this is ConnectionSupport) {
-      final dtd = this as ConnectionSupport;
-      if (dtd.dtdClient != null && vmServiceUri != null) {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
+    var dtdSuccess = false;
+    if (this case final ConnectionSupport dtd
+        when dtd.dtdClient != null && vmServiceUri != null) {
+      stderr.writeln(
+        '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...',
+      );
+      try {
+        await dtd.dtdClient!.call(
+          'ConnectedApp',
+          'hotReload',
+          params: {'vmServiceUri': vmServiceUri},
+        );
+        dtdSuccess = true;
+      } on Exception catch (e) {
         stderr.writeln(
-            '[mcp:hot_reload] Triggering ConnectedApp.hotReload via DTD...');
-        try {
-          await dtd.dtdClient!.call(
-            'ConnectedApp',
-            'hotReload',
-            params: {'vmServiceUri': vmServiceUri},
-          );
-          dtdSuccess = true;
-        } catch (e) {
-          stderr.writeln(
-              '[mcp:hot_reload] DTD call failed: $e. Falling back to direct VM Service...');
-        }
+          '[mcp:hot_reload] DTD call failed: $e. Falling back to direct VM Service...',
+        );
       }
     }
 
@@ -215,48 +248,54 @@ base mixin PerformanceProfilingSupport
           registeredMethodsForService['hotReload'];
       if (reloadMethod != null) {
         stderr.writeln(
-            '[mcp:hot_reload] Triggering registered service $reloadMethod...');
-        await vmService!.callMethod(
+          '[mcp:hot_reload] Triggering registered service $reloadMethod...',
+        );
+        await service.callMethod(
           reloadMethod,
-          args: {'isolateId': isolateId!},
+          args: {'isolateId': currentIsolateId},
         );
       } else {
         stderr.writeln('[mcp:hot_reload] Triggering ext.flutter.reassemble...');
-        await vmService!.callServiceExtension(
+        await service.callServiceExtension(
           'ext.flutter.reassemble',
-          isolateId: isolateId!,
+          isolateId: currentIsolateId,
         );
       }
     }
 
-    return CallToolResult(content: [
-      TextContent(
-        text: 'Hot reload triggered successfully.\n'
-            'UI has been reassembled. Note: To load new code changes from disk, '
-            'save the files in your editor (VS Code, IntelliJ) to let the compiler build them first.',
-      )
-    ]);
+    return CallToolResult(
+      content: [
+        TextContent(
+          text: 'Hot reload triggered successfully.\n'
+              'UI has been reassembled. Note: Save modified files in your IDE to ensure changes are compiled.',
+        ),
+      ],
+    );
   }
 
-  /// Handles the hot_restart tool request, utilizing DTD if connected.
+  /// Handles triggering hot restart with isolate validation.
   Future<CallToolResult> handleHotRestart(CallToolRequest req) async {
-    bool dtdSuccess = false;
-    if (this is ConnectionSupport) {
-      final dtd = this as ConnectionSupport;
-      if (dtd.dtdClient != null && vmServiceUri != null) {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
+    var dtdSuccess = false;
+    if (this case final ConnectionSupport dtd
+        when dtd.dtdClient != null && vmServiceUri != null) {
+      stderr.writeln(
+        '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...',
+      );
+      try {
+        await dtd.dtdClient!.call(
+          'ConnectedApp',
+          'hotRestart',
+          params: {'vmServiceUri': vmServiceUri},
+        );
+        dtdSuccess = true;
+      } on Exception catch (e) {
         stderr.writeln(
-            '[mcp:hot_restart] Triggering ConnectedApp.hotRestart via DTD...');
-        try {
-          await dtd.dtdClient!.call(
-            'ConnectedApp',
-            'hotRestart',
-            params: {'vmServiceUri': vmServiceUri},
-          );
-          dtdSuccess = true;
-        } catch (e) {
-          stderr.writeln(
-              '[mcp:hot_restart] DTD call failed: $e. Falling back to direct VM Service...');
-        }
+          '[mcp:hot_restart] DTD call failed: $e. Falling back to direct VM Service...',
+        );
       }
     }
 
@@ -265,87 +304,89 @@ base mixin PerformanceProfilingSupport
           registeredMethodsForService['restart'];
       if (hotRestartMethod != null) {
         stderr.writeln(
-            '[mcp:hot_restart] Triggering registered service $hotRestartMethod...');
-        await vmService!.callMethod(hotRestartMethod);
+          '[mcp:hot_restart] Triggering registered service $hotRestartMethod...',
+        );
+        await service.callMethod(hotRestartMethod);
       } else {
-        stderr.writeln(
-            '[mcp:hot_restart] Checking for restart service extensions...');
-        final isolate = await vmService!.getIsolate(isolateId!);
-        final extensions = isolate.extensionRPCs ?? [];
+        final isolate = await service.getIsolate(currentIsolateId);
+        final extensions = isolate.extensionRPCs ?? const <String>[];
 
         if (extensions.contains('ext.flutter.restart')) {
-          stderr.writeln('[mcp:hot_restart] Triggering ext.flutter.restart...');
-          await vmService!.callServiceExtension(
+          await service.callServiceExtension(
             'ext.flutter.restart',
-            isolateId: isolateId!,
+            isolateId: currentIsolateId,
           );
         } else {
-          stderr.writeln(
-              '[mcp:hot_restart] ext.flutter.restart not found, falling back to reassemble...');
-          await vmService!.callServiceExtension(
+          await service.callServiceExtension(
             'ext.flutter.reassemble',
-            isolateId: isolateId!,
+            isolateId: currentIsolateId,
           );
         }
       }
     }
 
-    // Wait briefly for the isolate to restart before querying the VM
+    // Await isolate lifecycle reset
     await Future<void>.delayed(const Duration(milliseconds: 800));
 
-    // Refresh the isolate ID and cache after the restart
-    final vm = await vmService!.getVM();
-    final isolates = vm.isolates ?? [];
+    final vm = await service.getVM();
+    final isolates = vm.isolates ?? const <IsolateRef>[];
     if (isolates.isNotEmpty) {
-      final newId = isolates.first.id;
-      if (newId != null) {
+      if (isolates.first.id case final newId?) {
         isolateId = newId;
         cachedLibraryId = null;
-        stderr
-            .writeln('[mcp:hot_restart] Refreshed main isolate ID: $isolateId');
+        stderr.writeln(
+          '[mcp:hot_restart] Refreshed main isolate ID: $isolateId',
+        );
       }
     }
 
-    return CallToolResult(content: [
-      TextContent(
-        text: 'Hot restart triggered successfully.\n'
-            'Isolate reference has been updated. Note: To load new code changes from disk, '
-            'save the files in your editor (VS Code, IntelliJ) to let the compiler build them first.',
-      )
-    ]);
+    return CallToolResult(
+      content: [
+        TextContent(
+          text: 'Hot restart triggered successfully.\n'
+              'Isolate reference has been updated. Ensure files are saved in your IDE before testing.',
+        ),
+      ],
+    );
   }
 
-  /// Handles the get_cpu_profile tool request.
+  /// Handles the `get_cpu_profile` tool request.
   Future<CallToolResult> _handleGetCpuProfile(CallToolRequest req) async {
-    final duration = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
-    stderr.writeln(
-        '[mcp:cpu_profile] Starting CPU profile, duration=${duration}s');
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
 
-    await vmService!.clearCpuSamples(isolateId!);
+    final durationSeconds = (req.arg<num>('duration_seconds'))?.toInt() ?? 3;
+    await service.clearCpuSamples(currentIsolateId);
+
     final samplingResult = await safeSamplingWindow(
-      vmService: vmService,
-      duration: Duration(seconds: duration),
+      vmService: service,
+      duration: Duration(seconds: durationSeconds),
     );
 
-    final endTime = DateTime.now().microsecondsSinceEpoch;
+    final endTimeUs = DateTime.now().microsecondsSinceEpoch;
     CpuSamples cpuSamples;
     try {
-      cpuSamples = await vmService!.getCpuSamples(isolateId!, 0, endTime);
-    } catch (_) {
-      cpuSamples =
-          CpuSamples(sampleCount: 0, samplePeriod: 0, maxStackDepth: 0);
+      cpuSamples = await service.getCpuSamples(currentIsolateId, 0, endTimeUs);
+    } on RPCError catch (_) {
+      cpuSamples = CpuSamples(
+        sampleCount: 0,
+        samplePeriod: 0,
+        maxStackDepth: 0,
+      );
     }
-    final functions = cpuSamples.functions ?? [];
 
+    final functions = cpuSamples.functions ?? const <dynamic>[];
     final hotspots = <Map<String, dynamic>>[];
     final mdBuffer = StringBuffer();
+
     writeSamplingWarningIfInterrupted(
       samplingResult,
       mdBuffer,
-      requestedSeconds: duration,
+      requestedSeconds: durationSeconds,
       dataName: 'CPU samples',
     );
-    mdBuffer.writeln('CPU Execution Hotspots (Exclusive Ticks)\n');
+    mdBuffer.writeln('### CPU Execution Hotspots (Exclusive Ticks)\n');
 
     for (final dynamic f in functions) {
       if (f is ProfileFunction) {
@@ -353,12 +394,11 @@ base mixin PerformanceProfilingSupport
         final inclusive = f.inclusiveTicks ?? 0;
         if (exclusive > 0 || inclusive > 0) {
           final func = f.function;
-          final String name;
-          if (func is FuncRef) {
-            name = func.name ?? 'unknown';
-          } else {
-            name = func?.toString() ?? 'unknown';
-          }
+          final name = switch (func) {
+            final FuncRef fr => fr.name ?? 'unknown',
+            final Object obj => obj.toString(),
+            _ => 'unknown',
+          };
 
           final url = f.resolvedUrl ?? '';
           final resolvedPath = pathResolver != null
@@ -375,21 +415,24 @@ base mixin PerformanceProfilingSupport
       }
     }
 
-    hotspots.sort((a, b) =>
-        (b['exclusive_ticks'] as int).compareTo(a['exclusive_ticks'] as int));
-    stderr.writeln(
-        '[mcp:cpu_profile] Collected ${cpuSamples.sampleCount} samples, ${hotspots.length} active functions');
+    hotspots.sort(
+      (a, b) =>
+          (b['exclusive_ticks'] as int).compareTo(a['exclusive_ticks'] as int),
+    );
 
     final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
     if (hotspots.isEmpty) {
       mdBuffer.writeln('No CPU sampling ticks recorded in the window.');
     } else {
-      mdBuffer.writeln(
-          '| Function | Exclusive Ticks | Inclusive Ticks | Source Location |');
-      mdBuffer.writeln('| :--- | :--- | :--- | :--- |');
+      mdBuffer
+        ..writeln(
+          '| Function | Exclusive Ticks | Inclusive Ticks | Source Location |',
+        )
+        ..writeln('| :--- | :--- | :--- | :--- |');
       for (final h in hotspots.take(limit)) {
         mdBuffer.writeln(
-            '| ${h['name']} | ${h['exclusive_ticks']} | ${h['inclusive_ticks']} | `${h['location']}` |');
+          '| `${h['name']}` | ${h['exclusive_ticks']} | ${h['inclusive_ticks']} | `${h['location']}` |',
+        );
       }
     }
 
@@ -397,40 +440,44 @@ base mixin PerformanceProfilingSupport
       title: 'CPU Profiler Diagnostic Report',
       markdownBody: mdBuffer.toString(),
       structuredData: {
-        'duration_seconds': duration,
+        'duration_seconds': durationSeconds,
         'total_samples': cpuSamples.sampleCount ?? 0,
         'hotspots': hotspots.take(limit).toList(),
       },
     );
   }
 
-  /// Handles the start_profiling tool request.
+  /// Starts a performance profiling session.
   Future<CallToolResult> _handleStartProfiling(CallToolRequest req) async {
+    final service = vmService;
+    if (service == null) return notConnected();
+
     if (isProfiling) {
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'A profiling session is already active. Call the `profiling` tool with action: `stop` first.')
+            text: 'A profiling session is already active. '
+                'Call the `profiling` tool with action: `stop` first.',
+          ),
         ],
         isError: true,
       );
     }
 
-    stderr.writeln('[mcp:profiling] Starting performance profiling session...');
-    await vmService!.clearVMTimeline();
-    await vmService!
-        .setVMTimelineFlags(['Embedder', 'Dart', 'GC', 'API', 'Compiler']);
+    await service.clearVMTimeline();
+    await service.setVMTimelineFlags(
+      const ['Embedder', 'Dart', 'GC', 'API', 'Compiler'],
+    );
 
-    double fpsVal = 60.0;
+    var fpsVal = 60.0;
     try {
-      final fpsResponse = await vmService!.callServiceExtension(
+      final fpsResponse = await service.callServiceExtension(
         'ext.flutter.getDisplayRefreshRate',
         isolateId: isolateId,
       );
       fpsVal = (fpsResponse.json?['fps'] as num?)?.toDouble() ?? 60.0;
-    } catch (e) {
-      stderr.writeln('[mcp:profile] Error getting display refresh rate: $e');
+    } on Exception catch (e) {
+      stderr.writeln('[mcp:profile] Error getting refresh rate: $e');
     }
 
     isProfiling = true;
@@ -440,27 +487,30 @@ base mixin PerformanceProfilingSupport
     return CallToolResult(
       content: [
         TextContent(
-          text:
-              'Profiling started. Interact with the app now, then call the `profiling` tool with action: `stop` to get the analysis.',
-        )
+          text: 'Profiling started. Interact with the app now, '
+              'then call the `profiling` tool with action: `stop` to get the report.',
+        ),
       ],
     );
   }
 
-  /// Handles the stop_profiling tool request.
+  /// Stops an active performance profiling session and outputs aggregate metrics.
   Future<CallToolResult> _handleStopProfiling(CallToolRequest req) async {
+    final service = vmService;
+    if (service == null) return notConnected();
+
     if (!isProfiling) {
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'No active profiling session. Call the `profiling` tool with action: `start` first.')
+            text: 'No active profiling session. '
+                'Call the `profiling` tool with action: `start` first.',
+          ),
         ],
         isError: true,
       );
     }
 
-    stderr.writeln('[mcp:profiling] Stopping performance profiling session...');
     isProfiling = false;
     final startTime = profilingStartTime;
     final durationMs = startTime != null
@@ -469,16 +519,16 @@ base mixin PerformanceProfilingSupport
 
     Timeline timeline;
     try {
-      timeline = await vmService!.getVMTimeline();
+      timeline = await service.getVMTimeline();
     } finally {
       try {
-        await vmService!.setVMTimelineFlags([]);
-      } catch (e) {
-        stderr.writeln('[mcp:profiling] Error resetting timeline flags: $e');
+        await service.setVMTimelineFlags(const []);
+      } on Exception catch (e) {
+        stderr.writeln('[mcp:profiling] Error clearing timeline flags: $e');
       }
     }
-    final events = timeline.traceEvents ?? [];
 
+    final events = timeline.traceEvents ?? const [];
     final targetFpsVal = targetFps ?? 60.0;
     final targetFrameTimeMs = 1000.0 / targetFpsVal;
 
@@ -598,12 +648,24 @@ base mixin PerformanceProfilingSupport
       };
     }
 
-    final buildPhase = analyzePhase('Build',
-        ['build', 'widget', 'createelement', 'updatechild', 'performrebuild']);
-    final layoutPhase = analyzePhase('Layout',
-        ['layout', 'performlayout', 'flushlayout', 'renderflex', 'renderbox']);
+    final buildPhase = analyzePhase('Build', [
+      'build',
+      'widget',
+      'createelement',
+      'updatechild',
+      'performrebuild',
+    ]);
+    final layoutPhase = analyzePhase('Layout', [
+      'layout',
+      'performlayout',
+      'flushlayout',
+      'renderflex',
+      'renderbox',
+    ]);
     final paintPhase = analyzePhase(
-        'Paint', ['paint', 'flushpaint', 'compositeframe', 'rasterizer']);
+      'Paint',
+      ['paint', 'flushpaint', 'compositeframe', 'rasterizer'],
+    );
 
     final output = [
       'FLUTTER PERFORMANCE ANALYSIS',
@@ -646,7 +708,8 @@ base mixin PerformanceProfilingSupport
                     : '[LOW]';
         output.add('$severityLabel ${h['name']}');
         output.add(
-            'Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}');
+          'Total: ${h['totalDurationMs']}ms | Avg: ${h['avgDurationMs']}ms | Max: ${h['maxDurationMs']}ms | Calls: ${h['callCount']}',
+        );
       }
       output.add('');
     }
@@ -654,37 +717,45 @@ base mixin PerformanceProfilingSupport
     final recommendations = <String>[];
     if (events.isEmpty) {
       recommendations.add(
-          'No timeline events were captured. Make sure to interact with the app.');
+        'No timeline events were captured. Make sure to interact with the app.',
+      );
     } else {
       if (jankPct > 10.0) {
         recommendations.add(
-            'Significant jank detected. Profile in release/profile mode to get accurate numbers.');
+          'Significant jank detected. Profile in release/profile mode to get accurate numbers.',
+        );
       }
       if ((buildPhase['maxTimeMs'] as double) > 16.0) {
         recommendations.add(
-            'Build phase exceeds frame budget. Use const constructors and break up large widget trees.');
+          'Build phase exceeds frame budget. Use const constructors and break up large widget trees.',
+        );
       }
       if ((buildPhase['count'] as int) > totalFrames * 3) {
         recommendations.add(
-            'Excessive widget rebuilds detected. Wrap in const constructors or use context.select().');
+          'Excessive widget rebuilds detected. Wrap in const constructors or use context.select().',
+        );
       }
       if ((layoutPhase['maxTimeMs'] as double) > 16.0) {
         recommendations.add(
-            'Layout phase is slow. Look for intrinsic dimensions or deeply nested flex layouts.');
+          'Layout phase is slow. Look for intrinsic dimensions or deeply nested flex layouts.',
+        );
       }
       if ((paintPhase['maxTimeMs'] as double) > 16.0) {
         recommendations.add(
-            'Paint phase is slow. Use RepaintBoundary to isolate repainting of heavy animated components.');
+          'Paint phase is slow. Use RepaintBoundary to isolate repainting of heavy animated components.',
+        );
       }
       for (final h
           in cpuHotspots.where((h) => h['severity'] == 'critical').take(3)) {
         recommendations.add(
-            'Critical hotspot: "${h['name']}" taking ${h['maxDurationMs']}ms.');
+          'Critical hotspot: "${h['name']}" taking ${h['maxDurationMs']}ms.',
+        );
       }
     }
     if (recommendations.isEmpty) {
       recommendations.add(
-          'Performance looks good! No major issues detected in this session.');
+        'Performance looks good! No major issues detected in this session.',
+      );
     }
 
     output.add('RECOMMENDATIONS');
@@ -713,20 +784,5 @@ base mixin PerformanceProfilingSupport
         'recommendations': recommendations,
       },
     );
-  }
-
-  /// Handles the profiling composite tool request.
-  Future<CallToolResult> _handleProfiling(CallToolRequest req) async {
-    final action = req.requireArg<String>('action');
-    return switch (action) {
-      'start' => _handleStartProfiling(req),
-      'stop' => _handleStopProfiling(req),
-      'get_cpu' => _handleGetCpuProfile(req),
-      'diagnose_jank' => _handleDiagnoseJank(req),
-      _ => CallToolResult(
-          content: [TextContent(text: 'Unknown profiling action: $action')],
-          isError: true,
-        ),
-    };
   }
 }

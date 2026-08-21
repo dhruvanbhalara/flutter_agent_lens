@@ -103,7 +103,7 @@ base mixin ConsoleLoggingSupport
       if (e.code != 103) {
         stderr.writeln('[mcp:logging] Error subscribing to logging stream: $e');
       }
-    } catch (e) {
+    } on Exception catch (e) {
       stderr.writeln('[mcp:logging] Error subscribing to logging stream: $e');
     }
   }
@@ -155,9 +155,10 @@ base mixin ConsoleLoggingSupport
     String logPrefix,
     Stream<Event> eventStream,
   ) async {
-    if (vmService == null) return null;
+    final service = vmService;
+    if (service == null) return null;
     try {
-      await vmService!.streamListen(streamId);
+      await service.streamListen(streamId);
       return eventStream.listen((Event event) {
         final bytes = event.bytes;
         if (bytes != null) {
@@ -174,7 +175,7 @@ base mixin ConsoleLoggingSupport
         stderr.writeln(
             '[mcp:logging] Error subscribing to byte stream $streamId: $e');
       }
-    } catch (e) {
+    } on Exception catch (e) {
       stderr.writeln(
           '[mcp:logging] Error subscribing to byte stream $streamId: $e');
     }

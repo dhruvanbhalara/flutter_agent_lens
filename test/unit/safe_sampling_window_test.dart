@@ -37,6 +37,13 @@ void main() {
       expect(result.elapsed.inMilliseconds, greaterThanOrEqualTo(40));
     });
 
+    test('InterruptionReason constants have expected values', () {
+      expect(
+        InterruptionReason.vmDisconnected.value,
+        equals('vm_service_disconnected'),
+      );
+    });
+
     test('terminates early when VM service disconnects mid-sampling', () async {
       final future = safeSamplingWindow(
         vmService: fakeVmService,

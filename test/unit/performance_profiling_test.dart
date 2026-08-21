@@ -24,24 +24,44 @@ base class PerformanceProfilingMock extends MCPServer
 class FakeVmServiceForProfiling extends vm_service.VmService {
   final Completer<void> _onDoneCompleter = Completer<void>();
   final Map<String, dynamic> responseMap;
+  bool setFlagsFailedWithRpcError = false;
+
   FakeVmServiceForProfiling(this.responseMap)
       : super(const Stream<dynamic>.empty(), (msg) {});
 
   @override
   Future<void> get onDone => _onDoneCompleter.future;
 
+  void triggerDisconnect() {
+    if (!_onDoneCompleter.isCompleted) {
+      _onDoneCompleter.complete();
+    }
+  }
+
   @override
   Future<vm_service.Isolate> getIsolate(String isolateId) async {
     return vm_service.Isolate(
       id: 'isolate_1',
       name: 'main',
-      extensionRPCs: [],
+      extensionRPCs: ['ext.flutter.restart'],
+    );
+  }
+
+  @override
+  Future<vm_service.VM> getVM() async {
+    return vm_service.VM(
+      isolates: [
+        vm_service.IsolateRef(id: 'isolate_2', name: 'main'),
+      ],
     );
   }
 
   @override
   Future<vm_service.Success> setVMTimelineFlags(
       List<String> recordedStreams) async {
+    if (setFlagsFailedWithRpcError) {
+      throw vm_service.RPCError('setVMTimelineFlags', 100, 'RPC error');
+    }
     return vm_service.Success();
   }
 
@@ -54,6 +74,15 @@ class FakeVmServiceForProfiling extends vm_service.VmService {
   Future<vm_service.Timeline> getVMTimeline(
       {int? timeOriginMicros, int? timeExtentMicros}) async {
     return vm_service.Timeline.parse(responseMap)!;
+  }
+
+  @override
+  Future<vm_service.Response> callServiceExtension(
+    String method, {
+    String? isolateId,
+    Map<String, dynamic>? args,
+  }) async {
+    return vm_service.Response.parse({'type': 'Success'})!;
   }
 }
 
@@ -95,10 +124,74 @@ void main() {
 
       expect(result.isError, isNot(isTrue));
       final text = (result.content.first as TextContent).text;
-      expect(text, contains('Janky Frame Events (> 16.6ms): 20'));
+      expect(text, contains('**Janky Frame Events (> 16.6ms):** 20 (100.0%)'));
       final lines = text.split('\n');
       final jankRows = lines.where((l) => l.contains('20.00')).toList();
       expect(jankRows.length, equals(15));
+    });
+
+    test('handleHotReload reassembles UI when DTD is unattached', () async {
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'hot_reload',
+          arguments: const {},
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Hot reload triggered successfully'));
+    });
+
+    test('handleHotRestart updates isolate ID upon completion', () async {
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'hot_restart',
+          arguments: const {},
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Hot restart triggered successfully'));
+      expect(mock.isolateId, equals('isolate_2'));
+    });
+
+    test('cleanupPerformanceProfiling handles RPCError gracefully', () async {
+      final fake = FakeVmServiceForProfiling({});
+      fake.setFlagsFailedWithRpcError = true;
+      mock.vmService = fake;
+
+      await expectLater(
+        mock.cleanupPerformanceProfiling(),
+        completes,
+      );
+      expect(mock.isProfiling, isFalse);
+    });
+
+    test('diagnose_jank includes warning when VM disconnects mid-sampling',
+        () async {
+      final fake = FakeVmServiceForProfiling({});
+      mock.vmService = fake;
+
+      final future = mock.callTool(
+        CallToolRequest(
+          name: 'profiling',
+          arguments: const {
+            'action': 'diagnose_jank',
+            'duration_seconds': 5,
+          },
+        ),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      fake.triggerDisconnect();
+
+      final result = await future;
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('> [!WARNING]'));
+      expect(text, contains('vm_service_disconnected'));
     });
   });
 }

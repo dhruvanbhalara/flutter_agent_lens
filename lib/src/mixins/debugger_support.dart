@@ -115,10 +115,14 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the get_call_stack tool request.
   Future<CallToolResult> _handleGetCallStack(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final limit = (req.arg<num>('limit'))?.toInt() ?? 20;
     stderr.writeln('[mcp:get_call_stack] Fetching stack frames (limit=$limit)');
 
-    final stack = await vmService!.getStack(isolateId!, limit: limit);
+    final stack = await service.getStack(currentIsolateId, limit: limit);
     final frames = stack.frames ?? [];
     final md = StringBuffer('Call Stack Frames\n\n');
 
@@ -159,20 +163,28 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   /// Handles the set_exception_pause_mode tool request.
   Future<CallToolResult> _handleSetExceptionPauseMode(
       CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final modeStr = req.requireArg<String>('mode');
     final mode = ExceptionPauseMode.fromString(modeStr);
     stderr.writeln(
         '[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
 
     try {
-      await vmService!
-          .setIsolatePauseMode(isolateId!, exceptionPauseMode: mode.value);
+      await service.setIsolatePauseMode(currentIsolateId,
+          exceptionPauseMode: mode.value);
     } catch (e) {
       stderr.writeln(
           '[mcp:debugger] setIsolatePauseMode failed: $e. Trying deprecated fallback.');
-      // Fallback for older VM Service versions
-      // ignore: deprecated_member_use
-      await vmService!.setExceptionPauseMode(isolateId!, mode.value);
+      try {
+        // Fallback for older VM Service versions
+        // ignore: deprecated_member_use
+        await service.setExceptionPauseMode(currentIsolateId, mode.value);
+      } on Exception catch (e2) {
+        stderr.writeln('[mcp:debugger] setExceptionPauseMode failed: $e2');
+      }
     }
     return CallToolResult(content: [
       TextContent(
@@ -182,6 +194,10 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the add_breakpoint tool request.
   Future<CallToolResult> _handleAddBreakpoint(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final filePath = req.requireArg<String>('file_path');
     final line = (req.requireArg<num>('line')).toInt();
     final column = (req.arg<num>('column'))?.toInt();
@@ -192,8 +208,8 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         filePath.startsWith('file:') ? filePath : Uri.file(filePath).toString();
     final bp = await () async {
       try {
-        return await vmService!.addBreakpointWithScriptUri(
-          isolateId!,
+        return await service.addBreakpointWithScriptUri(
+          currentIsolateId,
           uri,
           line,
           column: column,
@@ -226,12 +242,16 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the remove_breakpoint tool request.
   Future<CallToolResult> _handleRemoveBreakpoint(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final breakpointId = req.requireArg<String>('breakpoint_id');
     stderr
         .writeln('[mcp:remove_breakpoint] Removing breakpoint: $breakpointId');
 
     try {
-      await vmService!.removeBreakpoint(isolateId!, breakpointId);
+      await service.removeBreakpoint(currentIsolateId, breakpointId);
     } on RPCError catch (e) {
       return CallToolResult(
         content: [
@@ -248,6 +268,10 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the evaluate_expression tool request.
   Future<CallToolResult> _handleEvalExpression(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final expression = req.requireArg<String>('expression');
     final frameIndex = (req.arg<num>('frame_index'))?.toInt();
 
@@ -260,9 +284,10 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     }
 
     final Object res = frameIndex != null
-        ? await vmService!.evaluateInFrame(isolateId!, frameIndex, expression)
-        : await vmService!
-            .evaluate(isolateId!, await getEvaluationLibraryId(), expression);
+        ? await service.evaluateInFrame(
+            currentIsolateId, frameIndex, expression)
+        : await service.evaluate(
+            currentIsolateId, await getEvaluationLibraryId(), expression);
 
     final rawValStr = res is InstanceRef
         ? (res.valueAsString ?? res.toString())

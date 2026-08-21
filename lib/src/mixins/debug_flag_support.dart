@@ -59,6 +59,10 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   Future<CallToolResult> _handleTogglePackageWidgets(
       CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final enabled = req.requireArg<bool>('enabled');
     stderr.writeln('[mcp:toggle_package_widgets] Setting enabled = $enabled');
 
@@ -92,7 +96,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       packagePaths.insert(0, root);
     }
 
-    final isolate = await vmService!.getIsolate(isolateId!);
+    final isolate = await service.getIsolate(currentIsolateId);
     final libraries = isolate.libraries ?? [];
     LibraryRef? widgetInspectorLib;
     for (final lib in libraries) {
@@ -123,16 +127,16 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     if (enabled) {
       stderr.writeln(
           '[mcp:toggle_package_widgets] Adding ${packagePaths.length} pub root directories');
-      await vmService!.evaluate(
-        isolateId!,
+      await service.evaluate(
+        currentIsolateId,
         libId,
         'WidgetInspectorService.instance.addPubRootDirectories($pathsLiteral)',
       );
     } else {
       stderr.writeln(
           '[mcp:toggle_package_widgets] Removing ${packagePaths.length} pub root directories');
-      await vmService!.evaluate(
-        isolateId!,
+      await service.evaluate(
+        currentIsolateId,
         libId,
         'WidgetInspectorService.instance.removePubRootDirectories($pathsLiteral)',
       );
@@ -140,8 +144,8 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
     var currentDirs = 'unknown';
     try {
-      final res = await vmService!.evaluate(
-        isolateId!,
+      final res = await service.evaluate(
+        currentIsolateId,
         libId,
         'WidgetInspectorService.instance.pubRootDirectories',
       );
@@ -150,7 +154,9 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       } else {
         currentDirs = res.toString();
       }
-    } catch (e) {
+    } on RPCError catch (e) {
+      stderr.writeln('[mcp:widget] RPC error fetching pubRootDirectories: $e');
+    } on Exception catch (e) {
       stderr.writeln('[mcp:widget] Error fetching pubRootDirectories: $e');
     }
 
@@ -203,6 +209,10 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   }
 
   Future<CallToolResult> _handleToggleDebugFlag(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
     final flagName = req.requireArg<String>('flag_name');
     final valStr = req.requireArg<String>('value');
     stderr.writeln('[mcp:toggle_flag] Flag: $flagName, Target value: $valStr');
@@ -224,9 +234,9 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     };
 
     try {
-      final response = await vmService!.callServiceExtension(
+      final response = await service.callServiceExtension(
         extensionName,
-        isolateId: isolateId,
+        isolateId: currentIsolateId,
         args: args,
       );
 
@@ -242,7 +252,12 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           )
         ],
       );
-    } catch (e) {
+    } on RPCError catch (e) {
+      return CallToolResult(
+        content: [TextContent(text: 'RPC error setting debug flag: $e')],
+        isError: true,
+      );
+    } on Exception catch (e) {
       return CallToolResult(
         content: [TextContent(text: 'Failed to set debug flag: $e')],
         isError: true,
