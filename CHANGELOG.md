@@ -1,3 +1,10 @@
+## [Unreleased]
+
+### Fixed
+- Fixed unhandled crashes and null reference errors when the VM service disconnects during active tool execution.
+- Fixed a memory leak where background disconnect listeners remained attached after sampling completed.
+- Prevented inaccurate GC monitoring state from showing active when disconnected from the VM service.
+
 ## 1.7.3
 
 ### Fixed
