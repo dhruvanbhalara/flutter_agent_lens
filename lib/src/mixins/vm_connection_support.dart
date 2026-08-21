@@ -217,13 +217,23 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     if (fmt == 'json') {
       contentBuffer
         ..writeln('```json')
-        ..writeln(const JsonEncoder.withIndent('  ').convert(structuredData))
+        ..writeln(jsonEncode(structuredData))
         ..writeln('```');
     } else {
-      contentBuffer
-        ..writeln(title)
-        ..writeln()
-        ..writeln(markdownBody);
+      final trimmedBody = markdownBody.trimLeft();
+      final lowerTitle = title.toLowerCase();
+      final lowerBody = trimmedBody.toLowerCase();
+      final startsWithTitle = lowerBody.startsWith(lowerTitle) ||
+          lowerBody.startsWith('# $lowerTitle') ||
+          lowerBody.startsWith('## $lowerTitle') ||
+          lowerBody.startsWith('### $lowerTitle');
+
+      if (!startsWithTitle) {
+        contentBuffer
+          ..writeln(title)
+          ..writeln();
+      }
+      contentBuffer.writeln(markdownBody);
     }
 
     return CallToolResult(

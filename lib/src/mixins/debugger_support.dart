@@ -235,7 +235,6 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         'file_path': filePath,
         'line': line,
         'resolved': bp.resolved ?? false,
-        'raw_response': bp.json,
       },
     );
   }
