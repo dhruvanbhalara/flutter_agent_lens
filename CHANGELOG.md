@@ -1,4 +1,4 @@
-## [Unreleased]
+## 1.7.4
 
 ### Fixed
 - Fixed unhandled crashes and null reference errors when the VM service disconnects during active tool execution.
