@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:vm_service/vm_service.dart';
 
 class FakeVmService extends VmService {
+  final Completer<void> _onDoneCompleter = Completer<void>();
   final Map<String, Map<String, dynamic>> serviceExtensionResponses = {};
   final StreamController<Event> _eventController =
       StreamController<Event>.broadcast();
@@ -16,11 +17,19 @@ class FakeVmService extends VmService {
   Map<String, dynamic>? lastArgs;
   String? lastExtensionCalled;
   List<String> activeStreamSubscriptions = [];
+  RPCError? Function(String method)? customServiceExtensionError;
+  Object? Function(String expression)? customEvaluateError;
 
-  List<String> mockExtensionRPCs = [];
+  List<String> mockExtensionRPCs = [
+    'ext.dart.io.getHttpProfile',
+    'ext.dart.io.getHttpProfileRequest',
+  ];
   Map<String, dynamic> mockTimelineResponse = {};
 
   FakeVmService() : super(const Stream<dynamic>.empty(), (msg) {});
+
+  @override
+  Future<void> get onDone => _onDoneCompleter.future;
 
   @override
   Stream<Event> get onExtensionEvent => _eventController.stream;
@@ -95,6 +104,10 @@ class FakeVmService extends VmService {
   }) async {
     lastExtensionCalled = method;
     lastArgs = args;
+    if (customServiceExtensionError != null) {
+      final err = customServiceExtensionError!(method);
+      if (err != null) throw err;
+    }
     final responseMap = serviceExtensionResponses[method];
     if (responseMap != null) {
       return Response.parse(responseMap)!;
@@ -171,7 +184,7 @@ class FakeVmService extends VmService {
   }
 
   @override
-  Future<InstanceRef> evaluate(
+  Future<Response> evaluate(
     String isolateId,
     String targetId,
     String expression, {
@@ -179,6 +192,10 @@ class FakeVmService extends VmService {
     bool? disableBreakpoints,
     String? idZoneId,
   }) async {
+    if (customEvaluateError != null) {
+      final err = customEvaluateError!(expression);
+      if (err != null) throw err as Exception;
+    }
     return InstanceRef(
       id: 'ref_1',
       kind: InstanceKind.kBool,
@@ -261,8 +278,6 @@ class FakeVmService extends VmService {
   @override
   Future<Success> dispose() async {
     disposeCalled = true;
-    await _eventController.close();
-    await _gcEventController.close();
     return Success();
   }
 }
