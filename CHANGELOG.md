@@ -1,3 +1,13 @@
+## 1.7.5
+
+### Fixed
+- Fixed inaccurate duration and response size calculations in `network` traffic reports by accumulating metrics across all completed requests.
+- Hardened widget rebuild tracking against malformed or missing extension event payload fields.
+
+### Changed
+- Standardized case-insensitive value resolution across enum configuration options (`set_exception_pause_mode`, `network`, `screenshot`, `diagnose_project`).
+- Reduced memory overhead during class leak audits and heap retaining path inspections.
+
 ## 1.7.4
 
 ### Fixed
