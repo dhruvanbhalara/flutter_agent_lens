@@ -270,16 +270,7 @@ base mixin MemoryDebuggingSupport
         try {
           final retainingPath =
               await service.getRetainingPath(currentIsolateId, instanceId, 15);
-          final pathElements = <String>[];
-          final elements = retainingPath.elements ?? [];
-          for (final element in elements.whereType<RetainingObject>()) {
-            final val = element.value;
-            if (val is InstanceRef) {
-              pathElements.add('${val.classRef?.name} (${val.id})');
-            } else {
-              pathElements.add(val.toString());
-            }
-          }
+          final pathElements = _extractRetainingPathElements(retainingPath);
           retainingPathResults.add({
             'instance_id': instanceId,
             'mounted': false,
@@ -536,17 +527,7 @@ base mixin MemoryDebuggingSupport
 
     final retainingPath =
         await service.getRetainingPath(currentIsolateId, objectId, limit);
-    final pathElements = <String>[];
-
-    final elements = retainingPath.elements ?? [];
-    for (final element in elements.whereType<RetainingObject>()) {
-      final val = element.value;
-      if (val is InstanceRef) {
-        pathElements.add('${val.classRef?.name} (${val.id})');
-      } else {
-        pathElements.add(val.toString());
-      }
-    }
+    final pathElements = _extractRetainingPathElements(retainingPath);
 
     final md = StringBuffer('Retaining Path for Object: $objectId\n\n');
     if (pathElements.isEmpty) {
@@ -929,30 +910,11 @@ base mixin MemoryDebuggingSupport
       'heapCapacity': heapCapacity,
       'externalUsage': externalUsage,
       'heapUtilization': heapUtilization,
-      'top_classes': sortedBySizeFiltered
-          .take(topN)
-          .map((m) => {
-                'class': m.classRef?.name ?? 'Unknown',
-                'bytes': m.bytesCurrent ?? 0,
-                'instances': m.instancesCurrent ?? 0,
-              })
-          .toList(),
-      'top_instances': sortedByInstancesFiltered
-          .take(10)
-          .map((m) => {
-                'class': m.classRef?.name ?? 'Unknown',
-                'bytes': m.bytesCurrent ?? 0,
-                'instances': m.instancesCurrent ?? 0,
-              })
-          .toList(),
-      'app_classes': appClasses
-          .take(20)
-          .map((m) => {
-                'class': m.classRef?.name ?? 'Unknown',
-                'bytes': m.bytesCurrent ?? 0,
-                'instances': m.instancesCurrent ?? 0,
-              })
-          .toList(),
+      'top_classes':
+          sortedBySizeFiltered.take(topN).map(_classHeapStatsToMap).toList(),
+      'top_instances':
+          sortedByInstancesFiltered.take(10).map(_classHeapStatsToMap).toList(),
+      'app_classes': appClasses.take(20).map(_classHeapStatsToMap).toList(),
     };
 
     return serializeDualFormat(
@@ -1373,3 +1335,23 @@ base mixin MemoryDebuggingSupport
     };
   }
 }
+
+List<String> _extractRetainingPathElements(RetainingPath retainingPath) {
+  final pathElements = <String>[];
+  final elements = retainingPath.elements ?? [];
+  for (final element in elements.whereType<RetainingObject>()) {
+    final val = element.value;
+    if (val is InstanceRef) {
+      pathElements.add('${val.classRef?.name} (${val.id})');
+    } else {
+      pathElements.add(val.toString());
+    }
+  }
+  return pathElements;
+}
+
+Map<String, dynamic> _classHeapStatsToMap(ClassHeapStats m) => {
+      'class': m.classRef?.name ?? 'Unknown',
+      'bytes': m.bytesCurrent ?? 0,
+      'instances': m.instancesCurrent ?? 0,
+    };
