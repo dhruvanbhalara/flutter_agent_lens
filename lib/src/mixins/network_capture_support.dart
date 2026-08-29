@@ -390,45 +390,7 @@ base mixin NetworkCaptureSupport
       });
     }
 
-    final completedRequests = allRequests.where((r) {
-      final responseData = r['response'] as Map<String, dynamic>?;
-      return responseData != null && r['endTime'] != null;
-    }).toList();
-
-    final failedRequests = allRequests.where((r) {
-      final error = r['error']?.toString();
-      final responseData = r['response'] as Map<String, dynamic>?;
-      final statusCode = responseData?['statusCode'] as int?;
-      return error != null || (statusCode != null && statusCode >= 400);
-    }).toList();
-
-    final pendingRequests = allRequests.where((r) {
-      final responseData = r['response'] as Map<String, dynamic>?;
-      return r['endTime'] == null && r['error'] == null && responseData == null;
-    }).toList();
-
-    final totalSize = allRequests.fold<int>(0, (sum, r) {
-      final responseData = r['response'] as Map<String, dynamic>?;
-      return sum + ((responseData?['contentLength'] as int?) ?? 0);
-    });
-
-    final durations = completedRequests.map((r) {
-      final startUs = r['startTime'] as int? ?? 0;
-      final endUs = r['endTime'] as int? ?? 0;
-      return (endUs - startUs) / 1000.0;
-    }).toList();
-
-    final avgDuration = durations.isNotEmpty
-        ? durations.reduce((a, b) => a + b) / durations.length
-        : 0.0;
-    final maxDuration =
-        durations.isNotEmpty ? durations.reduce((a, b) => a > b ? a : b) : 0.0;
-
-    String formatDuration(double ms) {
-      if (ms < 1.0) return '<1ms';
-      if (ms < 1000.0) return '${ms.round()}ms';
-      return '${(ms / 1000.0).toStringAsFixed(2)}s';
-    }
+    final summary = _NetworkTrafficSummary(allRequests);
 
     final output = [
       'NETWORK TRAFFIC REPORT',
@@ -436,10 +398,10 @@ base mixin NetworkCaptureSupport
       'SUMMARY',
       'Captured for ${(durationMs / 1000.0).toStringAsFixed(1)}s',
       'Total requests: ${allRequests.length}',
-      'Completed: ${completedRequests.length} | Failed: ${failedRequests.length} | Pending: ${pendingRequests.length}',
-      'Total response size: ${formatBytes(totalSize)}',
-      'Average response time: ${formatDuration(avgDuration)}',
-      'Slowest request: ${formatDuration(maxDuration)}',
+      'Completed: ${summary.completedRequests.length} | Failed: ${summary.failedRequests.length} | Pending: ${summary.pendingRequests.length}',
+      'Total response size: ${formatBytes(summary.totalSize)}',
+      'Average response time: ${_NetworkTrafficSummary.formatDuration(summary.avgDuration)}',
+      'Slowest request: ${_NetworkTrafficSummary.formatDuration(summary.maxDuration)}',
       '',
       'REQUESTS',
     ];
@@ -458,8 +420,9 @@ base mixin NetworkCaptureSupport
       final durationVal = (startUs != null && endUs != null)
           ? (endUs - startUs) / 1000.0
           : null;
-      final durationStr =
-          durationVal != null ? formatDuration(durationVal) : 'pending...';
+      final durationStr = durationVal != null
+          ? _NetworkTrafficSummary.formatDuration(durationVal)
+          : 'pending...';
 
       final statusSymbol = switch (reqMap) {
         {'error': final err} when err != null => '[ERROR] $err',
@@ -501,13 +464,13 @@ base mixin NetworkCaptureSupport
       formattedRequests.add(reqEntry);
     }
 
-    final slowRequests = completedRequests.where((r) {
+    final slowRequests = summary.completedRequests.where((r) {
       final startUs = r['startTime'] as int? ?? 0;
       final endUs = r['endTime'] as int? ?? 0;
       return (endUs - startUs) > 2000000;
     }).toList();
 
-    final largeResponses = completedRequests.where((r) {
+    final largeResponses = summary.completedRequests.where((r) {
       final responseData = r['response'] as Map<String, dynamic>?;
       final len = responseData?['contentLength'] as int? ?? 0;
       return len > 500000;
@@ -515,7 +478,7 @@ base mixin NetworkCaptureSupport
 
     if (slowRequests.isNotEmpty ||
         largeResponses.isNotEmpty ||
-        failedRequests.isNotEmpty) {
+        summary.failedRequests.isNotEmpty) {
       output.add('');
       output.add('CONCERNS');
       for (final r in slowRequests.take(3)) {
@@ -523,7 +486,7 @@ base mixin NetworkCaptureSupport
         final endUs = r['endTime'] as int? ?? 0;
         final dur = (endUs - startUs) / 1000.0;
         output.add(
-            '- SLOW: ${r['method']} ${r['uri']} took ${formatDuration(dur)}');
+            '- SLOW: ${r['method']} ${r['uri']} took ${_NetworkTrafficSummary.formatDuration(dur)}');
       }
       for (final r in largeResponses.take(3)) {
         final responseData = r['response'] as Map<String, dynamic>?;
@@ -531,7 +494,7 @@ base mixin NetworkCaptureSupport
         output.add(
             '- LARGE: ${r['method']} ${r['uri']} returned ${formatBytes(len)}');
       }
-      for (final r in failedRequests.take(3)) {
+      for (final r in summary.failedRequests.take(3)) {
         final error = r['error']?.toString();
         final responseData = r['response'] as Map<String, dynamic>?;
         final statusCode = responseData?['statusCode']?.toString();
@@ -860,47 +823,9 @@ base mixin NetworkCaptureSupport
       );
     } catch (_) {}
 
-    final completedRequests = newRequests.where((r) {
-      final responseData = r['response'] as Map<String, dynamic>?;
-      return responseData != null || r['endTime'] != null;
-    }).toList();
+    final summary = _NetworkTrafficSummary(newRequests);
 
-    final failedRequests = newRequests.where((r) {
-      final error = r['error']?.toString();
-      final responseData = r['response'] as Map<String, dynamic>?;
-      final statusCode = responseData?['statusCode'] as int?;
-      return error != null || (statusCode != null && statusCode >= 400);
-    }).toList();
-
-    final pendingRequests = newRequests.where((r) {
-      final responseData = r['response'] as Map<String, dynamic>?;
-      return r['endTime'] == null && r['error'] == null && responseData == null;
-    }).toList();
-
-    final totalSize = completedRequests.fold<int>(0, (sum, r) {
-      final responseData = r['response'] as Map<String, dynamic>?;
-      return sum + (responseData?['contentLength'] as int? ?? 0);
-    });
-
-    final durations = completedRequests.map((r) {
-      final startUs = r['startTime'] as int? ?? 0;
-      final endUs = r['endTime'] as int? ?? 0;
-      return (endUs - startUs) / 1000.0;
-    }).toList();
-
-    final avgDuration = durations.isNotEmpty
-        ? durations.reduce((a, b) => a + b) / durations.length
-        : 0.0;
-    final maxDuration =
-        durations.isNotEmpty ? durations.reduce((a, b) => a > b ? a : b) : 0.0;
-
-    String formatDuration(double ms) {
-      if (ms < 1.0) return '<1ms';
-      if (ms < 1000.0) return '${ms.round()}ms';
-      return '${(ms / 1000.0).toStringAsFixed(2)}s';
-    }
-
-    final slowRequests = completedRequests.where((r) {
+    final slowRequests = summary.completedRequests.where((r) {
       final startUs = r['startTime'] as int? ?? 0;
       final endUs = r['endTime'] as int? ?? 0;
       final durMs = (endUs - startUs) / 1000.0;
@@ -923,10 +848,10 @@ base mixin NetworkCaptureSupport
       'SUMMARY',
       'Captured for ${duration}s',
       'Total requests: ${newRequests.length}',
-      'Completed: ${completedRequests.length} | Failed: ${failedRequests.length} | Pending: ${pendingRequests.length}',
-      'Total response size: ${formatBytes(totalSize)}',
-      'Average response time: ${formatDuration(avgDuration)}',
-      'Slowest request: ${formatDuration(maxDuration)}',
+      'Completed: ${summary.completedRequests.length} | Failed: ${summary.failedRequests.length} | Pending: ${summary.pendingRequests.length}',
+      'Total response size: ${formatBytes(summary.totalSize)}',
+      'Average response time: ${_NetworkTrafficSummary.formatDuration(summary.avgDuration)}',
+      'Slowest request: ${_NetworkTrafficSummary.formatDuration(summary.maxDuration)}',
       'Requests exceeding threshold (${slowThresholdMs}ms): ${slowRequests.length}',
       '',
       'REQUESTS',
@@ -947,8 +872,9 @@ base mixin NetworkCaptureSupport
         final durationVal = (startUs != null && endUs != null)
             ? (endUs - startUs) / 1000.0
             : null;
-        final durationStr =
-            durationVal != null ? formatDuration(durationVal) : 'pending...';
+        final durationStr = durationVal != null
+            ? _NetworkTrafficSummary.formatDuration(durationVal)
+            : 'pending...';
 
         final isSlow = durationVal != null && durationVal > slowThresholdMs;
         final statusSymbol = switch (reqMap) {
@@ -999,7 +925,7 @@ base mixin NetworkCaptureSupport
       }
     }
 
-    if (slowRequests.isNotEmpty || failedRequests.isNotEmpty) {
+    if (slowRequests.isNotEmpty || summary.failedRequests.isNotEmpty) {
       output.add('');
       output.add('CONCERNS');
       for (final r in slowRequests) {
@@ -1007,9 +933,9 @@ base mixin NetworkCaptureSupport
         final endUs = r['endTime'] as int? ?? 0;
         final dur = (endUs - startUs) / 1000.0;
         output.add(
-            '- SLOW: ${r['method']} ${r['uri']} took ${formatDuration(dur)} (exceeded threshold of ${slowThresholdMs}ms)');
+            '- SLOW: ${r['method']} ${r['uri']} took ${_NetworkTrafficSummary.formatDuration(dur)} (exceeded threshold of ${slowThresholdMs}ms)');
       }
-      for (final r in failedRequests) {
+      for (final r in summary.failedRequests) {
         final error = r['error']?.toString();
         final responseData = r['response'] as Map<String, dynamic>?;
         final statusCode = responseData?['statusCode']?.toString();
@@ -1047,5 +973,54 @@ base mixin NetworkCaptureSupport
           isError: true,
         ),
     };
+  }
+}
+
+class _NetworkTrafficSummary {
+  _NetworkTrafficSummary(this.requests) {
+    for (final r in requests) {
+      final responseData = r['response'] as Map<String, dynamic>?;
+      final error = r['error']?.toString();
+      final statusCode = responseData?['statusCode'] as int?;
+      final isCompleted = responseData != null || r['endTime'] != null;
+      final isFailed =
+          error != null || (statusCode != null && statusCode >= 400);
+
+      if (isFailed) {
+        failedRequests.add(r);
+      } else if (isCompleted) {
+        completedRequests.add(r);
+      } else {
+        pendingRequests.add(r);
+      }
+
+      totalSize += (responseData?['contentLength'] as int?) ?? 0;
+      final startUs = r['startTime'] as int? ?? 0;
+      final endUs = r['endTime'] as int? ?? 0;
+      if (startUs > 0 && endUs > 0) {
+        durations.add((endUs - startUs) / 1000.0);
+      }
+    }
+
+    avgDuration = durations.isNotEmpty
+        ? durations.reduce((a, b) => a + b) / durations.length
+        : 0.0;
+    maxDuration =
+        durations.isNotEmpty ? durations.reduce((a, b) => a > b ? a : b) : 0.0;
+  }
+
+  final List<Map<String, dynamic>> requests;
+  final List<Map<String, dynamic>> completedRequests = [];
+  final List<Map<String, dynamic>> failedRequests = [];
+  final List<Map<String, dynamic>> pendingRequests = [];
+  final List<double> durations = [];
+  int totalSize = 0;
+  double avgDuration = 0.0;
+  double maxDuration = 0.0;
+
+  static String formatDuration(double ms) {
+    if (ms < 1.0) return '<1ms';
+    if (ms < 1000.0) return '${ms.round()}ms';
+    return '${(ms / 1000.0).toStringAsFixed(2)}s';
   }
 }
