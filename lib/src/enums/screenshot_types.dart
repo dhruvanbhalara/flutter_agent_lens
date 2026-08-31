@@ -11,18 +11,14 @@ enum ScreenshotAction {
   /// The raw String identifier of the action.
   final String value;
 
-  static final Map<String, ScreenshotAction> _lookup = {
-    for (final e in ScreenshotAction.values) e.value.toLowerCase(): e,
-  };
-
   /// Resolves the action from a raw string.
   /// Throws an [ArgumentError] if the action is unsupported.
   static ScreenshotAction fromString(String val) {
-    final match = _lookup[val.toLowerCase()];
-    if (match == null) {
-      throw ArgumentError('Unsupported action: $val');
+    final lower = val.toLowerCase();
+    for (final e in values) {
+      if (e.value.toLowerCase() == lower) return e;
     }
-    return match;
+    throw ArgumentError('Unsupported action: $val');
   }
 }
 
@@ -39,13 +35,13 @@ enum ScreenshotType {
   /// The raw String identifier of the screenshot type.
   final String value;
 
-  static final Map<String, ScreenshotType> _lookup = {
-    for (final e in ScreenshotType.values) e.value.toLowerCase(): e,
-  };
-
   /// Resolves the type from a raw string, defaulting to [device].
   static ScreenshotType fromString(String? val) {
     if (val == null) return ScreenshotType.device;
-    return _lookup[val.toLowerCase()] ?? ScreenshotType.device;
+    final lower = val.toLowerCase();
+    for (final e in values) {
+      if (e.value.toLowerCase() == lower) return e;
+    }
+    return ScreenshotType.device;
   }
 }

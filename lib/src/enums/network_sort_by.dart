@@ -14,13 +14,12 @@ enum NetworkSortBy {
   /// The raw String identifier of the sort strategy.
   final String value;
 
-  static final Map<String, NetworkSortBy> _lookup = {
-    for (final e in NetworkSortBy.values) e.value: e,
-  };
-
   /// Resolves the sort enum from a nullable raw string, defaulting to [time].
   static NetworkSortBy fromString(String? val) {
     if (val == null) return NetworkSortBy.time;
-    return _lookup[val] ?? NetworkSortBy.time;
+    for (final e in values) {
+      if (e.value == val) return e;
+    }
+    return NetworkSortBy.time;
   }
 }

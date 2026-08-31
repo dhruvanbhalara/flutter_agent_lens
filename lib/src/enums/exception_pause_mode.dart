@@ -14,12 +14,12 @@ enum ExceptionPauseMode {
   /// The raw String identifier used by the Dart VM Service.
   final String value;
 
-  static final Map<String, ExceptionPauseMode> _lookup = {
-    for (final e in ExceptionPauseMode.values) e.value.toLowerCase(): e,
-  };
-
   /// Resolves the enum from a raw string input, case-insensitively, defaulting to [none] if unresolved.
   static ExceptionPauseMode fromString(String modeStr) {
-    return _lookup[modeStr.toLowerCase()] ?? ExceptionPauseMode.none;
+    final lower = modeStr.toLowerCase();
+    for (final e in values) {
+      if (e.value.toLowerCase() == lower) return e;
+    }
+    return ExceptionPauseMode.none;
   }
 }

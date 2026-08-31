@@ -179,17 +179,7 @@ base mixin RebuildTrackingSupport
 
     final widgetCounts = <String, int>{};
     for (final event in rebuildEvents) {
-      _parseLocationsMap(event['locations'], idToName, idToFile);
-      _parseNewLocationsMap(event['newLocations'], idToFile);
-
-      final events = event['events'] as List<dynamic>?;
-      if (events != null) {
-        for (var i = 0; i + 1 < events.length; i += 2) {
-          final locId = events[i].toString();
-          final count = events[i + 1] is int ? events[i + 1] as int : 1;
-          widgetCounts[locId] = (widgetCounts[locId] ?? 0) + count;
-        }
-      }
+      _accumulateRebuildEvents(event, widgetCounts, idToName, idToFile);
     }
 
     stderr.writeln(
@@ -276,21 +266,12 @@ base mixin RebuildTrackingSupport
 
     rebuildSub = vmService!.onExtensionEvent.listen((Event event) {
       if (event.extensionKind == 'Flutter.RebuiltWidgets') {
-        final data = event.extensionData?.data;
-        if (data != null) {
-          _parseLocationsMap(
-              data['locations'], rebuildIdToName, rebuildIdToFile);
-          _parseNewLocationsMap(data['newLocations'], rebuildIdToFile);
-
-          final events = data['events'] as List<dynamic>?;
-          if (events != null) {
-            for (var i = 0; i + 1 < events.length; i += 2) {
-              final locId = events[i].toString();
-              final count = events[i + 1] is int ? events[i + 1] as int : 1;
-              rebuildCounts[locId] = (rebuildCounts[locId] ?? 0) + count;
-            }
-          }
-        }
+        _accumulateRebuildEvents(
+          event.extensionData?.data,
+          rebuildCounts,
+          rebuildIdToName,
+          rebuildIdToFile,
+        );
       }
     });
 
@@ -538,6 +519,26 @@ base mixin RebuildTrackingSupport
         }
       }
     });
+  }
+
+  void _accumulateRebuildEvents(
+    Map<dynamic, dynamic>? dataObj,
+    Map<String, int> counts,
+    Map<String, String> idToName,
+    Map<String, String> idToFile,
+  ) {
+    if (dataObj is! Map) return;
+    _parseLocationsMap(dataObj['locations'], idToName, idToFile);
+    _parseNewLocationsMap(dataObj['newLocations'], idToFile);
+
+    final events = dataObj['events'] as List<dynamic>?;
+    if (events != null) {
+      for (var i = 0; i + 1 < events.length; i += 2) {
+        final locId = events[i].toString();
+        final count = events[i + 1] is int ? events[i + 1] as int : 1;
+        counts[locId] = (counts[locId] ?? 0) + count;
+      }
+    }
   }
 
   /// Handles the rebuild_tracking composite tool request.

@@ -11,17 +11,13 @@ enum TargetPlatform {
   /// The raw String representation of the platform.
   final String value;
 
-  static final Map<String, TargetPlatform> _lookup = {
-    for (final e in TargetPlatform.values) e.value.toLowerCase(): e,
-  };
-
   /// Resolves the enum from a raw string input, case-insensitively.
   /// Throws an [ArgumentError] if the platform is unsupported.
   static TargetPlatform fromString(String val) {
-    final match = _lookup[val.toLowerCase()];
-    if (match == null) {
-      throw ArgumentError('Unsupported platform: $val');
+    final lower = val.toLowerCase();
+    for (final e in values) {
+      if (e.value.toLowerCase() == lower) return e;
     }
-    return match;
+    throw ArgumentError('Unsupported platform: $val');
   }
 }
