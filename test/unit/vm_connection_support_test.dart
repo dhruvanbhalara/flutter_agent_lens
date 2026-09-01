@@ -62,7 +62,7 @@ void main() {
       expect(res.isError, isNot(isTrue));
       final text = (res.content.first as TextContent).text;
       expect(text, contains('```json'));
-      expect(text, contains('"key": "value"'));
+      expect(text, contains('"key":"value"'));
     });
 
     test('serializeDualFormat formats as markdown when preferred', () {
