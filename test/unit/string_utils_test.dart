@@ -40,6 +40,42 @@ void main() {
       expect(formatBytes(1024 * 1024 * 1024), equals('1.00 GB'));
       expect(formatBytes(-512), equals('-512.00 B'));
     });
+
+    test('formatRelativePath strips workspaceRoot and formats paths', () {
+      expect(
+        formatRelativePath(
+            '/Users/dev/project/lib/main.dart', '/Users/dev/project'),
+        equals('lib/main.dart'),
+      );
+      expect(
+        formatRelativePath('file:///Users/dev/project/lib/widgets/card.dart',
+            '/Users/dev/project'),
+        equals('lib/widgets/card.dart'),
+      );
+      expect(
+        formatRelativePath(
+            'package:flutter/material.dart', '/Users/dev/project'),
+        equals('package:flutter/material.dart'),
+      );
+      expect(
+        formatRelativePath('/other/path/file.dart', '/Users/dev/project'),
+        equals('/other/path/file.dart'),
+      );
+      expect(
+        formatRelativePath('/Users/dev/project/lib/main.dart', null),
+        equals('/Users/dev/project/lib/main.dart'),
+      );
+      expect(
+        formatRelativePath('', '/Users/dev/project'),
+        equals(''),
+      );
+    });
+
+    test('compactCollection caps list at maxItems', () {
+      final items = [1, 2, 3, 4, 5];
+      expect(compactCollection(items, maxItems: 3), equals([1, 2, 3]));
+      expect(compactCollection(items, maxItems: 10), equals([1, 2, 3, 4, 5]));
+    });
   });
 
   group('CallToolRequestX Extension Tests', () {
