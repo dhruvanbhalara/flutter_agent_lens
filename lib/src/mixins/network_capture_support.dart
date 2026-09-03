@@ -706,7 +706,8 @@ base mixin NetworkCaptureSupport
       }
     }
 
-    final formattedReqBody = formatBody(reqBodyRaw);
+    final formattedReqBody =
+        truncateString(formatBody(reqBodyRaw), maxLength: 5000);
     if (formattedReqBody != 'N/A' && formattedReqBody.isNotEmpty) {
       md.writeln('Request Body:');
       md.writeln(formattedReqBody);
@@ -724,7 +725,8 @@ base mixin NetworkCaptureSupport
       }
     }
 
-    final formattedResBody = formatBody(resBodyRaw);
+    final formattedResBody =
+        truncateString(formatBody(resBodyRaw), maxLength: 5000);
     if (formattedResBody != 'N/A' && formattedResBody.isNotEmpty) {
       md.writeln('Response Body:');
       md.writeln(formattedResBody);
@@ -745,12 +747,16 @@ base mixin NetworkCaptureSupport
         'request': {
           'headers': reqHeaders,
           'cookies': reqCookies,
-          'body': reqBodyRaw,
+          'body': reqBodyRaw is String
+              ? truncateString(reqBodyRaw, maxLength: 5000)
+              : reqBodyRaw,
         },
         'response': {
           'headers': resHeaders,
           'cookies': resCookies,
-          'body': resBodyRaw,
+          'body': resBodyRaw is String
+              ? truncateString(resBodyRaw, maxLength: 5000)
+              : resBodyRaw,
         },
       },
     );
