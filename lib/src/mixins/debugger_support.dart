@@ -119,7 +119,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final currentIsolateId = isolateId;
     if (service == null || currentIsolateId == null) return notConnected();
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 20;
+    final limit = ((req.arg<num>('limit'))?.toInt() ?? 20).clamp(1, 50);
     stderr.writeln('[mcp:get_call_stack] Fetching stack frames (limit=$limit)');
 
     final stack = await service.getStack(currentIsolateId, limit: limit);
@@ -139,7 +139,8 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         final resolvedPath = pathResolver != null
             ? await pathResolver!.resolveToAbsolutePath(scriptUri)
             : scriptUri;
-        md.writeln('| $i | `$funcName` | `$resolvedPath:$line` |');
+        final displayPath = formatRelativePath(resolvedPath, workspaceRoot);
+        md.writeln('| $i | `$funcName` | `$displayPath:$line` |');
       }
     }
 
@@ -147,15 +148,17 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       title: 'Call Stack Frames',
       markdownBody: md.toString(),
       structuredData: {
-        'frames': frames
-            .map((f) => {
-                  'index': f.index,
-                  'function': f.function?.name,
-                  'script': f.location?.script?.uri,
-                  'line': f.location?.line,
-                  'column': f.location?.column,
-                })
-            .toList(),
+        'frames': frames.map((f) {
+          final uri = f.location?.script?.uri;
+          return {
+            'index': f.index,
+            'function': f.function?.name,
+            'script':
+                uri != null ? formatRelativePath(uri, workspaceRoot) : null,
+            'line': f.location?.line,
+            'column': f.location?.column,
+          };
+        }).toList(),
       },
     );
   }
@@ -291,7 +294,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final rawValStr = res is InstanceRef
         ? (res.valueAsString ?? res.toString())
         : res.toString();
-    final valStr = truncateString(rawValStr, maxLength: 5000);
+    final valStr = truncateString(rawValStr, maxLength: 1000);
     final kindStr = res is InstanceRef ? res.kind : 'Unknown';
     final classStr = res is InstanceRef ? res.classRef?.name : 'Unknown';
     return CallToolResult(
