@@ -1,9 +1,15 @@
 import 'package:path/path.dart' as p;
 
-/// Truncates the given [value] to [maxLength], appending a truncation notice if needed.
-String truncateString(String value, {int maxLength = 10000}) {
-  if (value.length <= maxLength) return value;
-  return '${value.substring(0, maxLength)}\n... [TRUNCATED - ${value.length - maxLength} characters omitted]';
+/// Truncates the given [value] to [maxLength] unless [full] is true.
+String truncateString(
+  String value, {
+  int maxLength = 10000,
+  bool full = false,
+  String? hint,
+}) {
+  if (full || value.length <= maxLength) return value;
+  final actionHint = hint ?? 'Pass full: true to view untruncated content.';
+  return '${value.substring(0, maxLength)}\n... [TRUNCATED - ${value.length - maxLength} characters omitted. $actionHint]';
 }
 
 /// Formats a file path or URI relative to [workspaceRoot] if within the workspace.
@@ -48,10 +54,38 @@ String formatRelativePath(String path, String? workspaceRoot) {
   return clean;
 }
 
-/// Formats a collection into a compact list representation, capping at [maxItems].
-List<T> compactCollection<T>(List<T> items, {int maxItems = 20}) {
-  if (items.length <= maxItems) return items;
+/// Formats a collection into a compact list representation, capping at [maxItems] unless [full] is true.
+List<T> compactCollection<T>(
+  List<T> items, {
+  int maxItems = 20,
+  bool full = false,
+}) {
+  if (full || items.length <= maxItems) return items;
   return items.sublist(0, maxItems);
+}
+
+/// Recursively compacts lists within a structured data map unless [full] is true.
+Map<String, Object?>? compactStructuredData(
+  Map<String, Object?>? data, {
+  int maxItems = 20,
+  bool full = false,
+}) {
+  if (data == null || full) return data;
+
+  final result = <String, Object?>{};
+  for (final entry in data.entries) {
+    final val = entry.value;
+    if (val is List) {
+      result[entry.key] =
+          compactCollection(val, maxItems: maxItems, full: full);
+    } else if (val is Map<String, Object?>) {
+      result[entry.key] =
+          compactStructuredData(val, maxItems: maxItems, full: full);
+    } else {
+      result[entry.key] = val;
+    }
+  }
+  return result;
 }
 
 /// Formats the map as a structured string up to [maxDepth] to optimize token size.
