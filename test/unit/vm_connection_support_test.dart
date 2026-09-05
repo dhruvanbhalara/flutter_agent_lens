@@ -85,6 +85,64 @@ void main() {
       expect(schema.description, contains('default: 50'));
       expect(schema.description, contains('max: 100'));
     });
+
+    test('fullSchema returns BooleanSchema with description', () {
+      final schema = mock.fullSchema();
+      expect(schema, isA<BooleanSchema>());
+      expect(schema.description, contains('untruncated output'));
+    });
+
+    test('serializeDualFormat compacts and truncates by default', () {
+      final bigList = List.generate(50, (i) => 'item_$i');
+      final longBody = 'x' * 10000;
+      final res = mock.serializeDualFormat(
+        title: 'Summary',
+        markdownBody: longBody,
+        structuredData: {'items': bigList},
+        maxTextLength: 1000,
+        maxListItems: 10,
+      );
+
+      final text = (res.content.first as TextContent).text;
+      expect(text, contains('[TRUNCATED'));
+      expect(res.structuredContent, isNotNull);
+      expect((res.structuredContent!['items']! as List).length, equals(10));
+    });
+
+    test(
+        'serializeDualFormat respects full: true bypass via req and full parameter',
+        () {
+      final bigList = List.generate(50, (i) => 'item_$i');
+      final longBody = 'x' * 10000;
+
+      // Via full: true
+      final resExplicit = mock.serializeDualFormat(
+        title: 'Summary',
+        markdownBody: longBody,
+        structuredData: {'items': bigList},
+        full: true,
+        maxTextLength: 1000,
+        maxListItems: 10,
+      );
+      final textExplicit = (resExplicit.content.first as TextContent).text;
+      expect(textExplicit, isNot(contains('[TRUNCATED')));
+      expect((resExplicit.structuredContent!['items']! as List).length,
+          equals(50));
+
+      // Via req with full: true
+      final req = CallToolRequest(name: 'test', arguments: {'full': true});
+      final resReq = mock.serializeDualFormat(
+        title: 'Summary',
+        markdownBody: longBody,
+        structuredData: {'items': bigList},
+        req: req,
+        maxTextLength: 1000,
+        maxListItems: 10,
+      );
+      final textReq = (resReq.content.first as TextContent).text;
+      expect(textReq, isNot(contains('[TRUNCATED')));
+      expect((resReq.structuredContent!['items']! as List).length, equals(50));
+    });
   });
 
   group('ConnectionSupport Edge Cases', () {
