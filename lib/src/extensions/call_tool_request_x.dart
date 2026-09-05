@@ -59,4 +59,21 @@ extension CallToolRequestX on CallToolRequest {
   ///
   /// Throws an [ArgumentError] if the key is missing or the value is not a [String].
   String requireStrArg(String key) => requireArg<String>(key);
+
+  /// Returns whether the caller requested complete untruncated output.
+  bool get isFull => arg<bool>('full') ?? false;
+
+  /// Returns the requested limit clamped to [1, max], or null if [isFull] is true.
+  int? limitArg({int defaultValue = 20, int max = 200}) {
+    if (isFull) return null;
+    final val = intArg('limit') ?? defaultValue;
+    return val.clamp(1, max);
+  }
+
+  /// Returns the requested body length clamped to [500, max], or null if [isFull] is true.
+  int? maxBodyLengthArg({int defaultValue = 5000, int max = 50000}) {
+    if (isFull) return null;
+    final val = intArg('max_body_length') ?? defaultValue;
+    return val.clamp(500, max);
+  }
 }
