@@ -48,6 +48,7 @@ base mixin WidgetInspectionSupport
               description:
                   'If true, only return widgets created by the local project code (default: true, for action: get_tree).',
             ),
+            'full': fullSchema(),
           },
           required: ['action'],
         ),
@@ -183,6 +184,7 @@ base mixin WidgetInspectionSupport
       }
 
       return serializeDualFormat(
+        req: req,
         title: 'Widget Layout Constraints',
         markdownBody: sb.toString(),
         structuredData: {
@@ -276,6 +278,7 @@ base mixin WidgetInspectionSupport
           : flattened.map((w) => w.depth).reduce((a, b) => a > b ? a : b);
 
       return serializeDualFormat(
+        req: req,
         title: 'Widget Tree Summary',
         markdownBody:
             'Widget Tree ($totalWidgets widgets, $projectWidgets from project, depth: $maxDepthReached)\n\n$text',
@@ -718,6 +721,7 @@ base mixin WidgetInspectionSupport
       }
 
       return serializeDualFormat(
+        req: req,
         title: 'Navigation Tree',
         markdownBody: md.toString(),
         structuredData: {
