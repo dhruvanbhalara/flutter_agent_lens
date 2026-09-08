@@ -58,6 +58,15 @@ void main() {
         equals('package:flutter/material.dart'),
       );
       expect(
+        formatRelativePath('dart:async/stream.dart', '/Users/dev/project'),
+        equals('dart:async/stream.dart'),
+      );
+      expect(
+        formatRelativePath(
+            'https://example.com/remote.dart', '/Users/dev/project'),
+        equals('https://example.com/remote.dart'),
+      );
+      expect(
         formatRelativePath('/other/path/file.dart', '/Users/dev/project'),
         equals('/other/path/file.dart'),
       );

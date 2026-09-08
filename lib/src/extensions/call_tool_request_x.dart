@@ -1,4 +1,5 @@
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/constants/mcp_limits.dart';
 
 /// Extension on [CallToolRequest] to retrieve arguments defensively.
 extension CallToolRequestX on CallToolRequest {
@@ -68,6 +69,32 @@ extension CallToolRequestX on CallToolRequest {
     if (isFull) return null;
     final val = intArg('limit') ?? defaultValue;
     return val.clamp(1, max);
+  }
+
+  /// Returns the effective limit as a non-nullable integer for VM Service calls
+  /// that require a concrete limit parameter.
+  ///
+  /// If [isFull] is true, returns [fullLimit].
+  /// Otherwise returns the requested limit clamped to [1, max], defaulting to [defaultValue].
+  int effectiveLimitArg({
+    int defaultValue = McpLimits.defaultListLimit,
+    int max = 200,
+    int fullLimit = McpLimits.fullInstancesLimit,
+  }) {
+    if (isFull) return fullLimit;
+    final val = intArg('limit') ?? defaultValue;
+    return val.clamp(1, max);
+  }
+
+  /// Takes up to [limitArg()] items from [iterable] unless [isFull] is true.
+  Iterable<T> applyLimit<T>(
+    Iterable<T> iterable, {
+    int defaultValue = McpLimits.defaultListLimit,
+    int max = 200,
+  }) {
+    if (isFull) return iterable;
+    final limit = limitArg(defaultValue: defaultValue, max: max);
+    return limit != null ? iterable.take(limit) : iterable;
   }
 
   /// Returns the requested body length clamped to [500, max], or null if [isFull] is true.

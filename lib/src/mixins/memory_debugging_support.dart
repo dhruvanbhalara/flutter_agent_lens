@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/constants/mcp_limits.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
@@ -206,7 +207,10 @@ base mixin MemoryDebuggingSupport
     if (service == null || currentIsolateId == null) return notConnected();
 
     final className = req.requireArg<String>('class_name');
-    final limit = req.limitArg(defaultValue: 100, max: 500);
+    final limit = req.effectiveLimitArg(
+      defaultValue: McpLimits.defaultMemoryInstancesLimit,
+      max: McpLimits.maxMemoryInstancesLimit,
+    );
     stderr.writeln(
         '[mcp:audit_memory] Auditing class: $className (limit=$limit)');
 
@@ -231,8 +235,8 @@ base mixin MemoryDebuggingSupport
       );
     }
 
-    final instancesResponse = await service.getInstances(
-        currentIsolateId, classRef.id!, limit ?? 100);
+    final instancesResponse =
+        await service.getInstances(currentIsolateId, classRef.id!, limit);
     final instances = instancesResponse.instances ?? [];
 
     final reports = <Map<String, dynamic>>[];
@@ -313,10 +317,7 @@ base mixin MemoryDebuggingSupport
       structuredData: {
         'class_name': className,
         'total_instances': instances.length,
-        'instances': compactCollection(
-          instances.map((i) => i.id).whereType<String>().toList(),
-          full: req.isFull,
-        ),
+        'instances': instances.map((i) => i.id).whereType<String>().toList(),
         'leaked_count': reports.length,
         'leaks': reports,
       },
@@ -526,13 +527,17 @@ base mixin MemoryDebuggingSupport
     if (service == null || currentIsolateId == null) return notConnected();
 
     final objectId = req.requireArg<String>('object_id');
-    final limit = req.limitArg(defaultValue: 15, max: 100);
+    final limit = req.effectiveLimitArg(
+      defaultValue: McpLimits.defaultRetainingPathLimit,
+      max: McpLimits.maxRetainingPathLimit,
+      fullLimit: McpLimits.fullRetainingPathLimit,
+    );
     final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     stderr.writeln(
         '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit');
 
     final retainingPath =
-        await service.getRetainingPath(currentIsolateId, objectId, limit ?? 15);
+        await service.getRetainingPath(currentIsolateId, objectId, limit);
     final pathElements = _extractRetainingPathElements(retainingPath);
 
     final md = StringBuffer('Retaining Path for Object: $objectId\n\n');
@@ -919,10 +924,17 @@ base mixin MemoryDebuggingSupport
       'externalUsage': externalUsage,
       'heapUtilization': heapUtilization,
       'top_classes':
-          sortedBySizeFiltered.take(topN).map(_classHeapStatsToMap).toList(),
-      'top_instances':
-          sortedByInstancesFiltered.take(10).map(_classHeapStatsToMap).toList(),
-      'app_classes': appClasses.take(20).map(_classHeapStatsToMap).toList(),
+          (req.isFull ? sortedBySizeFiltered : sortedBySizeFiltered.take(topN))
+              .map(_classHeapStatsToMap)
+              .toList(),
+      'top_instances': (req.isFull
+              ? sortedByInstancesFiltered
+              : sortedByInstancesFiltered.take(topN))
+          .map(_classHeapStatsToMap)
+          .toList(),
+      'app_classes': (req.isFull ? appClasses : appClasses.take(topN * 2))
+          .map(_classHeapStatsToMap)
+          .toList(),
     };
 
     return serializeDualFormat(

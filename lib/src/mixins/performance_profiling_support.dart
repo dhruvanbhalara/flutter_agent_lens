@@ -788,7 +788,7 @@ base mixin PerformanceProfilingSupport
         'build_phase': buildPhase,
         'layout_phase': layoutPhase,
         'paint_phase': paintPhase,
-        'cpu_hotspots': cpuHotspots.take(20).toList(),
+        'cpu_hotspots': cpuHotspots,
         'recommendations': recommendations,
       },
     );

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/mixins/console_logging_support.dart';
+import 'package:flutter_agent_lens/src/mixins/debugger_support.dart';
 import 'package:flutter_agent_lens/src/mixins/diagnose_project_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:path/path.dart' as p;
@@ -14,6 +15,7 @@ base class IntegratedToolsMock extends MCPServer
         ToolsSupport,
         VmConnectionSupport,
         ConsoleLoggingSupport,
+        DebuggerSupport,
         DiagnoseProjectSupport {
   IntegratedToolsMock(super.channel)
       : super.fromStreamChannel(
@@ -231,6 +233,12 @@ void main() {
       final fullData = fullResult.structuredContent! as Map<String, dynamic>;
       final fullList = fullData['components'] as List<dynamic>;
       expect(fullList.length, equals(40));
+    });
+
+    test('breakpoint schema includes full property', () {
+      mock.registerDebuggerTools();
+      // Verifies tools registered without throwing and full schema is present
+      expect(mock.fullSchema().description, contains('untruncated output'));
     });
   });
 }
