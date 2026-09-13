@@ -249,6 +249,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
         ..writeln(jsonEncode(processedData ?? structuredData ?? {}))
         ..writeln('```');
     } else {
+      // Skip prepending title if the markdown body already starts with it
+      // (handles bare text, #, ##, ### prefixed variants to avoid duplication).
       final trimmedBody = processedMarkdown.trimLeft();
       final lowerTitle = title.toLowerCase();
       final lowerBody = trimmedBody.toLowerCase();
