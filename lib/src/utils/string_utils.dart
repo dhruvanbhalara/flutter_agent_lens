@@ -84,9 +84,9 @@ Map<String, Object?>? compactStructuredData(
     if (val is List) {
       result[entry.key] =
           compactCollection(val, maxItems: maxItems, full: full);
-    } else if (val is Map<String, Object?>) {
-      result[entry.key] =
-          compactStructuredData(val, maxItems: maxItems, full: full);
+    } else if (val is Map<String, dynamic>) {
+      result[entry.key] = compactStructuredData(Map<String, Object?>.from(val),
+          maxItems: maxItems, full: full);
     } else {
       result[entry.key] = val;
     }
