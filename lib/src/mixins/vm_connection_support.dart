@@ -4,7 +4,9 @@ import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
+import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/path_resolver.dart';
+import 'package:flutter_agent_lens/src/utils/string_utils.dart';
 import 'package:flutter_agent_lens/src/utils/workspace_package_resolver.dart';
 import 'package:path/path.dart' as p;
 import 'package:vm_service/vm_service.dart';
@@ -80,6 +82,14 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     return IntegerSchema(
       description:
           'Maximum elements to return (default: $defaultValue, max: $max).',
+    );
+  }
+
+  /// Returns a schema definition for tools supporting full data bypass.
+  BooleanSchema fullSchema() {
+    return BooleanSchema(
+      description:
+          'When true, returns the complete untruncated output (bypasses default token-saving limits).',
     );
   }
 
@@ -206,30 +216,60 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   }
 
   /// Serializes response data as Markdown or JSON based on [responseFormat].
+  ///
+  /// Automatically guards against token blowouts by compacting structured collections
+  /// and truncating markdown bodies unless [req] indicates `isFull` or [full] is true.
   CallToolResult serializeDualFormat({
     required String title,
     required String markdownBody,
-    required Map<String, dynamic> structuredData,
+    Map<String, dynamic>? structuredData,
+    CallToolRequest? req,
+    bool? full,
+    int maxTextLength = 5000,
+    int maxListItems = 20,
   }) {
+    final isFull = full ?? req?.isFull ?? false;
+
+    final processedMarkdown = isFull
+        ? markdownBody
+        : truncateString(markdownBody, maxLength: maxTextLength);
+
+    final processedData = compactStructuredData(
+      structuredData,
+      maxItems: maxListItems,
+      full: isFull,
+    );
+
     final fmt = responseFormat;
     final contentBuffer = StringBuffer();
 
     if (fmt == 'json') {
       contentBuffer
         ..writeln('```json')
-        ..writeln(const JsonEncoder.withIndent('  ').convert(structuredData))
+        ..writeln(jsonEncode(processedData ?? structuredData ?? {}))
         ..writeln('```');
     } else {
-      contentBuffer
-        ..writeln(title)
-        ..writeln()
-        ..writeln(markdownBody);
+      final trimmedBody = processedMarkdown.trimLeft();
+      final lowerTitle = title.toLowerCase();
+      final lowerBody = trimmedBody.toLowerCase();
+      final startsWithTitle = lowerBody.startsWith(lowerTitle) ||
+          lowerBody.startsWith('# $lowerTitle') ||
+          lowerBody.startsWith('## $lowerTitle') ||
+          lowerBody.startsWith('### $lowerTitle');
+
+      if (!startsWithTitle) {
+        contentBuffer
+          ..writeln(title)
+          ..writeln();
+      }
+      contentBuffer.writeln(processedMarkdown);
     }
 
     return CallToolResult(
       content: [
         TextContent(text: contentBuffer.toString().trim()),
       ],
+      structuredContent: processedData,
     );
   }
 

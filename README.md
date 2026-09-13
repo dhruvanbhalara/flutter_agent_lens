@@ -96,6 +96,10 @@ To keep payloads light, these settings are supported:
   - `limit` in `profiling` (action: `get_cpu`): Sets max CPU hotspots returned (default: `15`).
   - `limit` in `diagnose_project` (action: `bundle_size`): Sets max components shown (default: `25`).
   - `limit` in `memory` (action: `audit_leak`, `get_referrers`, `stop_gc_stream`, `watch_gc_pressure`): Sets max instances, path depth, or returned GC events (default: `50`-`100`).
+  - `limit` in `console_logs` (action: `fetch`): Sets max buffered log entries returned (default: `50`, max: `500`).
+  - `limit` in `get_call_stack`: Sets max stack frames returned (default: `20`).
+  - `limit` in `console_logs` (action: `fetch`): Sets max buffered log entries returned (default: `50`, max: `500`).
+  - `limit` in `get_call_stack`: Sets max stack frames returned (default: `20`).
   - `duration_seconds` in `console_logs` (`watch`), `network` (`watch`), `memory` (`get_memory_timeline`, `watch_gc_pressure`): Sets sampling or monitoring duration in seconds (default: `5.0`, max: `30`).
   - `slow_threshold_ms` in `network` (action: `watch`): Threshold in ms to flag slow requests (default: `500`).
   - `filter` in `console_logs` (action: `watch`): Optional text filter substring for live logs.
@@ -112,7 +116,9 @@ To keep payloads light, these settings are supported:
 - **Platform Settings**:
   - `platform` in `diagnose_project` (action: `deep_links`): Platform target (e.g. `android` or `ios`, required).
 
-- **Payload Settings**:
+- **Payload & Token Optimization**:
+  - `full` across all tools: When `true`, disables default token-saving safety shields (such as markdown truncation and collection compaction) to return complete, untruncated outputs (default: `false`).
+  - `max_body_length` in `network` (action: `get_request_details`): Sets max character length for request/response bodies before truncation (default: `5000`, max: `50000`).
   - `include_details` in `network` (`watch` / `stop` / `get_profile`): Includes full request & response headers, cookies, and bodies (default: `false`).
   - `includeRawResponse` in `memory` and `network`: Hides raw JSON payloads when false (default: `false`).
   - `includeExtensions` in `get_app_info`: Hides the full service extensions list when false (default: `false`).

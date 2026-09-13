@@ -527,6 +527,7 @@ base mixin ConnectionSupport
       final result = response.result;
 
       return serializeDualFormat(
+        req: req,
         title: 'Active Editor Location Report',
         markdownBody: 'Active editor path and cursor: \n'
             '${const JsonEncoder.withIndent("  ").convert(result)}',
@@ -667,6 +668,7 @@ base mixin ConnectionSupport
           .join('\n'));
 
     return serializeDualFormat(
+      req: req,
       title: 'App Information Details',
       markdownBody: md.toString(),
       structuredData: appInfo,

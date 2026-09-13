@@ -10,7 +10,7 @@ void main() {
       expect(truncateString('hello', maxLength: 5), equals('hello'));
       expect(
         truncateString('hello world', maxLength: 5),
-        equals('hello\n... [TRUNCATED - 6 characters omitted]'),
+        contains('[TRUNCATED - 6 characters omitted'),
       );
       expect(truncateString('', maxLength: 5), equals(''));
     });
@@ -39,6 +39,84 @@ void main() {
       expect(formatBytes(1024 * 1024), equals('1.00 MB'));
       expect(formatBytes(1024 * 1024 * 1024), equals('1.00 GB'));
       expect(formatBytes(-512), equals('-512.00 B'));
+    });
+
+    test('formatRelativePath strips workspaceRoot and formats paths', () {
+      expect(
+        formatRelativePath(
+            '/Users/dev/project/lib/main.dart', '/Users/dev/project'),
+        equals('lib/main.dart'),
+      );
+      expect(
+        formatRelativePath('file:///Users/dev/project/lib/widgets/card.dart',
+            '/Users/dev/project'),
+        equals('lib/widgets/card.dart'),
+      );
+      expect(
+        formatRelativePath(
+            'package:flutter/material.dart', '/Users/dev/project'),
+        equals('package:flutter/material.dart'),
+      );
+      expect(
+        formatRelativePath('dart:async/stream.dart', '/Users/dev/project'),
+        equals('dart:async/stream.dart'),
+      );
+      expect(
+        formatRelativePath(
+            'https://example.com/remote.dart', '/Users/dev/project'),
+        equals('https://example.com/remote.dart'),
+      );
+      expect(
+        formatRelativePath('/other/path/file.dart', '/Users/dev/project'),
+        equals('/other/path/file.dart'),
+      );
+      expect(
+        formatRelativePath('/Users/dev/project/lib/main.dart', null),
+        equals('/Users/dev/project/lib/main.dart'),
+      );
+      expect(
+        formatRelativePath('', '/Users/dev/project'),
+        equals(''),
+      );
+    });
+
+    test('compactCollection caps list at maxItems', () {
+      final items = [1, 2, 3, 4, 5];
+      expect(compactCollection(items, maxItems: 3), equals([1, 2, 3]));
+      expect(compactCollection(items, maxItems: 10), equals([1, 2, 3, 4, 5]));
+    });
+
+    test('truncateString respects full: true bypass', () {
+      final longString = 'a' * 20000;
+      expect(truncateString(longString, maxLength: 5000, full: true),
+          equals(longString));
+      expect(
+          truncateString(longString, maxLength: 5000), contains('[TRUNCATED'));
+    });
+
+    test('compactCollection respects full: true bypass', () {
+      final items = List.generate(50, (i) => i);
+      expect(compactCollection(items, full: true).length, equals(50));
+      expect(compactCollection(items).length, equals(20));
+    });
+
+    test('compactStructuredData compacts lists inside map unless full: true',
+        () {
+      final data = {
+        'count': 100,
+        'items': List.generate(50, (i) => 'item_$i'),
+        'nested': {
+          'sub_items': List.generate(30, (i) => i),
+        }
+      };
+
+      final compacted = compactStructuredData(data, maxItems: 10);
+      expect((compacted!['items']! as List).length, equals(10));
+      expect(((compacted['nested']! as Map)['sub_items']! as List).length,
+          equals(10));
+
+      final fullData = compactStructuredData(data, maxItems: 10, full: true);
+      expect((fullData!['items']! as List).length, equals(50));
     });
   });
 
@@ -95,6 +173,42 @@ void main() {
         arguments: {'nullableKey': null},
       );
       expect(req.requireArg<String?>('nullableKey'), isNull);
+    });
+
+    test('CallToolRequestX handles full and limitArg correctly', () {
+      final reqDefault = CallToolRequest(name: 'test');
+      expect(reqDefault.isFull, isFalse);
+      expect(reqDefault.limitArg(), equals(20));
+
+      final reqWithLimit =
+          CallToolRequest(name: 'test', arguments: {'limit': 50});
+      expect(reqWithLimit.limitArg(), equals(50));
+
+      final reqClamped =
+          CallToolRequest(name: 'test', arguments: {'limit': 9999});
+      expect(reqClamped.limitArg(), equals(200));
+
+      final reqFull =
+          CallToolRequest(name: 'test', arguments: {'full': true, 'limit': 10});
+      expect(reqFull.isFull, isTrue);
+      expect(reqFull.limitArg(), isNull);
+    });
+
+    test('CallToolRequestX handles maxBodyLengthArg correctly', () {
+      final reqDefault = CallToolRequest(name: 'test');
+      expect(reqDefault.maxBodyLengthArg(), equals(5000));
+
+      final reqWithCustom =
+          CallToolRequest(name: 'test', arguments: {'max_body_length': 10000});
+      expect(reqWithCustom.maxBodyLengthArg(), equals(10000));
+
+      final reqClamped =
+          CallToolRequest(name: 'test', arguments: {'max_body_length': 100000});
+      expect(reqClamped.maxBodyLengthArg(), equals(50000));
+
+      final reqFull = CallToolRequest(
+          name: 'test', arguments: {'full': true, 'max_body_length': 1000});
+      expect(reqFull.maxBodyLengthArg(), isNull);
     });
   });
 }

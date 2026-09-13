@@ -39,6 +39,7 @@ base mixin PerformanceProfilingSupport
             ),
             'duration_seconds': durationSchema(),
             'limit': limitSchema(defaultValue: 15),
+            'full': fullSchema(),
           },
           required: const ['action'],
         ),
@@ -187,12 +188,14 @@ base mixin PerformanceProfilingSupport
         '- **Janky Frame Events (> 16.6ms):** $jankyFrames (${jankPercentage.toStringAsFixed(1)}%)\n',
       );
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
+    final limit = req.limitArg(defaultValue: 15);
     if (jankyFrames > 0) {
       mdBuffer
         ..writeln('| Event | Duration (ms) | Severity |')
         ..writeln('| :--- | :--- | :--- |');
-      for (final f in frameEvents.take(limit)) {
+      final displayedEvents =
+          limit != null ? frameEvents.take(limit) : frameEvents;
+      for (final f in displayedEvents) {
         final dur = f['duration_ms'] as double;
         final severity = dur > 33.3 ? 'CRITICAL (>33ms)' : 'WARNING (>16ms)';
         mdBuffer.writeln(
@@ -206,13 +209,15 @@ base mixin PerformanceProfilingSupport
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Jank Diagnosis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
         'total_frames': totalFrames,
         'janky_frames': jankyFrames,
         'jank_percentage': jankPercentage,
-        'critical_events': frameEvents,
+        'critical_events':
+            limit != null ? frameEvents.take(limit).toList() : frameEvents,
       },
     );
   }
@@ -420,7 +425,7 @@ base mixin PerformanceProfilingSupport
           (b['exclusive_ticks'] as int).compareTo(a['exclusive_ticks'] as int),
     );
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
+    final limit = req.limitArg(defaultValue: 15);
     if (hotspots.isEmpty) {
       mdBuffer.writeln('No CPU sampling ticks recorded in the window.');
     } else {
@@ -429,7 +434,8 @@ base mixin PerformanceProfilingSupport
           '| Function | Exclusive Ticks | Inclusive Ticks | Source Location |',
         )
         ..writeln('| :--- | :--- | :--- | :--- |');
-      for (final h in hotspots.take(limit)) {
+      final displayedHotspots = limit != null ? hotspots.take(limit) : hotspots;
+      for (final h in displayedHotspots) {
         mdBuffer.writeln(
           '| `${h['name']}` | ${h['exclusive_ticks']} | ${h['inclusive_ticks']} | `${h['location']}` |',
         );
@@ -437,12 +443,13 @@ base mixin PerformanceProfilingSupport
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'CPU Profiler Diagnostic Report',
       markdownBody: mdBuffer.toString(),
       structuredData: {
         'duration_seconds': durationSeconds,
         'total_samples': cpuSamples.sampleCount ?? 0,
-        'hotspots': hotspots.take(limit).toList(),
+        'hotspots': limit != null ? hotspots.take(limit).toList() : hotspots,
       },
     );
   }
@@ -764,6 +771,7 @@ base mixin PerformanceProfilingSupport
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Performance Profiling Analysis',
       markdownBody: output.join('\n'),
       structuredData: {

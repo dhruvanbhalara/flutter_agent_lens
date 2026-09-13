@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/constants/mcp_limits.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
@@ -81,6 +82,7 @@ base mixin MemoryDebuggingSupport
               description:
                   'Whether to filter out zero-delta classes (for diff_allocations).',
             ),
+            'full': fullSchema(),
           },
           required: ['action'],
         ),
@@ -205,7 +207,10 @@ base mixin MemoryDebuggingSupport
     if (service == null || currentIsolateId == null) return notConnected();
 
     final className = req.requireArg<String>('class_name');
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 100;
+    final limit = req.effectiveLimitArg(
+      defaultValue: McpLimits.defaultMemoryInstancesLimit,
+      max: McpLimits.maxMemoryInstancesLimit,
+    );
     stderr.writeln(
         '[mcp:audit_memory] Auditing class: $className (limit=$limit)');
 
@@ -306,6 +311,7 @@ base mixin MemoryDebuggingSupport
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Memory Leak Audit: $className',
       markdownBody: mdBuffer.toString(),
       structuredData: {
@@ -488,7 +494,7 @@ base mixin MemoryDebuggingSupport
       }
     }
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 20;
+    final limit = req.limitArg();
     _sortDeltas(deltas, 'instances_delta', 'bytes_delta');
 
     final md = StringBuffer();
@@ -499,16 +505,17 @@ base mixin MemoryDebuggingSupport
       dataName: 'heap allocations',
     );
     md.writeln('Memory Allocations Delta\n');
-    md.write(_formatAllocationDiffTable(deltas));
+    md.write(_formatAllocationDiffTable(deltas, limit: limit ?? deltas.length));
 
     return serializeDualFormat(
+      req: req,
       title: 'Memory Delta Analysis',
       markdownBody: md.toString(),
       structuredData: {
         'duration_seconds': duration,
         'expression_run': expression,
         'force_gc': forceGc,
-        'deltas': deltas.take(limit).toList(),
+        'deltas': limit != null ? deltas.take(limit).toList() : deltas,
       },
     );
   }
@@ -520,7 +527,11 @@ base mixin MemoryDebuggingSupport
     if (service == null || currentIsolateId == null) return notConnected();
 
     final objectId = req.requireArg<String>('object_id');
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 15;
+    final limit = req.effectiveLimitArg(
+      defaultValue: McpLimits.defaultRetainingPathLimit,
+      max: McpLimits.maxRetainingPathLimit,
+      fullLimit: McpLimits.fullRetainingPathLimit,
+    );
     final includeRawResponse = req.arg<bool>('includeRawResponse') ?? false;
     stderr.writeln(
         '[mcp:get_referrers] Checking referrers for object_id=$objectId, limit=$limit');
@@ -543,6 +554,7 @@ base mixin MemoryDebuggingSupport
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Retaining Path / Leak Trace Report',
       markdownBody: md.toString(),
       structuredData: {
@@ -706,6 +718,7 @@ base mixin MemoryDebuggingSupport
     md.writeln(verdict);
 
     return serializeDualFormat(
+      req: req,
       title: 'Snapshot Comparison: "$before" -> "$after"',
       markdownBody: md.toString(),
       structuredData: {
@@ -911,13 +924,21 @@ base mixin MemoryDebuggingSupport
       'externalUsage': externalUsage,
       'heapUtilization': heapUtilization,
       'top_classes':
-          sortedBySizeFiltered.take(topN).map(_classHeapStatsToMap).toList(),
-      'top_instances':
-          sortedByInstancesFiltered.take(10).map(_classHeapStatsToMap).toList(),
-      'app_classes': appClasses.take(20).map(_classHeapStatsToMap).toList(),
+          (req.isFull ? sortedBySizeFiltered : sortedBySizeFiltered.take(topN))
+              .map(_classHeapStatsToMap)
+              .toList(),
+      'top_instances': (req.isFull
+              ? sortedByInstancesFiltered
+              : sortedByInstancesFiltered.take(topN))
+          .map(_classHeapStatsToMap)
+          .toList(),
+      'app_classes': (req.isFull ? appClasses : appClasses.take(topN))
+          .map(_classHeapStatsToMap)
+          .toList(),
     };
 
     return serializeDualFormat(
+      req: req,
       title: 'Memory Snapshot Summary',
       markdownBody: output.join('\n'),
       structuredData: structuredData,
@@ -1001,6 +1022,7 @@ base mixin MemoryDebuggingSupport
     };
 
     return serializeDualFormat(
+      req: req,
       title: '### Garbage Collection (force_gc) Result',
       markdownBody: text.toString(),
       structuredData: data,
@@ -1011,6 +1033,7 @@ base mixin MemoryDebuggingSupport
   Future<CallToolResult> _handleStartGcStream(CallToolRequest req) async {
     await _ensureGcStream();
     return serializeDualFormat(
+      req: req,
       title: '### GC Stream Monitoring Started',
       markdownBody:
           'Now collecting garbage collection events on stream `${EventStreams.kGC}`.',
@@ -1024,12 +1047,14 @@ base mixin MemoryDebuggingSupport
 
   /// Handles the stop_gc_stream tool request.
   Future<CallToolResult> _handleStopGcStream(CallToolRequest req) async {
-    final limit = req.arg<num>('limit')?.toInt() ?? 50;
+    final limit = req.limitArg(defaultValue: 50, max: 500);
     final count = _gcEventBuffer.length;
     final durationMs = _gcStreamStartTime != null
         ? DateTime.now().millisecondsSinceEpoch - _gcStreamStartTime!
         : 0;
-    final returnedEvents = _gcEventBuffer.take(limit).toList();
+    final returnedEvents = limit != null
+        ? _gcEventBuffer.take(limit).toList()
+        : _gcEventBuffer.toList();
 
     await _stopGcStreamInternal(force: true);
 
@@ -1057,6 +1082,7 @@ base mixin MemoryDebuggingSupport
     _gcEventBuffer.clear();
 
     return serializeDualFormat(
+      req: req,
       title: '### GC Stream Monitoring Stopped',
       markdownBody: text.toString(),
       structuredData: data,
@@ -1146,6 +1172,7 @@ base mixin MemoryDebuggingSupport
     };
 
     return serializeDualFormat(
+      req: req,
       title: '### Memory Timeline (${duration}s recording)',
       markdownBody: text.toString(),
       structuredData: data,
@@ -1156,7 +1183,7 @@ base mixin MemoryDebuggingSupport
   Future<CallToolResult> _handleWatchGcPressure(CallToolRequest req) async {
     final rawDuration = req.arg<num>('duration_seconds')?.toInt() ?? 10;
     final duration = rawDuration.clamp(1, 60);
-    final limit = req.arg<num>('limit')?.toInt() ?? 50;
+    final limit = req.limitArg(defaultValue: 50, max: 500);
 
     final wasActive = _gcStreamActive;
     if (!wasActive) {
@@ -1225,7 +1252,8 @@ base mixin MemoryDebuggingSupport
       });
     }
 
-    final returnedEvents = newEvents.take(limit).toList();
+    final returnedEvents =
+        limit != null ? newEvents.take(limit).toList() : newEvents;
 
     final data = {
       'action': 'watch_gc_pressure',
@@ -1239,6 +1267,7 @@ base mixin MemoryDebuggingSupport
     };
 
     return serializeDualFormat(
+      req: req,
       title: '### GC Pressure Analysis (${duration}s window)',
       markdownBody: text.toString(),
       structuredData: data,
@@ -1302,6 +1331,7 @@ base mixin MemoryDebuggingSupport
     };
 
     return serializeDualFormat(
+      req: req,
       title: '### Memory Usage Breakdown',
       markdownBody: text.toString(),
       structuredData: data,
