@@ -932,7 +932,7 @@ base mixin MemoryDebuggingSupport
               : sortedByInstancesFiltered.take(topN))
           .map(_classHeapStatsToMap)
           .toList(),
-      'app_classes': (req.isFull ? appClasses : appClasses.take(topN * 2))
+      'app_classes': (req.isFull ? appClasses : appClasses.take(topN))
           .map(_classHeapStatsToMap)
           .toList(),
     };
