@@ -1,3 +1,15 @@
+## 1.8.0
+
+### Added
+- New `limit` parameter across tools for controlling response sizes.
+- Full data bypass option for returning untruncated responses.
+- Console log fetching now returns up to 500 entries.
+- Stack frame limits on debug breakpoint traces.
+
+### Fixed
+- Improved reliability of memory leak detection.
+- Hardened widget tree inspection against edge cases.
+
 ## 1.7.5
 
 ### Fixed
