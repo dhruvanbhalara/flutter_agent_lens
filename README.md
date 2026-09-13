@@ -96,6 +96,10 @@ To keep payloads light, these settings are supported:
   - `limit` in `profiling` (action: `get_cpu`): Sets max CPU hotspots returned (default: `15`).
   - `limit` in `diagnose_project` (action: `bundle_size`): Sets max components shown (default: `25`).
   - `limit` in `memory` (action: `audit_leak`, `get_referrers`, `stop_gc_stream`, `watch_gc_pressure`): Sets max instances, path depth, or returned GC events (default: `50`-`100`).
+  - `limit` in `console_logs` (action: `fetch`): Sets max buffered log entries returned (default: `50`, max: `500`).
+  - `limit` in `get_call_stack`: Sets max stack frames returned (default: `20`).
+  - `limit` in `console_logs` (action: `fetch`): Sets max buffered log entries returned (default: `50`, max: `500`).
+  - `limit` in `get_call_stack`: Sets max stack frames returned (default: `20`).
   - `duration_seconds` in `console_logs` (`watch`), `network` (`watch`), `memory` (`get_memory_timeline`, `watch_gc_pressure`): Sets sampling or monitoring duration in seconds (default: `5.0`, max: `30`).
   - `slow_threshold_ms` in `network` (action: `watch`): Threshold in ms to flag slow requests (default: `500`).
   - `filter` in `console_logs` (action: `watch`): Optional text filter substring for live logs.
