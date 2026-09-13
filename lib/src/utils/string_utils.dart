@@ -19,6 +19,12 @@ String truncateString(
 String formatRelativePath(String path, String? workspaceRoot) {
   if (path.isEmpty) return path;
 
+  if (path.startsWith('package:') ||
+      path.startsWith('dart:') ||
+      (path.contains('://') && !path.startsWith('file://'))) {
+    return path;
+  }
+
   var clean = path;
   if (clean.startsWith('file://')) {
     try {

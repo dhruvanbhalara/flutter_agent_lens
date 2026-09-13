@@ -740,6 +740,7 @@ base mixin NetworkCaptureSupport
 
     return serializeDualFormat(
       req: req,
+      maxTextLength: isFull ? 50000 : (maxBodyLength * 2) + 2000,
       title: 'HTTP Request Details $id',
       markdownBody: md.toString(),
       structuredData: {

@@ -77,6 +77,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               description:
                   'The unique ID of the breakpoint to remove (for remove).',
             ),
+            'full': fullSchema(),
           },
           required: ['action'],
         ),
