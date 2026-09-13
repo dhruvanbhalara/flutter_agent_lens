@@ -221,7 +221,7 @@ base mixin WidgetInspectionSupport
   /// Handles the get_widget_tree tool request.
   Future<CallToolResult> _handleGetWidgetTree(CallToolRequest req) async {
     final maxDepth =
-        (req.intArg('maxDepth', defaultValue: 6) ?? 6).clamp(1, 15);
+        (req.intArg('maxDepth', defaultValue: 8) ?? 8).clamp(1, 15);
     final projectOnly = req.arg<bool>('projectOnly') ?? true;
 
     return _withInspectorGroup((objectGroup) async {
