@@ -1,4 +1,5 @@
 import 'package:dart_mcp/server.dart';
+import 'package:flutter_agent_lens/src/constants/mcp_limits.dart';
 
 /// Extension on [CallToolRequest] to retrieve arguments defensively.
 extension CallToolRequestX on CallToolRequest {
@@ -59,4 +60,47 @@ extension CallToolRequestX on CallToolRequest {
   ///
   /// Throws an [ArgumentError] if the key is missing or the value is not a [String].
   String requireStrArg(String key) => requireArg<String>(key);
+
+  /// Returns whether the caller requested complete untruncated output.
+  bool get isFull => arg<bool>('full') ?? false;
+
+  /// Returns the requested limit clamped to [1, max], or null if [isFull] is true.
+  int? limitArg({int defaultValue = 20, int max = 200}) {
+    if (isFull) return null;
+    final val = intArg('limit') ?? defaultValue;
+    return val.clamp(1, max);
+  }
+
+  /// Returns the effective limit as a non-nullable integer for VM Service calls
+  /// that require a concrete limit parameter.
+  ///
+  /// If [isFull] is true, returns [fullLimit].
+  /// Otherwise returns the requested limit clamped to [1, max], defaulting to [defaultValue].
+  int effectiveLimitArg({
+    int defaultValue = McpLimits.defaultListLimit,
+    int max = 200,
+    int fullLimit = McpLimits.fullInstancesLimit,
+  }) {
+    if (isFull) return fullLimit;
+    final val = intArg('limit') ?? defaultValue;
+    return val.clamp(1, max);
+  }
+
+  /// Takes up to [limitArg()] items from [iterable] unless [isFull] is true.
+  Iterable<T> applyLimit<T>(
+    Iterable<T> iterable, {
+    int defaultValue = McpLimits.defaultListLimit,
+    int max = 200,
+  }) {
+    if (isFull) return iterable;
+    final limit = limitArg(defaultValue: defaultValue, max: max);
+    return limit != null ? iterable.take(limit) : iterable;
+  }
+
+  /// Returns the requested body length clamped to [500, max], or null if [isFull] is true.
+  int? maxBodyLengthArg({int defaultValue = 5000, int max = 50000}) {
+    if (isFull) return null;
+    final val = intArg('max_body_length') ?? defaultValue;
+    return val.clamp(500, max);
+  }
 }

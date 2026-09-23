@@ -53,6 +53,7 @@ base mixin RebuildTrackingSupport
               description:
                   'Whether to exclude built-in Flutter/SDK widgets (default: true).',
             ),
+            'full': fullSchema(),
           },
           required: ['action'],
         ),
@@ -218,6 +219,7 @@ base mixin RebuildTrackingSupport
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Widget Rebuilt Counts Analysis',
       markdownBody: mdBuffer.toString(),
       structuredData: {
@@ -419,6 +421,7 @@ base mixin RebuildTrackingSupport
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Widget Rebuild Report',
       markdownBody: output.join('\n'),
       structuredData: {

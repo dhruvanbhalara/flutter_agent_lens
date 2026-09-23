@@ -46,6 +46,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               description:
                   'Optional destination file path (only applicable for action: take).',
             ),
+            'full': fullSchema(),
           },
           required: ['action'],
         ),
@@ -257,6 +258,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       md.writeln('- Visual Diff: $diffPath');
 
       return serializeDualFormat(
+        req: req,
         title: 'Visual Layout Comparison Report',
         markdownBody: md.toString(),
         structuredData: {

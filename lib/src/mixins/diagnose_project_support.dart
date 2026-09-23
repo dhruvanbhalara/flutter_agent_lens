@@ -54,6 +54,7 @@ base mixin DiagnoseProjectSupport
               description: 'iOS target name (default: Runner).',
             ),
             'limit': limitSchema(defaultValue: 25),
+            'full': fullSchema(),
           },
           required: ['action'],
         ),
@@ -319,8 +320,10 @@ base mixin DiagnoseProjectSupport
     md.writeln('| Component | Size | Percentage |');
     md.writeln('| :--- | :--- | :--- |');
 
-    final limit = (req.arg<num>('limit'))?.toInt() ?? 25;
-    for (final item in leafComponents.take(limit)) {
+    final limit = req.limitArg(defaultValue: 25);
+    final displayedComponents =
+        limit != null ? leafComponents.take(limit) : leafComponents;
+    for (final item in displayedComponents) {
       final bytes = item['size_bytes'] as int;
       final sizeStr = formatBytes(bytes);
       final pct = totalSizeBytes > 0 ? (bytes / totalSizeBytes) * 100 : 0.0;
@@ -328,18 +331,21 @@ base mixin DiagnoseProjectSupport
           '| `${item['name']}` | $sizeStr | ${pct.toStringAsFixed(2)}% |');
     }
 
-    if (leafComponents.length > limit) {
+    if (limit != null && leafComponents.length > limit) {
       md.writeln(
           '\n_...and ${leafComponents.length - limit} more components._');
     }
 
     return serializeDualFormat(
+      req: req,
       title: 'Application Bundle Size Details',
       markdownBody: md.toString(),
       structuredData: {
         'file_analyzed': sizeFile.path,
         'total_bytes': totalSizeBytes,
-        'components': leafComponents.take(limit).toList(),
+        'components': limit != null
+            ? leafComponents.take(limit).toList()
+            : leafComponents,
       },
     );
   }
@@ -468,6 +474,7 @@ base mixin DiagnoseProjectSupport
     md.writeln(output);
 
     return serializeDualFormat(
+      req: req,
       title: 'Deep Link Analysis Report',
       markdownBody: md.toString(),
       structuredData: {
