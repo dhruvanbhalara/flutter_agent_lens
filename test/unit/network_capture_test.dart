@@ -76,27 +76,25 @@ void main() {
     test('start network capture fails when already capturing', () async {
       mock.isCapturingNetwork = true;
       final result = await mock.callTool(
-        CallToolRequest(
-          name: 'network',
-          arguments: const {'action': 'start'},
-        ),
+        CallToolRequest(name: 'network', arguments: const {'action': 'start'}),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Already capturing'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Already capturing'),
+      );
     });
 
     test('stop network capture fails when not capturing', () async {
       mock.isCapturingNetwork = false;
       final result = await mock.callTool(
-        CallToolRequest(
-          name: 'network',
-          arguments: const {'action': 'stop'},
-        ),
+        CallToolRequest(name: 'network', arguments: const {'action': 'stop'}),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Not capturing'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Not capturing'),
+      );
     });
 
     test('get_profile action retrieves HTTP profile history', () async {
@@ -111,19 +109,16 @@ void main() {
               'endTime': 1500000,
               'request': {'contentLength': 100},
               'response': {'statusCode': 200, 'contentLength': 500},
-            }
-          ]
-        }
+            },
+          ],
+        },
       });
       mock.isolateId = 'isolate_1';
 
       final result = await mock.callTool(
         CallToolRequest(
           name: 'network',
-          arguments: const {
-            'action': 'get_profile',
-            'limit': 5,
-          },
+          arguments: const {'action': 'get_profile', 'limit': 5},
         ),
       );
 
@@ -140,9 +135,7 @@ void main() {
         const <String, dynamic>{},
         responseSequence: <Map<String, dynamic>>[
           <String, dynamic>{
-            'result': <String, dynamic>{
-              'requests': <dynamic>[],
-            }
+            'result': <String, dynamic>{'requests': <dynamic>[]},
           },
           <String, dynamic>{
             'result': <String, dynamic>{
@@ -155,10 +148,10 @@ void main() {
                   'endTime': 1200000,
                   'request': <String, dynamic>{'contentLength': 50},
                   'response': null,
-                }
-              ]
-            }
-          }
+                },
+              ],
+            },
+          },
         ],
       );
       mock.isolateId = 'isolate_1';
@@ -166,10 +159,7 @@ void main() {
       final result = await mock.callTool(
         CallToolRequest(
           name: 'network',
-          arguments: const {
-            'action': 'watch',
-            'duration_seconds': 1,
-          },
+          arguments: const {'action': 'watch', 'duration_seconds': 1},
         ),
       );
 

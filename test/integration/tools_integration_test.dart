@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/mixins/console_logging_support.dart';
 import 'package:flutter_agent_lens/src/mixins/debugger_support.dart';
@@ -85,10 +86,7 @@ void main() {
         'serializeDualFormat enforces 5000 character safety limit on markdown by default',
         () {
       final longMarkdown = 'a' * 10000;
-      final req = CallToolRequest(
-        name: 'test_tool',
-        arguments: const {},
-      );
+      final req = CallToolRequest(name: 'test_tool', arguments: const {});
 
       final result = mock.serializeDualFormat(
         req: req,
@@ -103,32 +101,30 @@ void main() {
     });
 
     test(
-        'serializeDualFormat bypasses markdown limit when full: true is provided',
-        () {
-      final longMarkdown = 'a' * 10000;
-      final req = CallToolRequest(
-        name: 'test_tool',
-        arguments: const {'full': true},
-      );
+      'serializeDualFormat bypasses markdown limit when full: true is provided',
+      () {
+        final longMarkdown = 'a' * 10000;
+        final req = CallToolRequest(
+          name: 'test_tool',
+          arguments: const {'full': true},
+        );
 
-      final result = mock.serializeDualFormat(
-        req: req,
-        title: 'Full Test',
-        markdownBody: longMarkdown,
-        structuredData: {'key': 'val'},
-      );
+        final result = mock.serializeDualFormat(
+          req: req,
+          title: 'Full Test',
+          markdownBody: longMarkdown,
+          structuredData: {'key': 'val'},
+        );
 
-      final text = (result.content.first as TextContent).text;
-      expect(text.contains('TRUNCATED'), isFalse);
-      expect(text.length, greaterThanOrEqualTo(10000));
-    });
+        final text = (result.content.first as TextContent).text;
+        expect(text.contains('TRUNCATED'), isFalse);
+        expect(text.length, greaterThanOrEqualTo(10000));
+      },
+    );
 
     test('serializeDualFormat compacts large structured lists by default', () {
       final list = List.generate(50, (i) => {'index': i, 'value': 'item_$i'});
-      final req = CallToolRequest(
-        name: 'test_tool',
-        arguments: const {},
-      );
+      final req = CallToolRequest(name: 'test_tool', arguments: const {});
 
       final result = mock.serializeDualFormat(
         req: req,
@@ -142,25 +138,27 @@ void main() {
       expect(items.length, equals(20));
     });
 
-    test('serializeDualFormat returns full structured lists when full: true',
-        () {
-      final list = List.generate(50, (i) => {'index': i, 'value': 'item_$i'});
-      final req = CallToolRequest(
-        name: 'test_tool',
-        arguments: const {'full': true},
-      );
+    test(
+      'serializeDualFormat returns full structured lists when full: true',
+      () {
+        final list = List.generate(50, (i) => {'index': i, 'value': 'item_$i'});
+        final req = CallToolRequest(
+          name: 'test_tool',
+          arguments: const {'full': true},
+        );
 
-      final result = mock.serializeDualFormat(
-        req: req,
-        title: 'Full List Test',
-        markdownBody: 'Summary',
-        structuredData: {'items': list},
-      );
+        final result = mock.serializeDualFormat(
+          req: req,
+          title: 'Full List Test',
+          markdownBody: 'Summary',
+          structuredData: {'items': list},
+        );
 
-      final structured = result.structuredContent! as Map<String, dynamic>;
-      final items = structured['items'] as List<dynamic>;
-      expect(items.length, equals(50));
-    });
+        final structured = result.structuredContent! as Map<String, dynamic>;
+        final items = structured['items'] as List<dynamic>;
+        expect(items.length, equals(50));
+      },
+    );
 
     test('console_logs fetch respects custom limit and full flag', () async {
       for (var i = 1; i <= 60; i++) {
@@ -202,16 +200,14 @@ void main() {
         (i) => {'name': 'package:lib_$i/module.dart', 'value': 1000 * (40 - i)},
       );
       sizeFile.writeAsStringSync(
-          '{"children": ${components.map((c) => '{"n": "${c['name']}", "value": ${c['value']}}').toList()}}');
+        '{"children": ${components.map((c) => '{"n": "${c['name']}", "value": ${c['value']}}').toList()}}',
+      );
 
       // Default limit of 25 capped by list safety limit (20)
       final defaultResult = await mock.callTool(
         CallToolRequest(
           name: 'diagnose_project',
-          arguments: {
-            'action': 'bundle_size',
-            'analysis_path': sizeFile.path,
-          },
+          arguments: {'action': 'bundle_size', 'analysis_path': sizeFile.path},
         ),
       );
       final defaultData =

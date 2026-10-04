@@ -42,12 +42,8 @@ base mixin ConnectionSupport
             'action': StringSchema(
               description: 'Operation (connect, connect_dtd, disconnect).',
             ),
-            'uri': StringSchema(
-              description: 'WebSocket or HTTP URI.',
-            ),
-            'vmServiceUri': StringSchema(
-              description: 'Alias for uri.',
-            ),
+            'uri': StringSchema(description: 'WebSocket or HTTP URI.'),
+            'vmServiceUri': StringSchema(description: 'Alias for uri.'),
             'workspace_root': StringSchema(
               description: 'Flutter project root path.',
             ),
@@ -79,10 +75,7 @@ base mixin ConnectionSupport
             ),
           },
         ),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: true,
-        ),
+        annotations: ToolAnnotations(readOnlyHint: true, idempotentHint: true),
       ),
       _handleAutodiscover,
     );
@@ -94,9 +87,7 @@ base mixin ConnectionSupport
             'Set response format (details in docs/user_prompt_guide.md).',
         inputSchema: ObjectSchema(
           properties: {
-            'format': StringSchema(
-              description: 'Format (markdown or json).',
-            ),
+            'format': StringSchema(description: 'Format (markdown or json).'),
           },
           required: ['format'],
         ),
@@ -119,10 +110,7 @@ base mixin ConnectionSupport
         description:
             'Get active editor file path and cursor position when connected via DTD.',
         inputSchema: emptySchema(),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: false,
-        ),
+        annotations: ToolAnnotations(readOnlyHint: true, idempotentHint: false),
       ),
       _handleGetActiveLocation,
     );
@@ -143,10 +131,7 @@ base mixin ConnectionSupport
             ),
           },
         ),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: true,
-        ),
+        annotations: ToolAnnotations(readOnlyHint: true, idempotentHint: true),
       ),
       _handleGetAppInfo,
     );
@@ -185,7 +170,8 @@ base mixin ConnectionSupport
       {'uri': final String uri} => uri,
       {'vmServiceUri': final String uri} => uri,
       _ => throw ArgumentError(
-          'Required parameter "uri" or "vmServiceUri" is missing.'),
+          'Required parameter "uri" or "vmServiceUri" is missing.',
+        ),
     };
     final parsed = Uri.tryParse(rawUri);
     if (parsed == null || !_validSchemes.contains(parsed.scheme)) {
@@ -194,7 +180,7 @@ base mixin ConnectionSupport
           TextContent(
             text:
                 'Invalid URI scheme. Connection URI must use ws, wss, http, or https.',
-          )
+          ),
         ],
         isError: true,
       );
@@ -214,7 +200,7 @@ base mixin ConnectionSupport
                 text:
                     'Connection failed: Failed to resolve DTD URI to VM Service URI: $e\n'
                     'Please verify that DTD is running and has connected apps.',
-              )
+              ),
             ],
             isError: true,
           );
@@ -227,19 +213,22 @@ base mixin ConnectionSupport
       final service = await vmServiceConnectUri(wsUri).timeout(
         const Duration(seconds: 10),
         onTimeout: () => throw TimeoutException(
-            'Timed out connecting to VM Service at $wsUri'),
+          'Timed out connecting to VM Service at $wsUri',
+        ),
       );
       vmService = service;
 
-      unawaited(service.onDone.then((_) {
-        stderr.writeln('[mcp] VM Service connection lost.');
-        try {
-          unregisterConnectedTools();
-        } catch (_) {}
-        vmService = null;
-        isolateId = null;
-        vmServiceUri = null;
-      }));
+      unawaited(
+        service.onDone.then((_) {
+          stderr.writeln('[mcp] VM Service connection lost.');
+          try {
+            unregisterConnectedTools();
+          } catch (_) {}
+          vmService = null;
+          isolateId = null;
+          vmServiceUri = null;
+        }),
+      );
 
       final vm = await service.getVM();
       final isolates = vm.isolates;
@@ -252,8 +241,9 @@ base mixin ConnectionSupport
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Connection failed: No active isolates found in the Dart VM.')
+              text:
+                  'Connection failed: No active isolates found in the Dart VM.',
+            ),
           ],
           isError: true,
         );
@@ -282,8 +272,9 @@ base mixin ConnectionSupport
           if (sName == null || method == null) return;
           if (event.kind == EventKind.kServiceRegistered) {
             registeredMethodsForService[sName] = method;
-            stderr
-                .writeln('[mcp:service] Registered service: $sName -> $method');
+            stderr.writeln(
+              '[mcp:service] Registered service: $sName -> $method',
+            );
           } else if (event.kind == EventKind.kServiceUnregistered) {
             registeredMethodsForService.remove(sName);
             stderr.writeln('[mcp:service] Unregistered service: $sName');
@@ -292,7 +283,8 @@ base mixin ConnectionSupport
         await service.streamListen(EventStreams.kService);
         await Future<void>.delayed(const Duration(milliseconds: 100));
         stderr.writeln(
-            '[mcp:connect] Service stream seeded: ${registeredMethodsForService.keys.toList()}');
+          '[mcp:connect] Service stream seeded: ${registeredMethodsForService.keys.toList()}',
+        );
       } on Exception catch (e) {
         stderr.writeln('[mcp:connect] Error seeding service stream: $e');
       }
@@ -308,16 +300,19 @@ base mixin ConnectionSupport
           args: {'enabled': 'true'},
         );
       } on Exception catch (e) {
-        stderr
-            .writeln('[mcp:connect] Error enabling HTTP timeline logging: $e');
+        stderr.writeln(
+          '[mcp:connect] Error enabling HTTP timeline logging: $e',
+        );
       }
 
       final currentIsolates = vm.isolates ?? [];
       final String selectedIsolateName;
       if (currentIsolates.isNotEmpty) {
         selectedIsolateName = currentIsolates
-                .firstWhere((i) => i.id == isolateId,
-                    orElse: () => currentIsolates.first)
+                .firstWhere(
+                  (i) => i.id == isolateId,
+                  orElse: () => currentIsolates.first,
+                )
                 .name ??
             'unknown';
       } else {
@@ -334,10 +329,11 @@ base mixin ConnectionSupport
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Successfully connected to VM Service.\n'
-                  '- VM version: ${ver.major}.${ver.minor}\n'
-                  '- Main Isolate: $selectedIsolateName ($isolateId)\n'
-                  '- Workspace Root configured: ${workspaceRoot ?? "None"}')
+            text: 'Successfully connected to VM Service.\n'
+                '- VM version: ${ver.major}.${ver.minor}\n'
+                '- Main Isolate: $selectedIsolateName ($isolateId)\n'
+                '- Workspace Root configured: ${workspaceRoot ?? "None"}',
+          ),
         ],
       );
     } catch (e) {
@@ -356,7 +352,7 @@ base mixin ConnectionSupport
                   'Connection failed: the URI does not respond as a VM Service endpoint.\n'
                   'If you passed a Dart Tooling Daemon URI, run discover_apps instead.\n'
                   'URI tried: $rawUri',
-            )
+            ),
           ],
           isError: true,
         );
@@ -382,7 +378,8 @@ base mixin ConnectionSupport
           if (firstUri.isScheme('file')) {
             workspaceRoot = firstUri.toFilePath();
             stderr.writeln(
-                '[mcp:connect] Resolved workspace root from client: $workspaceRoot');
+              '[mcp:connect] Resolved workspace root from client: $workspaceRoot',
+            );
           }
         }
       } catch (e) {
@@ -402,7 +399,8 @@ base mixin ConnectionSupport
 
     try {
       stderr.writeln(
-          '[mcp:connect] Initializing DTD client for DTD URI: $rawUri');
+        '[mcp:connect] Initializing DTD client for DTD URI: $rawUri',
+      );
       final parsedDtdUri = Uri.parse(rawUri);
       await dtdClient?.close();
       dtdClient = await DartToolingDaemon.connect(parsedDtdUri);
@@ -425,7 +423,9 @@ base mixin ConnectionSupport
     if (uriStr == null) {
       return CallToolResult(
         content: [
-          TextContent(text: 'Missing required argument "uri" or "vmServiceUri"')
+          TextContent(
+            text: 'Missing required argument "uri" or "vmServiceUri"',
+          ),
         ],
         isError: true,
       );
@@ -447,8 +447,9 @@ base mixin ConnectionSupport
       final services = await client.getRegisteredServices();
       final apps = await client.getVmServices();
 
-      final report =
-          StringBuffer('Successfully connected to Dart Tooling Daemon.\n\n');
+      final report = StringBuffer(
+        'Successfully connected to Dart Tooling Daemon.\n\n',
+      );
       report.writeln('Registered Services:');
       for (final service in services.dtdServices) {
         report.writeln('- $service');
@@ -489,8 +490,9 @@ base mixin ConnectionSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Not connected to DTD. Run the `connection` tool with action: `connect_dtd` first.')
+            text:
+                'Not connected to DTD. Run the `connection` tool with action: `connect_dtd` first.',
+          ),
         ],
         isError: true,
       );
@@ -517,7 +519,7 @@ base mixin ConnectionSupport
               text: 'No active editor/IDE service is registered in DTD. '
                   'Ensure your IDE is running and connected to DTD.\n'
                   'Registered services: ${registered.clientServices.map((s) => s.name).join(", ")}',
-            )
+            ),
           ],
           isError: true,
         );
@@ -554,8 +556,8 @@ base mixin ConnectionSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Disconnected from DTD. Not connected to any VM Service app.')
+            text: 'Disconnected from DTD. Not connected to any VM Service app.',
+          ),
         ],
       );
     }
@@ -628,11 +630,13 @@ base mixin ConnectionSupport
       },
       if (includeExtensions) 'flutterExtensions': flutterExtensions,
       'isolates': (vm.isolates ?? [])
-          .map((i) => {
-                'id': i.id,
-                'name': i.name,
-                'isSystem': i.isSystemIsolate ?? false,
-              })
+          .map(
+            (i) => {
+              'id': i.id,
+              'name': i.name,
+              'isSystem': i.isSystemIsolate ?? false,
+            },
+          )
           .toList(),
     };
 
@@ -654,18 +658,24 @@ base mixin ConnectionSupport
     if (includeExtensions) {
       md
         ..writeln('FLUTTER EXTENSIONS')
-        ..writeln(flutterExtensions.isEmpty
-            ? 'None'
-            : flutterExtensions.map((e) => '- $e').join('\n'))
+        ..writeln(
+          flutterExtensions.isEmpty
+              ? 'None'
+              : flutterExtensions.map((e) => '- $e').join('\n'),
+        )
         ..writeln();
     }
 
     md
       ..writeln('ISOLATES')
-      ..writeln((vm.isolates ?? [])
-          .map((i) =>
-              '- ${i.name} (${i.id}, system: ${i.isSystemIsolate ?? false})')
-          .join('\n'));
+      ..writeln(
+        (vm.isolates ?? [])
+            .map(
+              (i) =>
+                  '- ${i.name} (${i.id}, system: ${i.isSystemIsolate ?? false})',
+            )
+            .join('\n'),
+      );
 
     return serializeDualFormat(
       req: req,
@@ -680,7 +690,8 @@ base mixin ConnectionSupport
     final workspace = req.arg<String>('workspace_root');
     final autoConnect = req.arg<bool>('autoConnect') ?? true;
     stderr.writeln(
-        '[mcp:autodiscover] Starting auto-discovery, workspace=$workspace, autoConnect=$autoConnect');
+      '[mcp:autodiscover] Starting auto-discovery, workspace=$workspace, autoConnect=$autoConnect',
+    );
     final runningApps = await discoverActiveApps();
     stderr.writeln('[mcp:autodiscover] Found ${runningApps.length} app(s)');
 
@@ -688,8 +699,9 @@ base mixin ConnectionSupport
       return CallToolResult(
         content: [
           TextContent(
-              text: 'No active Flutter applications were discovered. '
-                  'Please make sure your app is running in debug mode, or connect manually using connect.')
+            text: 'No active Flutter applications were discovered. '
+                'Please make sure your app is running in debug mode, or connect manually using connect.',
+          ),
         ],
         isError: true,
       );
@@ -714,19 +726,17 @@ base mixin ConnectionSupport
         if (workspace != null) 'workspace_root': workspace,
       };
 
-      final connectReq = CallToolRequest(
-        name: 'connect',
-        arguments: arguments,
-      );
+      final connectReq = CallToolRequest(name: 'connect', arguments: arguments);
 
       final connectResult = await _handleConnect(connectReq);
       if (connectResult.isError ?? false) {
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Found one application (${app.projectName}) at ${app.serviceUri}, but connection failed.\n'
-                    'Error: ${connectResult.content.map((c) => c is TextContent ? c.text : c.toString()).join("\n")}')
+              text:
+                  'Found one application (${app.projectName}) at ${app.serviceUri}, but connection failed.\n'
+                  'Error: ${connectResult.content.map((c) => c is TextContent ? c.text : c.toString()).join("\n")}',
+            ),
           ],
           isError: true,
         );
@@ -735,25 +745,25 @@ base mixin ConnectionSupport
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Successfully discovered and connected to application:\n'
-                  '- Project Name: ${app.projectName}\n'
-                  '- Service URI: ${app.serviceUri}\n'
-                  '- Workspace Root: ${workspace ?? "None"}')
+            text: 'Successfully discovered and connected to application:\n'
+                '- Project Name: ${app.projectName}\n'
+                '- Service URI: ${app.serviceUri}\n'
+                '- Workspace Root: ${workspace ?? "None"}',
+          ),
         ],
       );
     }
 
     final report = StringBuffer(
-        'Multiple active Flutter applications were discovered. '
-        'Please connect explicitly using the connect tool with one of the URIs below:\n\n');
+      'Multiple active Flutter applications were discovered. '
+      'Please connect explicitly using the connect tool with one of the URIs below:\n\n',
+    );
     for (final app in runningApps) {
       report.writeln('- Project: ${app.projectName}');
       report.writeln('  - URI: ${app.serviceUri}');
     }
 
-    return CallToolResult(
-      content: [TextContent(text: report.toString())],
-    );
+    return CallToolResult(content: [TextContent(text: report.toString())]);
   }
 
   /// Handles the set_response_format tool request.

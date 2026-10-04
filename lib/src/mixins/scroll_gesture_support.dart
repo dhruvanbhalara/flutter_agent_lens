@@ -38,7 +38,8 @@ base mixin ScrollGestureSupport
     final controller = req.requireArg<String>('scroll_controller_expression');
     final offset = (req.arg<num>('offset'))?.toDouble() ?? 500.0;
     stderr.writeln(
-        '[mcp:scroll_gesture] Controller: $controller, offset: $offset');
+      '[mcp:scroll_gesture] Controller: $controller, offset: $offset',
+    );
 
     final script = '$controller.animateTo('
         '$offset, '
@@ -52,8 +53,9 @@ base mixin ScrollGestureSupport
     return CallToolResult(
       content: [
         TextContent(
-            text:
-                'Scroll gesture driven successfully. Evaluation result: `$evalStr`')
+          text:
+              'Scroll gesture driven successfully. Evaluation result: `$evalStr`',
+        ),
       ],
     );
   }

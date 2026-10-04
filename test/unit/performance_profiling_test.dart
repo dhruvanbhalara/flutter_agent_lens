@@ -50,15 +50,14 @@ class FakeVmServiceForProfiling extends vm_service.VmService {
   @override
   Future<vm_service.VM> getVM() async {
     return vm_service.VM(
-      isolates: [
-        vm_service.IsolateRef(id: 'isolate_2', name: 'main'),
-      ],
+      isolates: [vm_service.IsolateRef(id: 'isolate_2', name: 'main')],
     );
   }
 
   @override
   Future<vm_service.Success> setVMTimelineFlags(
-      List<String> recordedStreams) async {
+    List<String> recordedStreams,
+  ) async {
     if (setFlagsFailedWithRpcError) {
       throw vm_service.RPCError('setVMTimelineFlags', 100, 'RPC error');
     }
@@ -71,8 +70,10 @@ class FakeVmServiceForProfiling extends vm_service.VmService {
   }
 
   @override
-  Future<vm_service.Timeline> getVMTimeline(
-      {int? timeOriginMicros, int? timeExtentMicros}) async {
+  Future<vm_service.Timeline> getVMTimeline({
+    int? timeOriginMicros,
+    int? timeExtentMicros,
+  }) async {
     return vm_service.Timeline.parse(responseMap)!;
   }
 
@@ -102,23 +103,21 @@ void main() {
     test('diagnose_jank defaults limit to 15 and respects it', () async {
       mock.vmService = FakeVmServiceForProfiling({
         'traceEvents': List.generate(
-            20,
-            (i) => {
-                  'ph': 'B',
-                  'name': 'GPURasterizer::Draw',
-                  'cat': 'Flutter',
-                  'ts': 100000 + i * 20000,
-                  'dur': 20000, // 20ms (> 16.6ms frame time)
-                }),
+          20,
+          (i) => {
+            'ph': 'B',
+            'name': 'GPURasterizer::Draw',
+            'cat': 'Flutter',
+            'ts': 100000 + i * 20000,
+            'dur': 20000, // 20ms (> 16.6ms frame time)
+          },
+        ),
       });
 
       final result = await mock.callTool(
         CallToolRequest(
           name: 'profiling',
-          arguments: const {
-            'action': 'diagnose_jank',
-            'duration_seconds': 0,
-          },
+          arguments: const {'action': 'diagnose_jank', 'duration_seconds': 0},
         ),
       );
 
@@ -132,10 +131,7 @@ void main() {
 
     test('handleHotReload reassembles UI when DTD is unattached', () async {
       final result = await mock.callTool(
-        CallToolRequest(
-          name: 'hot_reload',
-          arguments: const {},
-        ),
+        CallToolRequest(name: 'hot_reload', arguments: const {}),
       );
 
       expect(result.isError, isNot(isTrue));
@@ -145,10 +141,7 @@ void main() {
 
     test('handleHotRestart updates isolate ID upon completion', () async {
       final result = await mock.callTool(
-        CallToolRequest(
-          name: 'hot_restart',
-          arguments: const {},
-        ),
+        CallToolRequest(name: 'hot_restart', arguments: const {}),
       );
 
       expect(result.isError, isNot(isTrue));
@@ -162,36 +155,32 @@ void main() {
       fake.setFlagsFailedWithRpcError = true;
       mock.vmService = fake;
 
-      await expectLater(
-        mock.cleanupPerformanceProfiling(),
-        completes,
-      );
+      await expectLater(mock.cleanupPerformanceProfiling(), completes);
       expect(mock.isProfiling, isFalse);
     });
 
-    test('diagnose_jank includes warning when VM disconnects mid-sampling',
-        () async {
-      final fake = FakeVmServiceForProfiling({});
-      mock.vmService = fake;
+    test(
+      'diagnose_jank includes warning when VM disconnects mid-sampling',
+      () async {
+        final fake = FakeVmServiceForProfiling({});
+        mock.vmService = fake;
 
-      final future = mock.callTool(
-        CallToolRequest(
-          name: 'profiling',
-          arguments: const {
-            'action': 'diagnose_jank',
-            'duration_seconds': 5,
-          },
-        ),
-      );
+        final future = mock.callTool(
+          CallToolRequest(
+            name: 'profiling',
+            arguments: const {'action': 'diagnose_jank', 'duration_seconds': 5},
+          ),
+        );
 
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-      fake.triggerDisconnect();
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        fake.triggerDisconnect();
 
-      final result = await future;
-      expect(result.isError, isNot(isTrue));
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('> [!WARNING]'));
-      expect(text, contains('vm_service_disconnected'));
-    });
+        final result = await future;
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('> [!WARNING]'));
+        expect(text, contains('vm_service_disconnected'));
+      },
+    );
   });
 }

@@ -5,7 +5,9 @@ enum FlutterDebugFlag {
 
   /// Toggle visual baselines of text widgets.
   debugPaintBaselines(
-      'debugPaintBaselinesEnabled', 'debugPaintBaselinesEnabled'),
+    'debugPaintBaselinesEnabled',
+    'debugPaintBaselinesEnabled',
+  ),
 
   /// Force repaint showing visual boundaries.
   repaintRainbow('repaintRainbow', 'repaintRainbow'),

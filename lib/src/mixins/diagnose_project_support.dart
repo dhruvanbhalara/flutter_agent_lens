@@ -58,10 +58,7 @@ base mixin DiagnoseProjectSupport
           },
           required: ['action'],
         ),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: true,
-        ),
+        annotations: ToolAnnotations(readOnlyHint: true, idempotentHint: true),
       ),
       _handleDiagnoseProject,
     );
@@ -87,8 +84,9 @@ base mixin DiagnoseProjectSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Workspace root is not configured. Run connect first to set it.')
+            text:
+                'Workspace root is not configured. Run connect first to set it.',
+          ),
         ],
         isError: true,
       );
@@ -110,7 +108,8 @@ base mixin DiagnoseProjectSupport
         }
       } catch (e) {
         stderr.writeln(
-            '[mcp:bundle_size] Error auto-detecting target OS from VM: $e');
+          '[mcp:bundle_size] Error auto-detecting target OS from VM: $e',
+        );
       }
     }
 
@@ -119,7 +118,8 @@ base mixin DiagnoseProjectSupport
         ((target == 'apk' || target == 'appbundle') ? 'android-arm64' : '');
 
     stderr.writeln(
-        '[mcp:bundle_size] Analyzing bundle size, target=$target, platform=$targetPlatform');
+      '[mcp:bundle_size] Analyzing bundle size, target=$target, platform=$targetPlatform',
+    );
 
     File? sizeFile;
     final analysisPath = req.arg<String>('analysis_path');
@@ -129,8 +129,9 @@ base mixin DiagnoseProjectSupport
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Invalid analysis path: Path traversal or null byte detected.')
+              text:
+                  'Invalid analysis path: Path traversal or null byte detected.',
+            ),
           ],
           isError: true,
         );
@@ -154,8 +155,9 @@ base mixin DiagnoseProjectSupport
             return CallToolResult(
               content: [
                 TextContent(
-                    text:
-                        'Access denied: target path is outside the workspace root.')
+                  text:
+                      'Access denied: target path is outside the workspace root.',
+                ),
               ],
               isError: true,
             );
@@ -168,8 +170,9 @@ base mixin DiagnoseProjectSupport
             return CallToolResult(
               content: [
                 TextContent(
-                    text:
-                        'Access denied: target path is outside the workspace root.')
+                  text:
+                      'Access denied: target path is outside the workspace root.',
+                ),
               ],
               isError: true,
             );
@@ -180,7 +183,8 @@ base mixin DiagnoseProjectSupport
         return CallToolResult(
           content: [
             TextContent(
-                text: 'Specified analysis file does not exist: $analysisPath')
+              text: 'Specified analysis file does not exist: $analysisPath',
+            ),
           ],
           isError: true,
         );
@@ -191,7 +195,8 @@ base mixin DiagnoseProjectSupport
         return CallToolResult(
           content: [
             TextContent(
-                text: 'Build directory does not exist at ${buildDir.path}.')
+              text: 'Build directory does not exist at ${buildDir.path}.',
+            ),
           ],
           isError: true,
         );
@@ -232,7 +237,8 @@ base mixin DiagnoseProjectSupport
         }
       } catch (e) {
         stderr.writeln(
-            '[mcp:bundle_analysis] Error scanning build directory: $e');
+          '[mcp:bundle_analysis] Error scanning build directory: $e',
+        );
       }
 
       sizeFile ??= fallbackFile;
@@ -245,21 +251,22 @@ base mixin DiagnoseProjectSupport
             text: 'No size analysis file found in the build directory.\n\n'
                 'Please run the following command manually to generate the size analysis file, then try again:\n\n'
                 '  flutter build $target --analyze-size ${targetPlatform.isNotEmpty ? "--target-platform=$targetPlatform" : ""}',
-          )
+          ),
         ],
         isError: true,
       );
     }
 
     stderr.writeln(
-        '[mcp:bundle_size] Parsing size analysis file: ${sizeFile.path}');
+      '[mcp:bundle_size] Parsing size analysis file: ${sizeFile.path}',
+    );
     final dynamic rawJson;
     try {
       rawJson = jsonDecode(await sizeFile.readAsString());
     } catch (e) {
       return CallToolResult(
         content: [
-          TextContent(text: 'Failed to parse size analysis JSON file: $e')
+          TextContent(text: 'Failed to parse size analysis JSON file: $e'),
         ],
         isError: true,
       );
@@ -268,8 +275,9 @@ base mixin DiagnoseProjectSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Invalid size analysis file format: Root is not a JSON object.')
+            text:
+                'Invalid size analysis file format: Root is not a JSON object.',
+          ),
         ],
         isError: true,
       );
@@ -290,10 +298,7 @@ base mixin DiagnoseProjectSupport
           }
         }
       } else if (value is num) {
-        leafComponents.add({
-          'name': name,
-          'size_bytes': value.toInt(),
-        });
+        leafComponents.add({'name': name, 'size_bytes': value.toInt()});
       }
     }
 
@@ -301,21 +306,28 @@ base mixin DiagnoseProjectSupport
 
     // Sort by size descending
     leafComponents.sort(
-        (a, b) => (b['size_bytes'] as int).compareTo(a['size_bytes'] as int));
+      (a, b) => (b['size_bytes'] as int).compareTo(a['size_bytes'] as int),
+    );
 
     final totalSizeBytes = leafComponents.fold<int>(
-        0, (sum, item) => sum + (item['size_bytes'] as int));
+      0,
+      (sum, item) => sum + (item['size_bytes'] as int),
+    );
 
-    final md =
-        StringBuffer('Code Size Analysis: ${p.basename(sizeFile.path)}\n\n');
+    final md = StringBuffer(
+      'Code Size Analysis: ${p.basename(sizeFile.path)}\n\n',
+    );
     md.writeln(
-        'A summary of your APK analysis can be found at: ${sizeFile.path}');
+      'A summary of your APK analysis can be found at: ${sizeFile.path}',
+    );
     md.writeln(
-        'To analyze your app size in Dart DevTools, run the following command:\n'
-        '  dart devtools --appSizeBase=${sizeFile.path}');
+      'To analyze your app size in Dart DevTools, run the following command:\n'
+      '  dart devtools --appSizeBase=${sizeFile.path}',
+    );
     md.writeln();
     md.writeln(
-        '- Total Calculated Size: ${formatBytes(totalSizeBytes)} ($totalSizeBytes Bytes)');
+      '- Total Calculated Size: ${formatBytes(totalSizeBytes)} ($totalSizeBytes Bytes)',
+    );
     md.writeln();
     md.writeln('| Component | Size | Percentage |');
     md.writeln('| :--- | :--- | :--- |');
@@ -328,12 +340,14 @@ base mixin DiagnoseProjectSupport
       final sizeStr = formatBytes(bytes);
       final pct = totalSizeBytes > 0 ? (bytes / totalSizeBytes) * 100 : 0.0;
       md.writeln(
-          '| `${item['name']}` | $sizeStr | ${pct.toStringAsFixed(2)}% |');
+        '| `${item['name']}` | $sizeStr | ${pct.toStringAsFixed(2)}% |',
+      );
     }
 
     if (limit != null && leafComponents.length > limit) {
       md.writeln(
-          '\n_...and ${leafComponents.length - limit} more components._');
+        '\n_...and ${leafComponents.length - limit} more components._',
+      );
     }
 
     return serializeDualFormat(
@@ -357,8 +371,9 @@ base mixin DiagnoseProjectSupport
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Workspace root is not configured. Run connect first to set it.')
+            text:
+                'Workspace root is not configured. Run connect first to set it.',
+          ),
         ],
         isError: true,
       );
@@ -408,12 +423,16 @@ base mixin DiagnoseProjectSupport
     }
 
     stderr.writeln(
-        '[mcp:deeplinks] Validating deep links, platform=${platform.value}');
+      '[mcp:deeplinks] Validating deep links, platform=${platform.value}',
+    );
 
     final flutterRoot = Platform.environment['FLUTTER_ROOT'];
     final executable = flutterRoot != null
         ? p.join(
-            flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter')
+            flutterRoot,
+            'bin',
+            Platform.isWindows ? 'flutter.bat' : 'flutter',
+          )
         : (Platform.isWindows ? 'flutter.bat' : 'flutter');
 
     final List<String> args = switch (platform) {
@@ -426,12 +445,7 @@ base mixin DiagnoseProjectSupport
                 '--build-variant=$buildVariant',
                 root,
               ]
-            : [
-                'analyze',
-                '--android',
-                '--list-build-variants',
-                root,
-              ],
+            : ['analyze', '--android', '--list-build-variants', root],
       TargetPlatform.ios => (configuration != null && configuration.isNotEmpty)
           ? [
               'analyze',
@@ -441,12 +455,7 @@ base mixin DiagnoseProjectSupport
               '--target=$target',
               root,
             ]
-          : [
-              'analyze',
-              '--ios',
-              '--list-build-options',
-              root,
-            ],
+          : ['analyze', '--ios', '--list-build-options', root],
     };
 
     stderr.writeln('[mcp:deeplinks] Executing: $executable ${args.join(' ')}');
@@ -460,7 +469,7 @@ base mixin DiagnoseProjectSupport
                 'Flutter deep link analysis failed (Exit Code ${result.exitCode}):\n'
                 '${result.stderr}\n'
                 'Stdout:\n${result.stdout}',
-          )
+          ),
         ],
         isError: true,
       );

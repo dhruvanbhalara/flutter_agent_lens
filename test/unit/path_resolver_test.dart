@@ -31,36 +31,47 @@ void main() {
     test('resolve standard file URIs directly', () async {
       final fileUri =
           Uri.file(p.join(tempDir.path, 'lib', 'main.dart')).toString();
-      final expectedPath =
-          p.canonicalize(p.join(tempDir.path, 'lib', 'main.dart'));
+      final expectedPath = p.canonicalize(
+        p.join(tempDir.path, 'lib', 'main.dart'),
+      );
 
       final resolved = await resolver.resolveToAbsolutePath(fileUri);
       expect(resolved, equals(expectedPath));
     });
 
-    test('system URIs return unchanged without resolving or scanning',
-        () async {
-      expect(await resolver.resolveToAbsolutePath('dart:core'),
-          equals('dart:core'));
-      expect(
-        await resolver.resolveToAbsolutePath(
-            'org-dartlang-sdk:///sdk/lib/core/core.dart'),
-        equals('org-dartlang-sdk:///sdk/lib/core/core.dart'),
-      );
-      expect(await resolver.resolveToAbsolutePath('native'), equals('native'));
-    });
+    test(
+      'system URIs return unchanged without resolving or scanning',
+      () async {
+        expect(
+          await resolver.resolveToAbsolutePath('dart:core'),
+          equals('dart:core'),
+        );
+        expect(
+          await resolver.resolveToAbsolutePath(
+            'org-dartlang-sdk:///sdk/lib/core/core.dart',
+          ),
+          equals('org-dartlang-sdk:///sdk/lib/core/core.dart'),
+        );
+        expect(
+          await resolver.resolveToAbsolutePath('native'),
+          equals('native'),
+        );
+      },
+    );
 
     test('fallback search matches filename in workspace', () async {
       // Create a file nested deep in the temp directory
       final nestedDir = Directory(
-          p.join(tempDir.path, 'packages', 'feature_a', 'lib', 'src'));
+        p.join(tempDir.path, 'packages', 'feature_a', 'lib', 'src'),
+      );
       await nestedDir.create(recursive: true);
       final file = File(p.join(nestedDir.path, 'widget.dart'));
       await file.writeAsString('// test');
 
       // Attempting to resolve widget.dart should hit the fallback search
-      final resolved = await resolver
-          .resolveToAbsolutePath('package:feature_a/src/widget.dart');
+      final resolved = await resolver.resolveToAbsolutePath(
+        'package:feature_a/src/widget.dart',
+      );
       expect(resolved, equals(p.canonicalize(file.path)));
     });
 
@@ -101,18 +112,25 @@ void main() {
       expect(resolved, equals(expectedPath));
     });
 
-    test('empty or invalid package URIs pass through or return default path',
-        () async {
-      expect(
-          await resolver.resolveToAbsolutePath('package:'), equals('package:'));
-      expect(await resolver.resolveToAbsolutePath('package:foo'),
-          equals('package:foo'));
-    });
+    test(
+      'empty or invalid package URIs pass through or return default path',
+      () async {
+        expect(
+          await resolver.resolveToAbsolutePath('package:'),
+          equals('package:'),
+        );
+        expect(
+          await resolver.resolveToAbsolutePath('package:foo'),
+          equals('package:foo'),
+        );
+      },
+    );
 
     test('non-existent workspace root returns fallback', () async {
       final badResolver = PathResolver('/non_existent_directory_xyz');
-      final resolved =
-          await badResolver.resolveToAbsolutePath('package:foo/bar.dart');
+      final resolved = await badResolver.resolveToAbsolutePath(
+        'package:foo/bar.dart',
+      );
       expect(resolved, equals('package:foo/bar.dart'));
     });
 
@@ -128,8 +146,9 @@ void main() {
       }
 
       // Resolving a file should scan and stop at 10,000 files
-      final resolved =
-          await resolver.resolveToAbsolutePath('package:nonexistent/file.dart');
+      final resolved = await resolver.resolveToAbsolutePath(
+        'package:nonexistent/file.dart',
+      );
       expect(resolved, equals('package:nonexistent/file.dart'));
     });
   });

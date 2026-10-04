@@ -27,11 +27,7 @@ final class ClassAllocation {
 
   /// Serializes class allocation details into a key-value Map.
   Map<String, dynamic> toMap() {
-    return {
-      'name': name,
-      'instances': instances,
-      'bytes': bytes,
-    };
+    return {'name': name, 'instances': instances, 'bytes': bytes};
   }
 
   @override
@@ -74,9 +70,9 @@ final class MemorySnapshot {
       heapCapacity: (map['heapCapacity'] as num?)?.toInt() ?? 0,
       externalUsage: (map['externalUsage'] as num?)?.toInt() ?? 0,
       topClasses: List.unmodifiable(
-        topClassesList
-            .whereType<Map<dynamic, dynamic>>()
-            .map((c) => ClassAllocation.fromMap(Map<String, dynamic>.from(c))),
+        topClassesList.whereType<Map<dynamic, dynamic>>().map(
+              (c) => ClassAllocation.fromMap(Map<String, dynamic>.from(c)),
+            ),
       ),
     );
   }

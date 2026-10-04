@@ -37,12 +37,14 @@ class FakeVmServiceForRebuilds extends vm_service.VmService {
   Stream<vm_service.Event> get onExtensionEvent => _eventController.stream;
 
   void emitRebuildEvent(Map<String, dynamic> data) {
-    _eventController.add(vm_service.Event(
-      kind: 'Extension',
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-      extensionKind: 'Flutter.RebuiltWidgets',
-      extensionData: vm_service.ExtensionData.parse(data),
-    ));
+    _eventController.add(
+      vm_service.Event(
+        kind: 'Extension',
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        extensionKind: 'Flutter.RebuiltWidgets',
+        extensionData: vm_service.ExtensionData.parse(data),
+      ),
+    );
   }
 
   @override
@@ -76,29 +78,29 @@ class FakeVmServiceForRebuilds extends vm_service.VmService {
           'package:my_app/main.dart': {
             'ids': [1, 2],
             'lines': [10, 20],
-            'names': ['MyWidget', 'AppScreen']
+            'names': ['MyWidget', 'AppScreen'],
           },
           'package:flutter/src/widgets/container.dart': {
             'ids': [3, 4],
             'lines': [100, 200],
-            'names': ['Container', 'Padding']
+            'names': ['Container', 'Padding'],
           },
           'package:flutter/src/material/scaffold.dart': {
             'ids': [5],
             'lines': [50],
-            'names': ['Scaffold']
+            'names': ['Scaffold'],
           },
           'package:provider/src/provider.dart': {
             'ids': [6],
             'lines': [30],
-            'names': ['Provider']
+            'names': ['Provider'],
           },
           'dart:ui/geometry.dart': {
             'ids': [7],
             'lines': [15],
-            'names': ['Offset']
-          }
-        }
+            'names': ['Offset'],
+          },
+        },
       });
       if (parsed == null) {
         throw StateError('Failed to parse mock Response');
@@ -129,19 +131,18 @@ void main() {
     test(
         'Default filtering (exclude_flutter_widgets omitted) only returns project widgets',
         () async {
-      unawaited(Future.delayed(const Duration(milliseconds: 100), () {
-        (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
-          'events': [1, 10, 2, 20, 3, 5, 5, 2, 6, 8, 7, 4]
-        });
-      }));
+      unawaited(
+        Future.delayed(const Duration(milliseconds: 100), () {
+          (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
+            'events': [1, 10, 2, 20, 3, 5, 5, 2, 6, 8, 7, 4],
+          });
+        }),
+      );
 
       final result = await mock.callTool(
         CallToolRequest(
           name: 'rebuild_tracking',
-          arguments: const {
-            'action': 'get_counts',
-            'duration_seconds': 1,
-          },
+          arguments: const {'action': 'get_counts', 'duration_seconds': 1},
         ),
       );
 
@@ -156,39 +157,45 @@ void main() {
       expect(text, contains('Note: Built-in Flutter/SDK widgets excluded.'));
     });
 
-    test('Explicit exclude_flutter_widgets: true only returns project widgets',
-        () async {
-      unawaited(Future.delayed(const Duration(milliseconds: 100), () {
-        (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
-          'events': [1, 10, 3, 5]
-        });
-      }));
+    test(
+      'Explicit exclude_flutter_widgets: true only returns project widgets',
+      () async {
+        unawaited(
+          Future.delayed(const Duration(milliseconds: 100), () {
+            (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
+              'events': [1, 10, 3, 5],
+            });
+          }),
+        );
 
-      final result = await mock.callTool(
-        CallToolRequest(
-          name: 'rebuild_tracking',
-          arguments: const {
-            'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': true,
-          },
-        ),
-      );
+        final result = await mock.callTool(
+          CallToolRequest(
+            name: 'rebuild_tracking',
+            arguments: const {
+              'action': 'get_counts',
+              'duration_seconds': 1,
+              'exclude_flutter_widgets': true,
+            },
+          ),
+        );
 
-      expect(result.isError, isNot(isTrue));
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('MyWidget'));
-      expect(text, isNot(contains('Container')));
-    });
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('MyWidget'));
+        expect(text, isNot(contains('Container')));
+      },
+    );
 
     test(
         'Explicit exclude_flutter_widgets: false returns all widgets including SDK and packages',
         () async {
-      unawaited(Future.delayed(const Duration(milliseconds: 100), () {
-        (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
-          'events': [1, 10, 3, 5, 6, 8, 7, 2]
-        });
-      }));
+      unawaited(
+        Future.delayed(const Duration(milliseconds: 100), () {
+          (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
+            'events': [1, 10, 3, 5, 6, 8, 7, 2],
+          });
+        }),
+      );
 
       final result = await mock.callTool(
         CallToolRequest(
@@ -207,44 +214,52 @@ void main() {
       expect(text, contains('Container'));
       expect(text, contains('Provider'));
       expect(text, contains('Offset'));
-      expect(text,
-          isNot(contains('Note: Built-in Flutter/SDK widgets excluded.')));
-    });
-
-    test('All SDK widgets filtered results in graceful empty message',
-        () async {
-      unawaited(Future.delayed(const Duration(milliseconds: 100), () {
-        (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
-          'events': [3, 5, 5, 2]
-        });
-      }));
-
-      final result = await mock.callTool(
-        CallToolRequest(
-          name: 'rebuild_tracking',
-          arguments: const {
-            'action': 'get_counts',
-            'duration_seconds': 1,
-            'exclude_flutter_widgets': true,
-          },
-        ),
+      expect(
+        text,
+        isNot(contains('Note: Built-in Flutter/SDK widgets excluded.')),
       );
-
-      expect(result.isError, isNot(isTrue));
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('No rebuilds captured.'));
     });
+
+    test(
+      'All SDK widgets filtered results in graceful empty message',
+      () async {
+        unawaited(
+          Future.delayed(const Duration(milliseconds: 100), () {
+            (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
+              'events': [3, 5, 5, 2],
+            });
+          }),
+        );
+
+        final result = await mock.callTool(
+          CallToolRequest(
+            name: 'rebuild_tracking',
+            arguments: const {
+              'action': 'get_counts',
+              'duration_seconds': 1,
+              'exclude_flutter_widgets': true,
+            },
+          ),
+        );
+
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('No rebuilds captured.'));
+      },
+    );
 
     test(
         'Response contains total_recorded_widgets and filtered_count in JSON format',
         () async {
       mock.responseFormat = 'json';
 
-      unawaited(Future.delayed(const Duration(milliseconds: 100), () {
-        (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
-          'events': [1, 10, 3, 5, 6, 2]
-        });
-      }));
+      unawaited(
+        Future.delayed(const Duration(milliseconds: 100), () {
+          (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
+            'events': [1, 10, 3, 5, 6, 2],
+          });
+        }),
+      );
 
       final result = await mock.callTool(
         CallToolRequest(
@@ -263,8 +278,8 @@ void main() {
       expect(text, contains('filtered_count'));
 
       final data = jsonDecode(
-              text.replaceFirst('```json\n', '').replaceFirst('\n```', ''))
-          as Map<String, dynamic>;
+        text.replaceFirst('```json\n', '').replaceFirst('\n```', ''),
+      ) as Map<String, dynamic>;
       expect(data['total_recorded_widgets'], 3);
       expect(data['filtered_count'], 1);
     });
@@ -276,16 +291,14 @@ void main() {
       final startRes = await mock.callTool(
         CallToolRequest(
           name: 'rebuild_tracking',
-          arguments: const {
-            'action': 'start',
-          },
+          arguments: const {'action': 'start'},
         ),
       );
       expect(startRes.isError, isNot(isTrue));
 
       // Emit events
       (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
-        'events': [1, 10, 3, 5]
+        'events': [1, 10, 3, 5],
       });
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
@@ -293,10 +306,7 @@ void main() {
       final stopRes = await mock.callTool(
         CallToolRequest(
           name: 'rebuild_tracking',
-          arguments: const {
-            'action': 'stop',
-            'exclude_flutter_widgets': true,
-          },
+          arguments: const {'action': 'stop', 'exclude_flutter_widgets': true},
         ),
       );
 
@@ -308,42 +318,41 @@ void main() {
     });
 
     test(
-        'Start/stop flow with exclude_flutter_widgets: false returns all widgets',
-        () async {
-      // Start tracking
-      final startRes = await mock.callTool(
-        CallToolRequest(
-          name: 'rebuild_tracking',
-          arguments: const {
-            'action': 'start',
-          },
-        ),
-      );
-      expect(startRes.isError, isNot(isTrue));
+      'Start/stop flow with exclude_flutter_widgets: false returns all widgets',
+      () async {
+        // Start tracking
+        final startRes = await mock.callTool(
+          CallToolRequest(
+            name: 'rebuild_tracking',
+            arguments: const {'action': 'start'},
+          ),
+        );
+        expect(startRes.isError, isNot(isTrue));
 
-      // Emit events
-      (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
-        'events': [1, 10, 3, 5]
-      });
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+        // Emit events
+        (mock.vmService! as FakeVmServiceForRebuilds).emitRebuildEvent({
+          'events': [1, 10, 3, 5],
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 100));
 
-      // Stop tracking
-      final stopRes = await mock.callTool(
-        CallToolRequest(
-          name: 'rebuild_tracking',
-          arguments: const {
-            'action': 'stop',
-            'exclude_flutter_widgets': false,
-          },
-        ),
-      );
+        // Stop tracking
+        final stopRes = await mock.callTool(
+          CallToolRequest(
+            name: 'rebuild_tracking',
+            arguments: const {
+              'action': 'stop',
+              'exclude_flutter_widgets': false,
+            },
+          ),
+        );
 
-      expect(stopRes.isError, isNot(isTrue));
-      final text = (stopRes.content.first as TextContent).text;
-      expect(text, isNot(contains('Filtered widgets')));
-      expect(text, contains('MyWidget'));
-      expect(text, contains('Container'));
-    });
+        expect(stopRes.isError, isNot(isTrue));
+        final text = (stopRes.content.first as TextContent).text;
+        expect(text, isNot(contains('Filtered widgets')));
+        expect(text, contains('MyWidget'));
+        expect(text, contains('Container'));
+      },
+    );
 
     test('Helper isBuiltInWidget behaves correctly for all types of paths', () {
       // Mock workspace root set
@@ -351,124 +360,174 @@ void main() {
 
       // Project file
       expect(
-          mock.isBuiltInWidget('/Users/user/project/lib/main.dart:10',
-              projectName: 'my_app'),
-          isFalse);
+        mock.isBuiltInWidget(
+          '/Users/user/project/lib/main.dart:10',
+          projectName: 'my_app',
+        ),
+        isFalse,
+      );
 
       // Standard packages URIs
       expect(
-          mock.isBuiltInWidget('package:flutter/src/widgets/container.dart:100',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          'package:flutter/src/widgets/container.dart:100',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
       expect(
-          mock.isBuiltInWidget('package:flutter_test/src/widget_tester.dart:12',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          'package:flutter_test/src/widget_tester.dart:12',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
       expect(
-          mock.isBuiltInWidget('package:provider/src/provider.dart:30',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          'package:provider/src/provider.dart:30',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
 
       // User package unresolved path
       expect(
-          mock.isBuiltInWidget('package:my_app/main.dart:10',
-              projectName: 'my_app'),
-          isFalse);
+        mock.isBuiltInWidget(
+          'package:my_app/main.dart:10',
+          projectName: 'my_app',
+        ),
+        isFalse,
+      );
 
       // Puro, FVM, Mise, pub-cache paths
       expect(
-          mock.isBuiltInWidget(
-              '/Users/user/.puro/envs/stable/flutter/packages/flutter/lib/src/widgets/basic.dart:50',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          '/Users/user/.puro/envs/stable/flutter/packages/flutter/lib/src/widgets/basic.dart:50',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
       expect(
-          mock.isBuiltInWidget(
-              '/Users/user/.fvm/flutter_sdk/packages/flutter/lib/src/widgets/basic.dart:50',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          '/Users/user/.fvm/flutter_sdk/packages/flutter/lib/src/widgets/basic.dart:50',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
       expect(
-          mock.isBuiltInWidget(
-              '/Users/user/fvm/versions/3.22.0/packages/flutter/lib/src/widgets/basic.dart:50',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          '/Users/user/fvm/versions/3.22.0/packages/flutter/lib/src/widgets/basic.dart:50',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
       expect(
-          mock.isBuiltInWidget(
-              '/Users/user/.mise/installs/flutter/3.22.0/packages/flutter/lib/src/widgets/basic.dart:50',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          '/Users/user/.mise/installs/flutter/3.22.0/packages/flutter/lib/src/widgets/basic.dart:50',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
       expect(
-          mock.isBuiltInWidget(
-              '/Users/user/.pub-cache/hosted/pub.dev/provider-6.1.2/lib/provider.dart:10',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          '/Users/user/.pub-cache/hosted/pub.dev/provider-6.1.2/lib/provider.dart:10',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
 
       // Sky engine
       expect(
-          mock.isBuiltInWidget(
-              '/Users/user/flutter/bin/cache/pkg/sky_engine/lib/ui/geometry.dart:10',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          '/Users/user/flutter/bin/cache/pkg/sky_engine/lib/ui/geometry.dart:10',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
 
       // dart: and org-dartlang-sdk: schemes
       expect(
-          mock.isBuiltInWidget('dart:ui/geometry.dart:10',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget('dart:ui/geometry.dart:10', projectName: 'my_app'),
+        isTrue,
+      );
       expect(
-          mock.isBuiltInWidget(
-              'org-dartlang-sdk:///flutter/lib/src/widgets/basic.dart:5',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          'org-dartlang-sdk:///flutter/lib/src/widgets/basic.dart:5',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
 
       // Path outside workspace
       expect(
-          mock.isBuiltInWidget('/Users/user/another_project/lib/helper.dart:15',
-              projectName: 'my_app'),
-          isTrue);
+        mock.isBuiltInWidget(
+          '/Users/user/another_project/lib/helper.dart:15',
+          projectName: 'my_app',
+        ),
+        isTrue,
+      );
 
       // Relative path check
       expect(
-          mock.isBuiltInWidget('/Users/user/project/lib/../lib/main.dart:10',
-              projectName: 'my_app'),
-          isFalse);
+        mock.isBuiltInWidget(
+          '/Users/user/project/lib/../lib/main.dart:10',
+          projectName: 'my_app',
+        ),
+        isFalse,
+      );
     });
 
     test(
-        'Helper isBuiltInWidget falls back gracefully when workspaceRoot is null',
-        () {
-      mock.workspaceRoot = null;
+      'Helper isBuiltInWidget falls back gracefully when workspaceRoot is null',
+      () {
+        mock.workspaceRoot = null;
 
-      // Project unresolved package URI
-      expect(
-          mock.isBuiltInWidget('package:my_app/main.dart:10',
-              projectName: 'my_app'),
-          isFalse);
-
-      // Flutter package URI
-      expect(
-          mock.isBuiltInWidget('package:flutter/src/widgets/container.dart:100',
-              projectName: 'my_app'),
-          isTrue);
-
-      // Standard dependency package URI
-      expect(
-          mock.isBuiltInWidget('package:provider/src/provider.dart:30',
-              projectName: 'my_app'),
-          isTrue);
-
-      // Local relative path structure
-      expect(
-          mock.isBuiltInWidget('/Users/user/project/lib/main.dart:10',
-              projectName: 'my_app'),
-          isFalse);
-
-      // Known pub-cache / puro path checks
-      expect(
+        // Project unresolved package URI
+        expect(
           mock.isBuiltInWidget(
-              '/Users/user/.pub-cache/hosted/pub.dev/provider-6.1.2/lib/provider.dart:10',
-              projectName: 'my_app'),
-          isTrue);
-    });
+            'package:my_app/main.dart:10',
+            projectName: 'my_app',
+          ),
+          isFalse,
+        );
+
+        // Flutter package URI
+        expect(
+          mock.isBuiltInWidget(
+            'package:flutter/src/widgets/container.dart:100',
+            projectName: 'my_app',
+          ),
+          isTrue,
+        );
+
+        // Standard dependency package URI
+        expect(
+          mock.isBuiltInWidget(
+            'package:provider/src/provider.dart:30',
+            projectName: 'my_app',
+          ),
+          isTrue,
+        );
+
+        // Local relative path structure
+        expect(
+          mock.isBuiltInWidget(
+            '/Users/user/project/lib/main.dart:10',
+            projectName: 'my_app',
+          ),
+          isFalse,
+        );
+
+        // Known pub-cache / puro path checks
+        expect(
+          mock.isBuiltInWidget(
+            '/Users/user/.pub-cache/hosted/pub.dev/provider-6.1.2/lib/provider.dart:10',
+            projectName: 'my_app',
+          ),
+          isTrue,
+        );
+      },
+    );
 
     test('Helper isBuiltInWidget dynamically respects packageResolver', () {
       mock.workspaceRoot = '/Users/user/project';
@@ -484,23 +543,35 @@ void main() {
 
       // Local packages
       expect(
-          mock.isBuiltInWidget('package:my_app/main.dart:10',
-              projectName: 'some_other_name'),
-          isFalse);
+        mock.isBuiltInWidget(
+          'package:my_app/main.dart:10',
+          projectName: 'some_other_name',
+        ),
+        isFalse,
+      );
       expect(
-          mock.isBuiltInWidget('package:local_package/widgets/button.dart:42',
-              projectName: 'some_other_name'),
-          isFalse);
+        mock.isBuiltInWidget(
+          'package:local_package/widgets/button.dart:42',
+          projectName: 'some_other_name',
+        ),
+        isFalse,
+      );
 
       // External packages
       expect(
-          mock.isBuiltInWidget('package:provider/provider.dart:5',
-              projectName: 'some_other_name'),
-          isTrue);
+        mock.isBuiltInWidget(
+          'package:provider/provider.dart:5',
+          projectName: 'some_other_name',
+        ),
+        isTrue,
+      );
       expect(
-          mock.isBuiltInWidget('package:flutter_animate/animate.dart:2',
-              projectName: 'some_other_name'),
-          isTrue);
+        mock.isBuiltInWidget(
+          'package:flutter_animate/animate.dart:2',
+          projectName: 'some_other_name',
+        ),
+        isTrue,
+      );
     });
 
     test(
@@ -510,17 +581,24 @@ void main() {
       mock.isBuiltInWidgetCache.clear();
 
       // Relative paths should resolve to absolute workspace paths and be treated as local
-      expect(mock.isBuiltInWidget('lib/main.dart:10', projectName: 'my_app'),
-          isFalse);
       expect(
-          mock.isBuiltInWidget('src/widgets/button.dart:42',
-              projectName: 'my_app'),
-          isFalse);
+        mock.isBuiltInWidget('lib/main.dart:10', projectName: 'my_app'),
+        isFalse,
+      );
+      expect(
+        mock.isBuiltInWidget(
+          'src/widgets/button.dart:42',
+          projectName: 'my_app',
+        ),
+        isFalse,
+      );
 
       // Verify line numbers are stripped from cache keys
       expect(mock.isBuiltInWidgetCache.containsKey('lib/main.dart'), isTrue);
       expect(
-          mock.isBuiltInWidgetCache.containsKey('lib/main.dart:10'), isFalse);
+        mock.isBuiltInWidgetCache.containsKey('lib/main.dart:10'),
+        isFalse,
+      );
     });
   });
 }

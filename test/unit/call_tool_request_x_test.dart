@@ -46,10 +46,7 @@ void main() {
       );
 
       expect(req.requireStrArg('key'), equals('value'));
-      expect(
-        () => req.requireStrArg('missing'),
-        throwsA(isA<ArgumentError>()),
-      );
+      expect(() => req.requireStrArg('missing'), throwsA(isA<ArgumentError>()));
     });
   });
 }

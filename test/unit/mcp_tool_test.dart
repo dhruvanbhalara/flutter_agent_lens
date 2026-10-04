@@ -23,32 +23,50 @@ void main() {
 
   group('FlutterDebugFlag Enum Tests', () {
     test('fromString parsed successfully', () {
-      expect(FlutterDebugFlag.fromString('debugPaintSizeEnabled'),
-          equals(FlutterDebugFlag.debugPaint));
-      expect(FlutterDebugFlag.fromString('repaintRainbow'),
-          equals(FlutterDebugFlag.repaintRainbow));
-      expect(FlutterDebugFlag.fromString('timeDilation'),
-          equals(FlutterDebugFlag.timeDilation));
+      expect(
+        FlutterDebugFlag.fromString('debugPaintSizeEnabled'),
+        equals(FlutterDebugFlag.debugPaint),
+      );
+      expect(
+        FlutterDebugFlag.fromString('repaintRainbow'),
+        equals(FlutterDebugFlag.repaintRainbow),
+      );
+      expect(
+        FlutterDebugFlag.fromString('timeDilation'),
+        equals(FlutterDebugFlag.timeDilation),
+      );
       expect(FlutterDebugFlag.fromString('unknownFlag'), isNull);
 
       // Additional lookup coverage
-      expect(FlutterDebugFlag.fromString('debugpaint'),
-          equals(FlutterDebugFlag.debugPaint));
-      expect(FlutterDebugFlag.fromString('DEBUGPaintSizeENABLED'),
-          equals(FlutterDebugFlag.debugPaint));
-      expect(FlutterDebugFlag.fromString('debugPaintBaselines'),
-          equals(FlutterDebugFlag.debugPaintBaselines));
-      expect(FlutterDebugFlag.fromString('debugrepaintrainbowenabled'),
-          equals(FlutterDebugFlag.repaintRainbow));
-      expect(FlutterDebugFlag.fromString('debuginvertoversizedimages'),
-          equals(FlutterDebugFlag.invertOversizedImages));
+      expect(
+        FlutterDebugFlag.fromString('debugpaint'),
+        equals(FlutterDebugFlag.debugPaint),
+      );
+      expect(
+        FlutterDebugFlag.fromString('DEBUGPaintSizeENABLED'),
+        equals(FlutterDebugFlag.debugPaint),
+      );
+      expect(
+        FlutterDebugFlag.fromString('debugPaintBaselines'),
+        equals(FlutterDebugFlag.debugPaintBaselines),
+      );
+      expect(
+        FlutterDebugFlag.fromString('debugrepaintrainbowenabled'),
+        equals(FlutterDebugFlag.repaintRainbow),
+      );
+      expect(
+        FlutterDebugFlag.fromString('debuginvertoversizedimages'),
+        equals(FlutterDebugFlag.invertOversizedImages),
+      );
     });
   });
 
   group('TargetPlatform Enum Tests', () {
     test('fromString parsed successfully', () {
       expect(
-          TargetPlatform.fromString('android'), equals(TargetPlatform.android));
+        TargetPlatform.fromString('android'),
+        equals(TargetPlatform.android),
+      );
       expect(TargetPlatform.fromString('ios'), equals(TargetPlatform.ios));
       expect(() => TargetPlatform.fromString('windows'), throwsArgumentError);
     });
@@ -58,7 +76,9 @@ void main() {
     test('fromString parsed successfully', () {
       expect(NetworkSortBy.fromString('time'), equals(NetworkSortBy.time));
       expect(
-          NetworkSortBy.fromString('duration'), equals(NetworkSortBy.duration));
+        NetworkSortBy.fromString('duration'),
+        equals(NetworkSortBy.duration),
+      );
       expect(NetworkSortBy.fromString('size'), equals(NetworkSortBy.size));
       expect(NetworkSortBy.fromString('invalid'), equals(NetworkSortBy.time));
     });
@@ -66,30 +86,46 @@ void main() {
 
   group('ExceptionPauseMode Enum Tests', () {
     test('fromString parsed successfully', () {
-      expect(ExceptionPauseMode.fromString('none'),
-          equals(ExceptionPauseMode.none));
       expect(
-          ExceptionPauseMode.fromString('all'), equals(ExceptionPauseMode.all));
-      expect(ExceptionPauseMode.fromString('unhandled'),
-          equals(ExceptionPauseMode.unhandled));
-      expect(ExceptionPauseMode.fromString('invalid'),
-          equals(ExceptionPauseMode.none));
+        ExceptionPauseMode.fromString('none'),
+        equals(ExceptionPauseMode.none),
+      );
+      expect(
+        ExceptionPauseMode.fromString('all'),
+        equals(ExceptionPauseMode.all),
+      );
+      expect(
+        ExceptionPauseMode.fromString('unhandled'),
+        equals(ExceptionPauseMode.unhandled),
+      );
+      expect(
+        ExceptionPauseMode.fromString('invalid'),
+        equals(ExceptionPauseMode.none),
+      );
     });
   });
 
   group('ScreenshotType Enum Tests', () {
     test('ScreenshotAction and ScreenshotType parsed successfully', () {
-      expect(ScreenshotAction.fromString('capture_baseline'),
-          equals(ScreenshotAction.captureBaseline));
-      expect(ScreenshotAction.fromString('compare'),
-          equals(ScreenshotAction.compare));
+      expect(
+        ScreenshotAction.fromString('capture_baseline'),
+        equals(ScreenshotAction.captureBaseline),
+      );
+      expect(
+        ScreenshotAction.fromString('compare'),
+        equals(ScreenshotAction.compare),
+      );
       expect(() => ScreenshotAction.fromString('invalid'), throwsArgumentError);
 
       expect(
-          ScreenshotType.fromString('device'), equals(ScreenshotType.device));
+        ScreenshotType.fromString('device'),
+        equals(ScreenshotType.device),
+      );
       expect(ScreenshotType.fromString('skia'), equals(ScreenshotType.skia));
       expect(
-          ScreenshotType.fromString('invalid'), equals(ScreenshotType.device));
+        ScreenshotType.fromString('invalid'),
+        equals(ScreenshotType.device),
+      );
     });
   });
 }

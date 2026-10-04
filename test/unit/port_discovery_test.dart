@@ -63,10 +63,18 @@ class FakeHttpClientResponse implements HttpClientResponse {
   HttpHeaders get headers => FakeHttpHeaders();
 
   @override
-  StreamSubscription<List<int>> listen(void Function(List<int> event)? onData,
-      {Function? onError, void Function()? onDone, bool? cancelOnError}) {
-    return const Stream<List<int>>.empty().listen(onData,
-        onError: onError, onDone: onDone, cancelOnError: cancelOnError);
+  StreamSubscription<List<int>> listen(
+    void Function(List<int> event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return const Stream<List<int>>.empty().listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: cancelOnError,
+    );
   }
 
   @override
@@ -103,65 +111,70 @@ void main() {
   });
 
   group('PortDiscovery Process Scanning Tests', () {
-    test('PowerShell scan on Windows successfully parses running DDS processes',
-        () async {
-      final mockJson = jsonEncode({
-        'CommandLine':
-            'flutter run --vm-service-uri=http://127.0.0.1:8181/auth_token/ development-service',
-        'ProcessId': 456,
-        'WorkingDirectory': r'C:\Users\User\projects\my_flutter_app',
-      });
+    test(
+      'PowerShell scan on Windows successfully parses running DDS processes',
+      () async {
+        final mockJson = jsonEncode({
+          'CommandLine':
+              'flutter run --vm-service-uri=http://127.0.0.1:8181/auth_token/ development-service',
+          'ProcessId': 456,
+          'WorkingDirectory': r'C:\Users\User\projects\my_flutter_app',
+        });
 
-      final mockRunner = MockProcessRunner((exe, args) {
-        if (exe == 'powershell') {
-          return ProcessResult(
-            123,
-            0,
-            mockJson,
-            '',
-          );
-        }
-        throw UnimplementedError('Unexpected executable: $exe');
-      });
+        final mockRunner = MockProcessRunner((exe, args) {
+          if (exe == 'powershell') {
+            return ProcessResult(123, 0, mockJson, '');
+          }
+          throw UnimplementedError('Unexpected executable: $exe');
+        });
 
-      final discovery = PortDiscovery(processRunner: mockRunner);
+        final discovery = PortDiscovery(processRunner: mockRunner);
 
-      final apps = await discovery.discoverActiveApps();
-      expect(apps, isNotEmpty);
-      expect(apps.first.projectName, equals('my_flutter_app'));
-      expect(
-          apps.first.serviceUri, equals('ws://127.0.0.1:8181/auth_token/ws'));
-    }, skip: !Platform.isWindows ? 'Requires Windows' : null);
+        final apps = await discovery.discoverActiveApps();
+        expect(apps, isNotEmpty);
+        expect(apps.first.projectName, equals('my_flutter_app'));
+        expect(
+          apps.first.serviceUri,
+          equals('ws://127.0.0.1:8181/auth_token/ws'),
+        );
+      },
+      skip: !Platform.isWindows ? 'Requires Windows' : null,
+    );
 
-    test('ps/lsof scan on Unix successfully parses running DDS processes',
-        () async {
-      final mockRunner = MockProcessRunner((exe, args) {
-        if (exe == 'ps') {
-          return ProcessResult(
-            123,
-            0,
-            'user  789  0.0  0.1  12345  6789  ??  S  10:00AM  0:00.50  --vm-service-uri=http://127.0.0.1:8181/auth_token/ development-service',
-            '',
-          );
-        }
-        if (exe == 'lsof') {
-          return ProcessResult(
-            123,
-            0,
-            'n/Users/User/projects/my_flutter_app\n',
-            '',
-          );
-        }
-        throw UnimplementedError('Unexpected executable: $exe');
-      });
+    test(
+      'ps/lsof scan on Unix successfully parses running DDS processes',
+      () async {
+        final mockRunner = MockProcessRunner((exe, args) {
+          if (exe == 'ps') {
+            return ProcessResult(
+              123,
+              0,
+              'user  789  0.0  0.1  12345  6789  ??  S  10:00AM  0:00.50  --vm-service-uri=http://127.0.0.1:8181/auth_token/ development-service',
+              '',
+            );
+          }
+          if (exe == 'lsof') {
+            return ProcessResult(
+              123,
+              0,
+              'n/Users/User/projects/my_flutter_app\n',
+              '',
+            );
+          }
+          throw UnimplementedError('Unexpected executable: $exe');
+        });
 
-      final discovery = PortDiscovery(processRunner: mockRunner);
+        final discovery = PortDiscovery(processRunner: mockRunner);
 
-      final apps = await discovery.discoverActiveApps();
-      expect(apps, isNotEmpty);
-      expect(apps.first.projectName, equals('my_flutter_app'));
-      expect(
-          apps.first.serviceUri, equals('ws://127.0.0.1:8181/auth_token/ws'));
-    }, skip: Platform.isWindows ? 'Requires Unix' : null);
+        final apps = await discovery.discoverActiveApps();
+        expect(apps, isNotEmpty);
+        expect(apps.first.projectName, equals('my_flutter_app'));
+        expect(
+          apps.first.serviceUri,
+          equals('ws://127.0.0.1:8181/auth_token/ws'),
+        );
+      },
+      skip: Platform.isWindows ? 'Requires Unix' : null,
+    );
   });
 }

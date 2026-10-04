@@ -56,10 +56,7 @@ base mixin ConsoleLoggingSupport
             'full': fullSchema(),
           },
         ),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: false,
-        ),
+        annotations: ToolAnnotations(readOnlyHint: true, idempotentHint: false),
       ),
       _handleConsoleLogs,
     );
@@ -77,14 +74,20 @@ base mixin ConsoleLoggingSupport
 
     try {
       stdoutSub = await _listenToByteStream(
-          EventStreams.kStdout, '[STDOUT]', service.onStdoutEvent);
+        EventStreams.kStdout,
+        '[STDOUT]',
+        service.onStdoutEvent,
+      );
     } catch (e) {
       stderr.writeln('[mcp:logging] Error starting stdout listener: $e');
     }
 
     try {
       stderrSub = await _listenToByteStream(
-          EventStreams.kStderr, '[STDERR]', service.onStderrEvent);
+        EventStreams.kStderr,
+        '[STDERR]',
+        service.onStderrEvent,
+      );
     } catch (e) {
       stderr.writeln('[mcp:logging] Error starting stderr listener: $e');
     }
@@ -174,11 +177,13 @@ base mixin ConsoleLoggingSupport
     } on RPCError catch (e) {
       if (e.code != 103) {
         stderr.writeln(
-            '[mcp:logging] Error subscribing to byte stream $streamId: $e');
+          '[mcp:logging] Error subscribing to byte stream $streamId: $e',
+        );
       }
     } on Exception catch (e) {
       stderr.writeln(
-          '[mcp:logging] Error subscribing to byte stream $streamId: $e');
+        '[mcp:logging] Error subscribing to byte stream $streamId: $e',
+      );
     }
     return null;
   }
@@ -200,7 +205,8 @@ base mixin ConsoleLoggingSupport
   Future<CallToolResult> _handleFetchConsoleLogs(CallToolRequest req) async {
     final limit = req.limitArg(defaultValue: 50, max: 500);
     stderr.writeln(
-        '[mcp:console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$limit');
+      '[mcp:console_logs] Fetching logs, buffer size=${logBuffer.length}, limit=$limit',
+    );
 
     final totalLines = logBuffer.length;
     final startIndex =
@@ -233,7 +239,8 @@ base mixin ConsoleLoggingSupport
     final filter = req.arg<String>('filter');
 
     stderr.writeln(
-        '[mcp:watch_logs] Watching logs for ${duration}s, filter="$filter"');
+      '[mcp:watch_logs] Watching logs for ${duration}s, filter="$filter"',
+    );
 
     final watchBuffer = <String>[];
     final unsubscribe = logBroadcaster.addListener(watchBuffer.add);

@@ -18,9 +18,7 @@ void main() {
     test('formatMapString basic and edge cases', () {
       final map = {
         'key1': 'value1',
-        'key2': {
-          'nestedKey': 'nestedValue',
-        },
+        'key2': {'nestedKey': 'nestedValue'},
         'listKey': [1, 2, 3],
         'longList': List.generate(15, (i) => i),
       };
@@ -44,17 +42,23 @@ void main() {
     test('formatRelativePath strips workspaceRoot and formats paths', () {
       expect(
         formatRelativePath(
-            '/Users/dev/project/lib/main.dart', '/Users/dev/project'),
+          '/Users/dev/project/lib/main.dart',
+          '/Users/dev/project',
+        ),
         equals('lib/main.dart'),
       );
       expect(
-        formatRelativePath('file:///Users/dev/project/lib/widgets/card.dart',
-            '/Users/dev/project'),
+        formatRelativePath(
+          'file:///Users/dev/project/lib/widgets/card.dart',
+          '/Users/dev/project',
+        ),
         equals('lib/widgets/card.dart'),
       );
       expect(
         formatRelativePath(
-            'package:flutter/material.dart', '/Users/dev/project'),
+          'package:flutter/material.dart',
+          '/Users/dev/project',
+        ),
         equals('package:flutter/material.dart'),
       );
       expect(
@@ -63,7 +67,9 @@ void main() {
       );
       expect(
         formatRelativePath(
-            'https://example.com/remote.dart', '/Users/dev/project'),
+          'https://example.com/remote.dart',
+          '/Users/dev/project',
+        ),
         equals('https://example.com/remote.dart'),
       );
       expect(
@@ -74,10 +80,7 @@ void main() {
         formatRelativePath('/Users/dev/project/lib/main.dart', null),
         equals('/Users/dev/project/lib/main.dart'),
       );
-      expect(
-        formatRelativePath('', '/Users/dev/project'),
-        equals(''),
-      );
+      expect(formatRelativePath('', '/Users/dev/project'), equals(''));
     });
 
     test('compactCollection caps list at maxItems', () {
@@ -88,10 +91,14 @@ void main() {
 
     test('truncateString respects full: true bypass', () {
       final longString = 'a' * 20000;
-      expect(truncateString(longString, maxLength: 5000, full: true),
-          equals(longString));
       expect(
-          truncateString(longString, maxLength: 5000), contains('[TRUNCATED'));
+        truncateString(longString, maxLength: 5000, full: true),
+        equals(longString),
+      );
+      expect(
+        truncateString(longString, maxLength: 5000),
+        contains('[TRUNCATED'),
+      );
     });
 
     test('compactCollection respects full: true bypass', () {
@@ -100,24 +107,26 @@ void main() {
       expect(compactCollection(items).length, equals(20));
     });
 
-    test('compactStructuredData compacts lists inside map unless full: true',
-        () {
-      final data = {
-        'count': 100,
-        'items': List.generate(50, (i) => 'item_$i'),
-        'nested': {
-          'sub_items': List.generate(30, (i) => i),
-        }
-      };
+    test(
+      'compactStructuredData compacts lists inside map unless full: true',
+      () {
+        final data = {
+          'count': 100,
+          'items': List.generate(50, (i) => 'item_$i'),
+          'nested': {'sub_items': List.generate(30, (i) => i)},
+        };
 
-      final compacted = compactStructuredData(data, maxItems: 10);
-      expect((compacted!['items']! as List).length, equals(10));
-      expect(((compacted['nested']! as Map)['sub_items']! as List).length,
-          equals(10));
+        final compacted = compactStructuredData(data, maxItems: 10);
+        expect((compacted!['items']! as List).length, equals(10));
+        expect(
+          ((compacted['nested']! as Map)['sub_items']! as List).length,
+          equals(10),
+        );
 
-      final fullData = compactStructuredData(data, maxItems: 10, full: true);
-      expect((fullData!['items']! as List).length, equals(50));
-    });
+        final fullData = compactStructuredData(data, maxItems: 10, full: true);
+        expect((fullData!['items']! as List).length, equals(50));
+      },
+    );
   });
 
   group('CallToolRequestX Extension Tests', () {
@@ -136,8 +145,10 @@ void main() {
       final req1 = CallToolRequest(name: 'test_tool');
       expect(req1.arg<String>('someKey'), isNull);
 
-      final req2 =
-          CallToolRequest(name: 'test_tool', arguments: {'key': 'value'});
+      final req2 = CallToolRequest(
+        name: 'test_tool',
+        arguments: {'key': 'value'},
+      );
       expect(req2.arg<String>('absentKey'), isNull);
     });
 
@@ -154,16 +165,15 @@ void main() {
       final req1 = CallToolRequest(name: 'test_tool');
       expect(() => req1.requireArg<String>('key'), throwsArgumentError);
 
-      final req2 =
-          CallToolRequest(name: 'test_tool', arguments: {'key': 'value'});
+      final req2 = CallToolRequest(
+        name: 'test_tool',
+        arguments: {'key': 'value'},
+      );
       expect(() => req2.requireArg<String>('absentKey'), throwsArgumentError);
     });
 
     test('requireArg throws on type mismatch', () {
-      final req = CallToolRequest(
-        name: 'test_tool',
-        arguments: {'key': 42},
-      );
+      final req = CallToolRequest(name: 'test_tool', arguments: {'key': 42});
       expect(() => req.requireArg<String>('key'), throwsArgumentError);
     });
 
@@ -180,16 +190,22 @@ void main() {
       expect(reqDefault.isFull, isFalse);
       expect(reqDefault.limitArg(), equals(20));
 
-      final reqWithLimit =
-          CallToolRequest(name: 'test', arguments: {'limit': 50});
+      final reqWithLimit = CallToolRequest(
+        name: 'test',
+        arguments: {'limit': 50},
+      );
       expect(reqWithLimit.limitArg(), equals(50));
 
-      final reqClamped =
-          CallToolRequest(name: 'test', arguments: {'limit': 9999});
+      final reqClamped = CallToolRequest(
+        name: 'test',
+        arguments: {'limit': 9999},
+      );
       expect(reqClamped.limitArg(), equals(200));
 
-      final reqFull =
-          CallToolRequest(name: 'test', arguments: {'full': true, 'limit': 10});
+      final reqFull = CallToolRequest(
+        name: 'test',
+        arguments: {'full': true, 'limit': 10},
+      );
       expect(reqFull.isFull, isTrue);
       expect(reqFull.limitArg(), isNull);
     });
@@ -198,16 +214,22 @@ void main() {
       final reqDefault = CallToolRequest(name: 'test');
       expect(reqDefault.maxBodyLengthArg(), equals(5000));
 
-      final reqWithCustom =
-          CallToolRequest(name: 'test', arguments: {'max_body_length': 10000});
+      final reqWithCustom = CallToolRequest(
+        name: 'test',
+        arguments: {'max_body_length': 10000},
+      );
       expect(reqWithCustom.maxBodyLengthArg(), equals(10000));
 
-      final reqClamped =
-          CallToolRequest(name: 'test', arguments: {'max_body_length': 100000});
+      final reqClamped = CallToolRequest(
+        name: 'test',
+        arguments: {'max_body_length': 100000},
+      );
       expect(reqClamped.maxBodyLengthArg(), equals(50000));
 
       final reqFull = CallToolRequest(
-          name: 'test', arguments: {'full': true, 'max_body_length': 1000});
+        name: 'test',
+        arguments: {'full': true, 'max_body_length': 1000},
+      );
       expect(reqFull.maxBodyLengthArg(), isNull);
     });
   });
