@@ -5,6 +5,7 @@ import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/constants/mcp_limits.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
@@ -259,7 +260,13 @@ base mixin MemoryDebuggingSupport
         final isMounted =
             evalResult is InstanceRef && evalResult.valueAsString == 'true';
         mountedResults.add((instanceId: instanceId, isMounted: isMounted));
-      } catch (_) {
+      } on RPCError catch (e) {
+        if (!e.isServiceDisposedError) {
+          stderr.writeln('[mcp:memory] RPCError retrieving mounted status: $e');
+        }
+        mountedResults.add((instanceId: instanceId, isMounted: true));
+      } on Exception catch (e) {
+        stderr.writeln('[mcp:memory] Error retrieving mounted status: $e');
         mountedResults.add((instanceId: instanceId, isMounted: true));
       }
     }
