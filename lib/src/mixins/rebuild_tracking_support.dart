@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/enums/mcp_tool.dart';
 import 'package:flutter_agent_lens/src/extensions/call_tool_request_x.dart';
+import 'package:flutter_agent_lens/src/extensions/vm_service_x.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/utils/safe_sampling_window.dart';
 import 'package:path/path.dart' as p;
@@ -316,9 +317,16 @@ base mixin RebuildTrackingSupport
         isolateId: isolateId,
         args: {'enabled': 'false'},
       );
+    } on RPCError catch (e) {
+      if (!e.isServiceDisposedError && e.code != 112) {
+        stderr.writeln(
+          '[mcp:widget_rebuild_counts] Error disabling trackRebuildDirtyWidgets: $e',
+        );
+      }
     } on Exception catch (e) {
       stderr.writeln(
-          '[mcp:widget_rebuild_counts] Error disabling trackRebuildDirtyWidgets: $e');
+        '[mcp:widget_rebuild_counts] Error disabling trackRebuildDirtyWidgets: $e',
+      );
     }
 
     final durationSec = rebuildStartTime != null
@@ -462,9 +470,16 @@ base mixin RebuildTrackingSupport
       } else if (rawLocationResult is Map) {
         _parseLocationsMap(rawLocationResult, idToName, idToFile);
       }
-    } catch (e) {
+    } on RPCError catch (e) {
+      if (!e.isServiceDisposedError && e.code != 112) {
+        stderr.writeln(
+          '[mcp:widget] RPC Error enabling rebuild tracking locations: $e',
+        );
+      }
+    } on Exception catch (e) {
       stderr.writeln(
-          '[mcp:widget] Error enabling rebuild tracking locations: $e');
+        '[mcp:widget] Error enabling rebuild tracking locations: $e',
+      );
     }
     try {
       await vmService!.streamListen(EventStreams.kExtension);
