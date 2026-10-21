@@ -134,6 +134,20 @@ base mixin NetworkCaptureSupport
     }
   }
 
+  /// Clears the HTTP profile to prevent unbounded memory growth in the target VM.
+  Future<void> _clearHttpProfile() async {
+    if (vmService != null && isolateId != null) {
+      try {
+        await vmService!.callServiceExtension(
+          'ext.dart.io.clearHttpProfile',
+          isolateId: isolateId!,
+        );
+      } catch (e) {
+        stderr.writeln('[mcp:network] Error clearing HTTP profile: $e');
+      }
+    }
+  }
+
   /// Helper to check if http profiling is supported.
   Future<bool> _checkHttpProfileSupport() async {
     final vm = vmService;
@@ -280,6 +294,9 @@ base mixin NetworkCaptureSupport
     isCapturingNetwork = true;
     networkCaptureStartTime = DateTime.now().millisecondsSinceEpoch;
     _initialRequestIds.clear();
+
+    // Always clear the profile when starting a fresh capturing session or watch
+    await _clearHttpProfile();
 
     try {
       await vmService!.callServiceExtension(
@@ -797,7 +814,11 @@ base mixin NetworkCaptureSupport
     final slowThresholdMs = (req.arg<num>('slow_threshold_ms'))?.toInt() ?? 500;
 
     stderr.writeln(
-        '[mcp:watch_network] Watching network traffic for ${duration}s (slow threshold: ${slowThresholdMs}ms)...');
+      '[mcp:watch_network] Watching network traffic for ${duration}s (slow threshold: ${slowThresholdMs}ms)...',
+    );
+
+    // Watch captures a specific time window, always start clean
+    await _clearHttpProfile();
 
     // Capture initial requests snapshot
     final initialRequests = await _getHttpRequests();
