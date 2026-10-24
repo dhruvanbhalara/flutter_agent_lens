@@ -18,12 +18,14 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         name: McpTool.debugFlag.name,
         description: 'Manage Flutter debug flags and settings. '
             'Actions: toggle (set a Flutter debug flag like debugPaintSizeEnabled), '
-            'toggle_package_widgets (show/hide package widgets in the widget tree).',
+            'toggle_package_widgets (show/hide package widgets in the widget tree), '
+            'list_extensions (discover registered service extensions), '
+            'call_extension (invoke arbitrary extension RPCs).',
         inputSchema: ObjectSchema(
           properties: {
             'action': StringSchema(
               description:
-                  'The debug flag action: toggle, toggle_package_widgets.',
+                  'The debug flag action: toggle, toggle_package_widgets, list_extensions, call_extension.',
             ),
             'flag_name': StringSchema(
               description:
@@ -35,6 +37,14 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
             'enabled': BooleanSchema(
               description:
                   'Whether to show package widgets (required for toggle_package_widgets).',
+            ),
+            'extension_name': StringSchema(
+              description:
+                  'The name of the service extension to invoke (required for call_extension, e.g. ext.flutter.debugPaint).',
+            ),
+            'params': ObjectSchema(
+              description:
+                  'Optional map of parameters to pass to the service extension.',
             ),
           },
           required: ['action'],
@@ -50,6 +60,8 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     return switch (action) {
       'toggle' => _handleToggleDebugFlag(req),
       'toggle_package_widgets' => _handleTogglePackageWidgets(req),
+      'list_extensions' => _handleListExtensions(req),
+      'call_extension' => _handleCallExtension(req),
       _ => CallToolResult(
           content: [TextContent(text: 'Unknown debug flag action: $action')],
           isError: true,
@@ -267,6 +279,135 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     } on Exception catch (e) {
       return CallToolResult(
         content: [TextContent(text: 'Failed to set debug flag: $e')],
+        isError: true,
+      );
+    }
+  }
+
+  /// Lists all registered service extensions for the current isolate.
+  Future<CallToolResult> _handleListExtensions(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
+    try {
+      final isolate = await service.getIsolate(currentIsolateId);
+      final extensions = (isolate.extensionRPCs ?? []).toList()..sort();
+
+      if (responseFormat == 'json') {
+        return CallToolResult(
+          content: [
+            TextContent(
+              text: jsonEncode({
+                'count': extensions.length,
+                'extensions': extensions,
+              }),
+            ),
+          ],
+        );
+      }
+
+      final md = StringBuffer(
+        '### Registered Service Extensions (${extensions.length})\n\n',
+      );
+      if (extensions.isEmpty) {
+        md.writeln('No registered service extensions found.');
+      } else {
+        for (final ext in extensions) {
+          md.writeln('- `$ext`');
+        }
+      }
+
+      return CallToolResult(
+        content: [TextContent(text: md.toString().trimRight())],
+      );
+    } on RPCError catch (e) {
+      stderr.writeln(
+        '[mcp:list_extensions] RPCError retrieving service extensions: $e',
+      );
+      return CallToolResult(
+        content: [
+          TextContent(
+            text: 'RPCError retrieving service extensions: ${e.message}',
+          ),
+        ],
+        isError: true,
+      );
+    } catch (e, stack) {
+      stderr.writeln(
+        '[mcp:list_extensions] Error retrieving service extensions: $e\n$stack',
+      );
+      return CallToolResult(
+        content: [
+          TextContent(text: 'Failed to retrieve service extensions: $e'),
+        ],
+        isError: true,
+      );
+    }
+  }
+
+  /// Invokes an arbitrary registered Flutter service extension.
+  Future<CallToolResult> _handleCallExtension(CallToolRequest req) async {
+    final service = vmService;
+    final currentIsolateId = isolateId;
+    if (service == null || currentIsolateId == null) return notConnected();
+
+    final String extensionName;
+    try {
+      extensionName = req.requireArg<String>('extension_name');
+    } catch (e) {
+      return CallToolResult(
+        content: [
+          TextContent(text: 'Missing required argument: extension_name ($e)'),
+        ],
+        isError: true,
+      );
+    }
+
+    final rawParams = req.arg<Map<String, dynamic>>('params');
+    final args = Map<String, dynamic>.from(rawParams ?? {});
+
+    try {
+      final response = await service.callServiceExtension(
+        extensionName,
+        isolateId: currentIsolateId,
+        args: args,
+      );
+
+      final resultData = response.json ?? {'result': 'success'};
+      if (responseFormat == 'json') {
+        return CallToolResult(
+          content: [TextContent(text: jsonEncode(resultData))],
+        );
+      }
+
+      const encoder = JsonEncoder.withIndent('  ');
+      return CallToolResult(
+        content: [
+          TextContent(
+            text: '### Service Extension Result: `$extensionName`\n\n'
+                '```json\n${encoder.convert(resultData)}\n```',
+          ),
+        ],
+      );
+    } on RPCError catch (e) {
+      stderr.writeln(
+        '[mcp:call_extension] RPCError invoking $extensionName: $e',
+      );
+      return CallToolResult(
+        content: [
+          TextContent(text: 'RPCError invoking $extensionName: ${e.message}'),
+        ],
+        isError: true,
+      );
+    } catch (e, stack) {
+      stderr.writeln(
+        '[mcp:call_extension] Error invoking $extensionName: $e\n$stack',
+      );
+      return CallToolResult(
+        content: [
+          TextContent(text: 'Failed to invoke $extensionName: $e'),
+        ],
         isError: true,
       );
     }
