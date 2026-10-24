@@ -74,14 +74,16 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the compare_layout_screenshots tool request.
   Future<CallToolResult> _handleCompareLayoutScreenshots(
-      CallToolRequest req) async {
+    CallToolRequest req,
+  ) async {
     final root = workspaceRoot;
     if (root == null || root.isEmpty) {
       return CallToolResult(
         content: [
           TextContent(
-              text:
-                  'Workspace root is not configured. Run connect first to set it.')
+            text:
+                'Workspace root is not configured. Run connect first to set it.',
+          ),
         ],
         isError: true,
       );
@@ -94,7 +96,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           TextContent(
             text:
                 'Invalid baseline_name: Only alphanumeric characters, underscores, and hyphens are allowed.',
-          )
+          ),
         ],
         isError: true,
       );
@@ -117,7 +119,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final screenshotType = ScreenshotType.fromString(screenshotTypeStr);
 
     stderr.writeln(
-        '[mcp:screenshot] Action=${action.value}, baselineName=$baselineName, type=${screenshotType.value}, deviceId=$deviceId');
+      '[mcp:screenshot] Action=${action.value}, baselineName=$baselineName, type=${screenshotType.value}, deviceId=$deviceId',
+    );
 
     final screenshotDir = Directory(p.join(root, 'build', 'mcp_screenshots'));
     if (!screenshotDir.existsSync()) {
@@ -125,8 +128,10 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     }
 
     if (action == ScreenshotAction.captureBaseline) {
-      final baselinePath =
-          p.join(screenshotDir.path, '${baselineName}_baseline.png');
+      final baselinePath = p.join(
+        screenshotDir.path,
+        '${baselineName}_baseline.png',
+      );
       stderr.writeln('[mcp:screenshot] Capturing baseline to $baselinePath');
 
       try {
@@ -142,8 +147,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Successfully captured and saved baseline screenshot to $baselinePath$notice')
+              text:
+                  'Successfully captured and saved baseline screenshot to $baselinePath$notice',
+            ),
           ],
         );
       } catch (e) {
@@ -153,25 +159,31 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         );
       }
     } else {
-      final baselinePath =
-          p.join(screenshotDir.path, '${baselineName}_baseline.png');
-      final currentPath =
-          p.join(screenshotDir.path, '${baselineName}_current.png');
+      final baselinePath = p.join(
+        screenshotDir.path,
+        '${baselineName}_baseline.png',
+      );
+      final currentPath = p.join(
+        screenshotDir.path,
+        '${baselineName}_current.png',
+      );
       final diffPath = p.join(screenshotDir.path, '${baselineName}_diff.png');
 
       if (!File(baselinePath).existsSync()) {
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Baseline screenshot not found for "$baselineName". Run capture_baseline first.')
+              text:
+                  'Baseline screenshot not found for "$baselineName". Run capture_baseline first.',
+            ),
           ],
           isError: true,
         );
       }
 
-      stderr
-          .writeln('[mcp:screenshot] Capturing current screen to $currentPath');
+      stderr.writeln(
+        '[mcp:screenshot] Capturing current screen to $currentPath',
+      );
       String actualType;
       try {
         actualType = await _captureDeviceScreenshot(
@@ -197,8 +209,9 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Failed to decode screenshots. Ensure the captured files are valid PNGs.')
+              text:
+                  'Failed to decode screenshots. Ensure the captured files are valid PNGs.',
+            ),
           ],
           isError: true,
         );
@@ -211,7 +224,7 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               text:
                   'Layout size mismatch: Baseline is ${img1.width}x${img1.height}, '
                   'but current screen is ${img2.width}x${img2.height}.',
-            )
+            ),
           ],
           isError: true,
         );
@@ -241,15 +254,18 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       stderr.writeln('[mcp:screenshot] Saving diff image to $diffPath');
       await File(diffPath).writeAsBytes(img.encodePng(diffImage));
 
-      final md =
-          StringBuffer('Layout Screenshot Comparison: $baselineName\n\n');
+      final md = StringBuffer(
+        'Layout Screenshot Comparison: $baselineName\n\n',
+      );
       md.writeln('- Status: ${passed ? "PASS" : "FAIL"}');
       md.writeln(
-          '- Similarity Score: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)');
+        '- Similarity Score: ${(similarity * 100).toStringAsFixed(2)}% (Threshold: ${(threshold * 100).toStringAsFixed(2)}%)',
+      );
       md.writeln('- Matching Pixels: $matchingPixels / $totalPixels');
       if (screenshotType == ScreenshotType.skia && actualType == 'device') {
         md.writeln(
-            '- Notice: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.');
+          '- Notice: Automatically fell back to native "device" screenshot because Impeller is active and Skia is unsupported.',
+        );
       }
       md.writeln();
       md.writeln('FILES GENERATED');
@@ -283,7 +299,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Workspace root is not configured. Run connect first.')
+            text: 'Workspace root is not configured. Run connect first.',
+          ),
         ],
         isError: true,
       );
@@ -320,15 +337,11 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
               ? '\n(Note: Automatically fell back to VM Service screenshot because CLI capture failed)'
               : '';
       return CallToolResult(
-        content: [
-          TextContent(text: 'Screenshot saved to $targetPath$notice'),
-        ],
+        content: [TextContent(text: 'Screenshot saved to $targetPath$notice')],
       );
     } catch (e) {
       return CallToolResult(
-        content: [
-          TextContent(text: 'Failed to capture screenshot: $e'),
-        ],
+        content: [TextContent(text: 'Failed to capture screenshot: $e')],
         isError: true,
       );
     }
@@ -340,7 +353,10 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final flutterRoot = Platform.environment['FLUTTER_ROOT'];
     if (flutterRoot != null) {
       return p.join(
-          flutterRoot, 'bin', Platform.isWindows ? 'flutter.bat' : 'flutter');
+        flutterRoot,
+        'bin',
+        Platform.isWindows ? 'flutter.bat' : 'flutter',
+      );
     }
     return Platform.isWindows ? 'flutter.bat' : 'flutter';
   }
@@ -367,7 +383,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         }
       } catch (e) {
         stderr.writeln(
-            '[mcp:screenshot] VM Service screenshot failed ($e). Falling back to CLI...');
+          '[mcp:screenshot] VM Service screenshot failed ($e). Falling back to CLI...',
+        );
       }
 
       // 2. Fallback to CLI screenshot
@@ -384,7 +401,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         }
       } catch (e) {
         stderr.writeln(
-            '[mcp:screenshot] Error detecting VM OS or auto-detecting device: $e');
+          '[mcp:screenshot] Error detecting VM OS or auto-detecting device: $e',
+        );
       }
 
       final executable = _getFlutterExecutable();
@@ -406,7 +424,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         const Duration(seconds: 15),
         onTimeout: () {
           throw TimeoutException(
-              'Flutter screenshot command timed out after 15 seconds.');
+            'Flutter screenshot command timed out after 15 seconds.',
+          );
         },
       );
 
@@ -414,9 +433,11 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         final errorMsg = result.stderr.toString();
         if (screenshotType == 'skia' &&
             errorMsg.contains(
-                'Cannot capture SKP screenshot with Impeller enabled.')) {
+              'Cannot capture SKP screenshot with Impeller enabled.',
+            )) {
           stderr.writeln(
-              '[mcp:screenshot] Skia capture blocked by Impeller. Retrying as device screenshot.');
+            '[mcp:screenshot] Skia capture blocked by Impeller. Retrying as device screenshot.',
+          );
           return _captureDeviceScreenshot(
             targetPath: targetPath,
             screenshotType: 'device',
@@ -445,7 +466,8 @@ base mixin ScreenshotSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         const Duration(seconds: 15),
         onTimeout: () {
           throw TimeoutException(
-              'Flutter devices listing timed out after 15 seconds.');
+            'Flutter devices listing timed out after 15 seconds.',
+          );
         },
       );
 

@@ -12,8 +12,9 @@ typedef SamplingResult = ({
 /// Typed sampling interruption causes.
 extension type const InterruptionReason(String value) {
   /// VM Service connection dropped before sampling completed.
-  static const InterruptionReason vmDisconnected =
-      InterruptionReason('vm_service_disconnected');
+  static const InterruptionReason vmDisconnected = InterruptionReason(
+    'vm_service_disconnected',
+  );
 }
 
 /// Appends a GitHub-flavored markdown alert to [buffer]
@@ -54,9 +55,11 @@ Future<SamplingResult> safeSamplingWindow({
   final timer = Timer(duration, () {
     if (!completer.isCompleted) {
       stopwatch.stop();
-      completer.complete(
-        (completed: true, elapsed: stopwatch.elapsed, interruptReason: null),
-      );
+      completer.complete((
+        completed: true,
+        elapsed: stopwatch.elapsed,
+        interruptReason: null,
+      ));
     }
   });
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:path/path.dart' as p;
 
 /// Maps VM-reported file URIs (such as `package:foo/main.dart` or `file://`) to local absolute paths.
@@ -116,13 +117,16 @@ final class PathResolver {
           await _scanDirectory(entity);
         } else if (entity is File) {
           final name = p.basename(entity.path);
-          _allWorkspaceFiles!
-              .putIfAbsent(name, () => p.canonicalize(entity.path));
+          _allWorkspaceFiles!.putIfAbsent(
+            name,
+            () => p.canonicalize(entity.path),
+          );
         }
       }
     } catch (e) {
       stderr.writeln(
-          '[mcp:path_resolver] Error scanning directory ${dir.path}: $e');
+        '[mcp:path_resolver] Error scanning directory ${dir.path}: $e',
+      );
     }
   }
 

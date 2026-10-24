@@ -52,10 +52,7 @@ base mixin WidgetInspectionSupport
           },
           required: ['action'],
         ),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: false,
-        ),
+        annotations: ToolAnnotations(readOnlyHint: true, idempotentHint: false),
       ),
       _handleWidget,
     );
@@ -66,10 +63,7 @@ base mixin WidgetInspectionSupport
         description:
             "Retrieve the application's current routing/navigation stacks.",
         inputSchema: emptySchema(),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: true,
-        ),
+        annotations: ToolAnnotations(readOnlyHint: true, idempotentHint: true),
       ),
       _handleGetNavigationStack,
     );
@@ -111,14 +105,16 @@ base mixin WidgetInspectionSupport
         );
       } catch (e) {
         stderr.writeln(
-            '[mcp:widget] Error disposing inspector object group $objectGroup: $e');
+          '[mcp:widget] Error disposing inspector object group $objectGroup: $e',
+        );
       }
     }
   }
 
   /// Handles the inspect_widget tool request.
   Future<CallToolResult> _handleInspectLayoutConstraints(
-      CallToolRequest req) async {
+    CallToolRequest req,
+  ) async {
     final widgetId = req.requireArg<String>('widgetId');
     stderr.writeln('[mcp:inspect_layout] Inspecting widget: $widgetId');
 
@@ -200,7 +196,8 @@ base mixin WidgetInspectionSupport
 
   /// Handles the toggle_widget_selection tool request.
   Future<CallToolResult> _handleToggleWidgetSelection(
-      CallToolRequest req) async {
+    CallToolRequest req,
+  ) async {
     final enabled = req.requireArg<bool>('enabled');
     stderr.writeln('[mcp:toggle_widget_selection] Setting enabled = $enabled');
 
@@ -212,16 +209,19 @@ base mixin WidgetInspectionSupport
     return CallToolResult(
       content: [
         TextContent(
-            text:
-                'On-device widget selection overlay is now ${enabled ? "enabled" : "disabled"}.')
+          text:
+              'On-device widget selection overlay is now ${enabled ? "enabled" : "disabled"}.',
+        ),
       ],
     );
   }
 
   /// Handles the get_widget_tree tool request.
   Future<CallToolResult> _handleGetWidgetTree(CallToolRequest req) async {
-    final maxDepth =
-        (req.intArg('maxDepth', defaultValue: 8) ?? 8).clamp(1, 15);
+    final maxDepth = (req.intArg('maxDepth', defaultValue: 8) ?? 8).clamp(
+      1,
+      15,
+    );
     final projectOnly = req.arg<bool>('projectOnly') ?? true;
 
     return _withInspectorGroup((objectGroup) async {
@@ -260,7 +260,8 @@ base mixin WidgetInspectionSupport
         return CallToolResult(
           content: [
             TextContent(
-                text: 'Unexpected response format for root widget node.')
+              text: 'Unexpected response format for root widget node.',
+            ),
           ],
           isError: true,
         );
@@ -318,10 +319,7 @@ base mixin WidgetInspectionSupport
           final response = await vmService!.callServiceExtension(
             'ext.flutter.inspector.getChildrenSummaryTree',
             isolateId: isolateId,
-            args: {
-              'arg': valueId,
-              'objectGroup': objectGroup,
-            },
+            args: {'arg': valueId, 'objectGroup': objectGroup},
           );
           final result = _parseExtensionResult(response);
           if (result is List) {
@@ -330,7 +328,8 @@ base mixin WidgetInspectionSupport
           }
         } catch (e) {
           stderr.writeln(
-              '[mcp:widget] Error resolving child details subtree: $e');
+            '[mcp:widget] Error resolving child details subtree: $e',
+          );
         }
       }
     }
@@ -342,8 +341,9 @@ base mixin WidgetInspectionSupport
         if (child is Map) {
           final childMap = Map<String, dynamic>.from(child);
           childrenList[i] = childMap;
-          futures.add(_expandWidgetChildren(
-              childMap, objectGroup, depth + 1, maxDepth));
+          futures.add(
+            _expandWidgetChildren(childMap, objectGroup, depth + 1, maxDepth),
+          );
         }
       }
       if (futures.isNotEmpty) {
@@ -369,7 +369,11 @@ base mixin WidgetInspectionSupport
         if (child is Map) {
           childResults.addAll(
             _flattenWidgetTree(
-                Map<String, dynamic>.from(child), depth, maxDepth, projectOnly),
+              Map<String, dynamic>.from(child),
+              depth,
+              maxDepth,
+              projectOnly,
+            ),
           );
         }
       }
@@ -388,10 +392,12 @@ base mixin WidgetInspectionSupport
         typeStr ??
         'Unknown';
 
-    final (sourceFile, sourceLine) =
-        (isProjectWidget && creationLocation != null)
-            ? _extractSourceLocation(creationLocation)
-            : (null, null);
+    final (
+      sourceFile,
+      sourceLine,
+    ) = (isProjectWidget && creationLocation != null)
+        ? _extractSourceLocation(creationLocation)
+        : (null, null);
 
     final rawProperties = node['properties'] as List<dynamic>?;
     List<Map<String, String>>? properties;
@@ -408,10 +414,7 @@ base mixin WidgetInspectionSupport
               propDesc.isNotEmpty &&
               propDesc != '[]' &&
               propDesc != '{}') {
-            properties.add({
-              'name': propName,
-              'value': propDesc,
-            });
+            properties.add({'name': propName, 'value': propDesc});
           }
         }
       }
@@ -438,8 +441,12 @@ base mixin WidgetInspectionSupport
     for (final child in children) {
       if (child is Map) {
         results.addAll(
-          _flattenWidgetTree(Map<String, dynamic>.from(child), depth + 1,
-              maxDepth, projectOnly),
+          _flattenWidgetTree(
+            Map<String, dynamic>.from(child),
+            depth + 1,
+            maxDepth,
+            projectOnly,
+          ),
         );
       }
     }
@@ -471,7 +478,8 @@ base mixin WidgetInspectionSupport
 
   /// Extracts project source location (file path and line number) from a creation location map.
   (String? file, int? line) _extractSourceLocation(
-      Map<dynamic, dynamic> creationLocation) {
+    Map<dynamic, dynamic> creationLocation,
+  ) {
     String? sourceFile;
     final fileUri = creationLocation['file'] as String?;
     if (fileUri != null) {
@@ -548,8 +556,9 @@ base mixin WidgetInspectionSupport
         return CallToolResult(
           content: [
             TextContent(
-                text:
-                    'Evaluation failed. Unexpected result type: ${eval.runtimeType}')
+              text:
+                  'Evaluation failed. Unexpected result type: ${eval.runtimeType}',
+            ),
           ],
           isError: true,
         );
@@ -573,7 +582,7 @@ base mixin WidgetInspectionSupport
       if (decoded.containsKey('error')) {
         return CallToolResult(
           content: [
-            TextContent(text: 'Navigation tree error: ${decoded['error']}')
+            TextContent(text: 'Navigation tree error: ${decoded['error']}'),
           ],
           isError: true,
         );
@@ -585,7 +594,8 @@ base mixin WidgetInspectionSupport
       final delegates = decoded['delegates'] as List<dynamic>? ?? [];
       final evalLogs = decoded['logs'] as List<dynamic>? ?? [];
       stderr.writeln(
-          '[mcp:get_navigation_stack] Found router delegates in tree: $delegates');
+        '[mcp:get_navigation_stack] Found router delegates in tree: $delegates',
+      );
       stderr.writeln('[mcp:get_navigation_stack] Eval logs: $evalLogs');
 
       final navList = navRaw.cast<Map<String, dynamic>>().toList();
@@ -715,7 +725,8 @@ base mixin WidgetInspectionSupport
       final hasLeak = maxRouteCount >= 20;
       if (hasLeak) {
         md.writeln(
-            'WARNING: Navigator stack depth $maxRouteCount exceeds limit of 20. Possible navigation leak.');
+          'WARNING: Navigator stack depth $maxRouteCount exceeds limit of 20. Possible navigation leak.',
+        );
       } else {
         md.writeln('Max stack depth: $maxRouteCount/20. No leak detected.');
       }
@@ -737,7 +748,8 @@ base mixin WidgetInspectionSupport
       );
     } catch (e, stack) {
       stderr.writeln(
-          '[mcp:get_navigation_stack] Error retrieving navigation: $e\n$stack');
+        '[mcp:get_navigation_stack] Error retrieving navigation: $e\n$stack',
+      );
       return CallToolResult(
         content: [TextContent(text: 'Failed to retrieve navigation stack: $e')],
         isError: true,

@@ -59,15 +59,12 @@ void main() {
 
       fakeVmService.serviceExtensionResponses[
           'ext.flutter.inspector.getRootWidgetSummaryTree'] = {
-        'result': {
-          'description': 'RootWidget',
-          'hasChildren': false,
-        }
+        'result': {'description': 'RootWidget', 'hasChildren': false},
       };
 
       fakeVmService
           .serviceExtensionResponses['ext.flutter.inspector.disposeGroup'] = {
-        'result': 'success'
+        'result': 'success',
       };
 
       final req = CallToolRequest(
@@ -77,10 +74,14 @@ void main() {
 
       final result = await mock.callTool(req);
       expect(result.isError, isNot(isTrue));
-      expect(fakeVmService.lastExtensionCalled,
-          equals('ext.flutter.inspector.disposeGroup'));
-      expect(fakeVmService.lastArgs,
-          containsPair('objectGroup', startsWith('mcp_inspector_')));
+      expect(
+        fakeVmService.lastExtensionCalled,
+        equals('ext.flutter.inspector.disposeGroup'),
+      );
+      expect(
+        fakeVmService.lastArgs,
+        containsPair('objectGroup', startsWith('mcp_inspector_')),
+      );
     });
 
     test('get_widget_tree disposes object group even when root node is null',
@@ -90,11 +91,13 @@ void main() {
       mock.isolateId = 'isolate_1';
 
       fakeVmService.serviceExtensionResponses[
-          'ext.flutter.inspector.getRootWidgetSummaryTree'] = {'result': null};
+          'ext.flutter.inspector.getRootWidgetSummaryTree'] = {
+        'result': null,
+      };
 
       fakeVmService
           .serviceExtensionResponses['ext.flutter.inspector.disposeGroup'] = {
-        'result': 'success'
+        'result': 'success',
       };
 
       final req = CallToolRequest(
@@ -104,8 +107,10 @@ void main() {
 
       final result = await mock.callTool(req);
       expect(result.isError, isTrue);
-      expect(fakeVmService.lastExtensionCalled,
-          equals('ext.flutter.inspector.disposeGroup'));
+      expect(
+        fakeVmService.lastExtensionCalled,
+        equals('ext.flutter.inspector.disposeGroup'),
+      );
     });
 
     test('inspect_widget disposes object group after layout inspection',
@@ -119,14 +124,14 @@ void main() {
         'result': jsonEncode({
           'description': 'ContainerWidget',
           'properties': [
-            {'name': 'size', 'description': 'Size(100, 100)'}
-          ]
-        })
+            {'name': 'size', 'description': 'Size(100, 100)'},
+          ],
+        }),
       };
 
       fakeVmService
           .serviceExtensionResponses['ext.flutter.inspector.disposeGroup'] = {
-        'result': 'success'
+        'result': 'success',
       };
 
       final req = CallToolRequest(
@@ -136,8 +141,10 @@ void main() {
 
       final result = await mock.callTool(req);
       expect(result.isError, isNot(isTrue));
-      expect(fakeVmService.lastExtensionCalled,
-          equals('ext.flutter.inspector.disposeGroup'));
+      expect(
+        fakeVmService.lastExtensionCalled,
+        equals('ext.flutter.inspector.disposeGroup'),
+      );
     });
   });
 
@@ -150,11 +157,7 @@ void main() {
       for (var i = 1; i <= 4; i++) {
         final req = CallToolRequest(
           name: 'memory',
-          arguments: {
-            'action': 'save',
-            'name': 'snap_$i',
-            'limit': 3,
-          },
+          arguments: {'action': 'save', 'name': 'snap_$i', 'limit': 3},
         );
         final res = await mock.callTool(req);
         expect(res.isError, isNot(isTrue));

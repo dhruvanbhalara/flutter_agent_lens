@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter_agent_lens/src/models/memory_models.dart';
 
 /// Abstract interface for fetching heap and process memory stats.
@@ -57,14 +58,16 @@ final class MemoryTimelineRecorder {
         final gcInInterval = currentGcCount - lastGcCount;
         lastGcCount = currentGcCount;
 
-        samples.add(MemoryTimelineSample(
-          timestamp: DateTime.now().millisecondsSinceEpoch,
-          heapUsed: heap.heapUsage,
-          heapCapacity: heap.heapCapacity,
-          externalUsage: heap.externalUsage,
-          rss: rss,
-          gcEventsInInterval: gcInInterval,
-        ));
+        samples.add(
+          MemoryTimelineSample(
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+            heapUsed: heap.heapUsage,
+            heapCapacity: heap.heapCapacity,
+            externalUsage: heap.externalUsage,
+            rss: rss,
+            gcEventsInInterval: gcInInterval,
+          ),
+        );
 
         if (i < clampedDuration) {
           stopwatch.stop();
@@ -79,7 +82,8 @@ final class MemoryTimelineRecorder {
       return samples;
     } catch (e, st) {
       stderr.writeln(
-          '[MemoryTimelineRecorder] Error recording memory timeline: $e\n$st');
+        '[MemoryTimelineRecorder] Error recording memory timeline: $e\n$st',
+      );
       rethrow;
     } finally {
       await statsProvider.releaseGcStream();

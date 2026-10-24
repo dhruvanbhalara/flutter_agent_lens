@@ -30,7 +30,8 @@ extension CallToolRequestX on CallToolRequest {
     final val = args[key];
     if (val is! T) {
       throw ArgumentError(
-          'Argument "$key" is not of type $T (got: ${val.runtimeType})');
+        'Argument "$key" is not of type $T (got: ${val.runtimeType})',
+      );
     }
     return val;
   }

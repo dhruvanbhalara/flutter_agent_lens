@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:path/path.dart' as p;
 
 /// Parses and caches package configurations from .dart_tool/package_config.json.
@@ -27,8 +28,11 @@ class WorkspacePackageResolver {
 
   /// Loads the package configuration from disk.
   Future<void> load() async {
-    final configPath =
-        p.join(workspaceRoot, '.dart_tool', 'package_config.json');
+    final configPath = p.join(
+      workspaceRoot,
+      '.dart_tool',
+      'package_config.json',
+    );
     final configFile = File(configPath);
     if (!configFile.existsSync()) return;
 

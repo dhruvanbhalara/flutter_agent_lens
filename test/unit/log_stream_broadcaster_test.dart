@@ -29,32 +29,31 @@ void main() {
 
       expect(listener1Logs.length, equals(2));
       expect(
-          listener2Logs,
-          equals([
-            '[STDOUT] line 1',
-            '[STDERR] error 1',
-            '[STDOUT] line 2',
-          ]));
+        listener2Logs,
+        equals(['[STDOUT] line 1', '[STDERR] error 1', '[STDOUT] line 2']),
+      );
 
       unsub2();
       expect(broadcaster.hasListeners, isFalse);
     });
 
-    test('handles listener exceptions gracefully without stopping dispatch',
-        () {
-      final validLogs = <String>[];
+    test(
+      'handles listener exceptions gracefully without stopping dispatch',
+      () {
+        final validLogs = <String>[];
 
-      broadcaster.addListener((line) {
-        throw Exception('Boom in listener');
-      });
-      broadcaster.addListener(validLogs.add);
+        broadcaster.addListener((line) {
+          throw Exception('Boom in listener');
+        });
+        broadcaster.addListener(validLogs.add);
 
-      expect(
-        () => broadcaster.dispatch('[STDOUT] resilient line'),
-        returnsNormally,
-      );
+        expect(
+          () => broadcaster.dispatch('[STDOUT] resilient line'),
+          returnsNormally,
+        );
 
-      expect(validLogs, equals(['[STDOUT] resilient line']));
-    });
+        expect(validLogs, equals(['[STDOUT] resilient line']));
+      },
+    );
   });
 }

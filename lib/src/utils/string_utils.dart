@@ -82,11 +82,17 @@ Map<String, Object?>? compactStructuredData(
   for (final entry in data.entries) {
     final val = entry.value;
     if (val is List) {
-      result[entry.key] =
-          compactCollection(val, maxItems: maxItems, full: full);
+      result[entry.key] = compactCollection(
+        val,
+        maxItems: maxItems,
+        full: full,
+      );
     } else if (val is Map<String, dynamic>) {
-      result[entry.key] = compactStructuredData(Map<String, Object?>.from(val),
-          maxItems: maxItems, full: full);
+      result[entry.key] = compactStructuredData(
+        Map<String, Object?>.from(val),
+        maxItems: maxItems,
+        full: full,
+      );
     } else {
       result[entry.key] = val;
     }
@@ -102,7 +108,11 @@ String formatMapString(Map<dynamic, dynamic> data, {int maxDepth = 3}) {
 }
 
 void _formatMapHelper(
-    Map<dynamic, dynamic> data, StringBuffer buffer, int indent, int maxDepth) {
+  Map<dynamic, dynamic> data,
+  StringBuffer buffer,
+  int indent,
+  int maxDepth,
+) {
   if (indent > maxDepth) {
     buffer.write('{...}');
     return;

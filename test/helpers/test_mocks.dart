@@ -42,20 +42,24 @@ class FakeVmService extends VmService {
   }
 
   void emitGcEvent({String gcType = 'Scavenge', int? timestamp}) {
-    _gcEventController.add(Event(
-      kind: 'GC',
-      timestamp: timestamp ?? DateTime.now().millisecondsSinceEpoch,
-      gcType: gcType,
-    ));
+    _gcEventController.add(
+      Event(
+        kind: 'GC',
+        timestamp: timestamp ?? DateTime.now().millisecondsSinceEpoch,
+        gcType: gcType,
+      ),
+    );
   }
 
   void emitRebuildEvent(Map<String, dynamic> data) {
-    _eventController.add(Event(
-      kind: 'Extension',
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-      extensionKind: 'Flutter.RebuiltWidgets',
-      extensionData: ExtensionData.parse(data),
-    ));
+    _eventController.add(
+      Event(
+        kind: 'Extension',
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        extensionKind: 'Flutter.RebuiltWidgets',
+        extensionData: ExtensionData.parse(data),
+      ),
+    );
   }
 
   @override
@@ -128,7 +132,7 @@ class FakeVmService extends VmService {
           classRef: ClassRef(id: 'c_1', name: 'MyWidget'),
           bytesCurrent: allocationProfileCalls == 1 ? 1000 : 2500,
           instancesCurrent: allocationProfileCalls == 1 ? 10 : 15,
-        )
+        ),
       ],
       memoryUsage: MemoryUsage(
         heapUsage: 10 * 1024 * 1024,
@@ -151,8 +155,10 @@ class FakeVmService extends VmService {
   }
 
   @override
-  Future<Timeline> getVMTimeline(
-      {int? timeExtentMicros, int? timeOriginMicros}) async {
+  Future<Timeline> getVMTimeline({
+    int? timeExtentMicros,
+    int? timeOriginMicros,
+  }) async {
     return Timeline.parse(mockTimelineResponse) ?? Timeline(traceEvents: []);
   }
 
@@ -173,7 +179,10 @@ class FakeVmService extends VmService {
       extensionRPCs: mockExtensionRPCs,
       libraries: [
         LibraryRef(
-            id: 'lib_1', name: 'main_lib', uri: 'package:my_app/main.dart'),
+          id: 'lib_1',
+          name: 'main_lib',
+          uri: 'package:my_app/main.dart',
+        ),
         LibraryRef(
           id: 'lib_2',
           name: 'debug_rendering',
@@ -228,8 +237,11 @@ class FakeVmService extends VmService {
   }
 
   @override
-  Future<Stack> getStack(String isolateId,
-      {String? idZoneId, int? limit}) async {
+  Future<Stack> getStack(
+    String isolateId, {
+    String? idZoneId,
+    int? limit,
+  }) async {
     if (isolateId != 'isolate_1') {
       throw RPCError('getStack', -32000, 'Isolate not found');
     }

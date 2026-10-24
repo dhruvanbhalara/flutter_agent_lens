@@ -58,7 +58,8 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
   }
 
   Future<CallToolResult> _handleTogglePackageWidgets(
-      CallToolRequest req) async {
+    CallToolRequest req,
+  ) async {
     final service = vmService;
     final currentIsolateId = isolateId;
     if (service == null || currentIsolateId == null) return notConnected();
@@ -126,7 +127,8 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
     if (enabled) {
       stderr.writeln(
-          '[mcp:toggle_package_widgets] Adding ${packagePaths.length} pub root directories');
+        '[mcp:toggle_package_widgets] Adding ${packagePaths.length} pub root directories',
+      );
       await service.evaluate(
         currentIsolateId,
         libId,
@@ -134,7 +136,8 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       );
     } else {
       stderr.writeln(
-          '[mcp:toggle_package_widgets] Removing ${packagePaths.length} pub root directories');
+        '[mcp:toggle_package_widgets] Removing ${packagePaths.length} pub root directories',
+      );
       await service.evaluate(
         currentIsolateId,
         libId,
@@ -174,14 +177,18 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   Future<List<String>> _getPackageDirectories(String workspaceRoot) async {
     final directories = <String>[];
-    final configPath =
-        p.join(workspaceRoot, '.dart_tool', 'package_config.json');
+    final configPath = p.join(
+      workspaceRoot,
+      '.dart_tool',
+      'package_config.json',
+    );
     final file = File(configPath);
     // The package configuration is read asynchronously outside the main rendering path.
     // ignore: avoid_slow_async_io
     if (!await file.exists()) {
       stderr.writeln(
-          '[mcp:package_resolver] package_config.json not found at $configPath');
+        '[mcp:package_resolver] package_config.json not found at $configPath',
+      );
       return directories;
     }
 
@@ -249,7 +256,7 @@ base mixin DebugFlagSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           TextContent(
             text: 'Successfully set debug flag `$flagName` to `$valStr`.\n'
                 'Extension result: `$resultText`',
-          )
+          ),
         ],
       );
     } on RPCError catch (e) {

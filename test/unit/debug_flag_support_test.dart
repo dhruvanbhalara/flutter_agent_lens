@@ -84,8 +84,10 @@ void main() {
       );
 
       expect(result.isError, isNot(isTrue));
-      expect(fakeVm.lastExtensionCalled,
-          equals('ext.flutter.debugPaintBaselinesEnabled'));
+      expect(
+        fakeVm.lastExtensionCalled,
+        equals('ext.flutter.debugPaintBaselinesEnabled'),
+      );
       expect(fakeVm.lastArgs?['enabled'], equals('false'));
     });
 
@@ -119,8 +121,10 @@ void main() {
       );
 
       expect(result.isError, isNot(isTrue));
-      expect(fakeVm.lastExtensionCalled,
-          equals('ext.flutter.invertOversizedImages'));
+      expect(
+        fakeVm.lastExtensionCalled,
+        equals('ext.flutter.invertOversizedImages'),
+      );
       expect(fakeVm.lastArgs?['enabled'], equals('true'));
     });
 
@@ -141,23 +145,25 @@ void main() {
       expect(fakeVm.lastArgs?['timeDilation'], equals('5.0'));
     });
 
-    test('toggle action with unsupported flag name returns validation error',
-        () async {
-      final result = await mock.callTool(
-        CallToolRequest(
-          name: 'debug_flag',
-          arguments: const {
-            'action': 'toggle',
-            'flag_name': 'unsupported_flag',
-            'value': 'true',
-          },
-        ),
-      );
+    test(
+      'toggle action with unsupported flag name returns validation error',
+      () async {
+        final result = await mock.callTool(
+          CallToolRequest(
+            name: 'debug_flag',
+            arguments: const {
+              'action': 'toggle',
+              'flag_name': 'unsupported_flag',
+              'value': 'true',
+            },
+          ),
+        );
 
-      expect(result.isError, isTrue);
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('Unsupported debug flag'));
-    });
+        expect(result.isError, isTrue);
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Unsupported debug flag'));
+      },
+    );
 
     test(
         'toggle_package_widgets when workspaceRoot is not configured returns error',
@@ -182,9 +188,7 @@ void main() {
       final result = await mock.callTool(
         CallToolRequest(
           name: 'debug_flag',
-          arguments: const {
-            'action': 'unknown_flag_action',
-          },
+          arguments: const {'action': 'unknown_flag_action'},
         ),
       );
 

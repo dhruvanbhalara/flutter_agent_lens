@@ -22,49 +22,55 @@ void main() {
     });
 
     test(
-        'handleToolError captures StateError and returns standard error result',
-        () {
-      final result = handleToolError(
-        StateError('Not connected'),
-        StackTrace.current,
-        'disconnect',
-      );
+      'handleToolError captures StateError and returns standard error result',
+      () {
+        final result = handleToolError(
+          StateError('Not connected'),
+          StackTrace.current,
+          'disconnect',
+        );
 
-      expect(result.isError, isTrue);
-      expect(result.content, isNotEmpty);
-      final textContent = result.content.first as TextContent;
-      expect(textContent.text, contains('Bad state: Not connected'));
-      expect(textContent.text, contains('disconnect execution failed:'));
-    });
+        expect(result.isError, isTrue);
+        expect(result.content, isNotEmpty);
+        final textContent = result.content.first as TextContent;
+        expect(textContent.text, contains('Bad state: Not connected'));
+        expect(textContent.text, contains('disconnect execution failed:'));
+      },
+    );
 
     test(
-        'handleToolError captures RPCError and returns custom RPC error format',
-        () {
-      final result = handleToolError(
-        RPCError('callServiceExtension', -32601, 'Method not found'),
-        StackTrace.current,
-        'widget',
-      );
+      'handleToolError captures RPCError and returns custom RPC error format',
+      () {
+        final result = handleToolError(
+          RPCError('callServiceExtension', -32601, 'Method not found'),
+          StackTrace.current,
+          'widget',
+        );
 
-      expect(result.isError, isTrue);
-      expect(result.content, isNotEmpty);
-      final textContent = result.content.first as TextContent;
-      expect(textContent.text,
-          contains('callServiceExtension: (-32601) Method not found'));
-      expect(textContent.text, contains('widget execution failed:'));
-    });
+        expect(result.isError, isTrue);
+        expect(result.content, isNotEmpty);
+        final textContent = result.content.first as TextContent;
+        expect(
+          textContent.text,
+          contains('callServiceExtension: (-32601) Method not found'),
+        );
+        expect(textContent.text, contains('widget execution failed:'));
+      },
+    );
 
-    test('handleToolError captures generic Exception and formats it correctly',
-        () {
-      final result = handleToolError(
-        Exception('Generic error occurred'),
-        StackTrace.current,
-        'evaluate_expression',
-      );
+    test(
+      'handleToolError captures generic Exception and formats it correctly',
+      () {
+        final result = handleToolError(
+          Exception('Generic error occurred'),
+          StackTrace.current,
+          'evaluate_expression',
+        );
 
-      expect(result.isError, isTrue);
-      final textContent = result.content.first as TextContent;
-      expect(textContent.text, contains('Exception: Generic error occurred'));
-    });
+        expect(result.isError, isTrue);
+        final textContent = result.content.first as TextContent;
+        expect(textContent.text, contains('Exception: Generic error occurred'));
+      },
+    );
   });
 }

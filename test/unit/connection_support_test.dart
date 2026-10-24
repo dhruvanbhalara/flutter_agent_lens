@@ -57,14 +57,14 @@ void main() {
       final result = await mock.callTool(
         CallToolRequest(
           name: McpTool.connection.name,
-          arguments: const {
-            'action': 'unknown_connection_action',
-          },
+          arguments: const {'action': 'unknown_connection_action'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Unknown action:'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Unknown action:'),
+      );
     });
 
     test(

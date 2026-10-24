@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/mixins/network_capture_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
@@ -68,66 +69,68 @@ void main() {
   });
 
   group('get_request_details action tests', () {
-    test('returns error when profile history is empty and requestId is omitted',
-        () async {
-      mock.vmService = FakeVmServiceForRequestDetails({
-        'result': {
-          'requests': <Map<String, dynamic>>[],
-        }
-      });
+    test(
+      'returns error when profile history is empty and requestId is omitted',
+      () async {
+        mock.vmService = FakeVmServiceForRequestDetails({
+          'result': {'requests': <Map<String, dynamic>>[]},
+        });
 
-      final result = await mock.callTool(
-        CallToolRequest(
-          name: 'network',
-          arguments: const {'action': 'get_request_details'},
-        ),
-      );
+        final result = await mock.callTool(
+          CallToolRequest(
+            name: 'network',
+            arguments: const {'action': 'get_request_details'},
+          ),
+        );
 
-      expect(result.isError, isTrue);
-      expect(
-        (result.content.first as TextContent).text,
-        contains('No HTTP requests recorded in VM profile history'),
-      );
-    });
+        expect(result.isError, isTrue);
+        expect(
+          (result.content.first as TextContent).text,
+          contains('No HTTP requests recorded in VM profile history'),
+        );
+      },
+    );
 
-    test('auto-selects most recent request when requestId is omitted',
-        () async {
-      mock.vmService = FakeVmServiceForRequestDetails({
-        'result': {
-          'requests': [
-            {
-              'id': '999',
-              'method': 'GET',
-              'uri': 'https://api.example.com/auto-latest',
-              'startTime': 1000000,
-              'endTime': 1200000,
-              'request': {
-                'headers': <String, dynamic>{},
-                'cookies': <dynamic>[],
+    test(
+      'auto-selects most recent request when requestId is omitted',
+      () async {
+        mock.vmService = FakeVmServiceForRequestDetails({
+          'result': {
+            'requests': [
+              {
+                'id': '999',
+                'method': 'GET',
+                'uri': 'https://api.example.com/auto-latest',
+                'startTime': 1000000,
+                'endTime': 1200000,
+                'request': {
+                  'headers': <String, dynamic>{},
+                  'cookies': <dynamic>[],
+                },
+                'response': {
+                  'statusCode': 200,
+                  'headers': <String, dynamic>{},
+                  'cookies': <dynamic>[],
+                },
               },
-              'response': {
-                'statusCode': 200,
-                'headers': <String, dynamic>{},
-                'cookies': <dynamic>[],
-              },
-            }
-          ]
-        }
-      });
+            ],
+          },
+        });
 
-      final result = await mock.callTool(
-        CallToolRequest(
-          name: 'network',
-          arguments: const {'action': 'get_request_details'},
-        ),
-      );
+        final result = await mock.callTool(
+          CallToolRequest(
+            name: 'network',
+            arguments: const {'action': 'get_request_details'},
+          ),
+        );
 
-      expect(result.isError ?? false, isFalse);
-      expect(
-        (result.content.first as TextContent).text,
-        contains('https://api.example.com/auto-latest'),
-      );
-    });
+        expect(result.isError ?? false, isFalse);
+        expect(
+          (result.content.first as TextContent).text,
+          contains('https://api.example.com/auto-latest'),
+        );
+      },
+    );
 
     test('returns error when HTTP profile extension is unsupported', () async {
       mock.vmService = FakeVmServiceForRequestDetails(
@@ -163,7 +166,7 @@ void main() {
           'request': {
             'headers': {
               'content-type': 'application/json',
-              'authorization': 'Bearer token123'
+              'authorization': 'Bearer token123',
             },
             'cookies': ['session=xyz123'],
             'contentLength': 42,
@@ -177,7 +180,7 @@ void main() {
             'contentLength': 58,
             'body': '{"id":101,"status":"success","message":"User created"}',
           },
-        }
+        },
       });
 
       final result = await mock.callTool(

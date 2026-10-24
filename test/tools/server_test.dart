@@ -21,11 +21,13 @@ void main() {
     fakeVmService = FakeVmService();
 
     // Initialize server to register all tools before running any test
-    await server.initialize(InitializeRequest(
-      protocolVersion: ProtocolVersion.v2024_11_05,
-      capabilities: ClientCapabilities(),
-      clientInfo: Implementation(name: 'test_client', version: '1.0'),
-    ));
+    await server.initialize(
+      InitializeRequest(
+        protocolVersion: ProtocolVersion.v2024_11_05,
+        capabilities: ClientCapabilities(),
+        clientInfo: Implementation(name: 'test_client', version: '1.0'),
+      ),
+    );
     server.registerConnectedTools();
   });
 
@@ -46,10 +48,7 @@ void main() {
       server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
       final infoResult = await server.callTool(
-        CallToolRequest(
-          name: McpTool.getAppInfo.name,
-          arguments: const {},
-        ),
+        CallToolRequest(name: McpTool.getAppInfo.name, arguments: const {}),
       );
 
       if (infoResult.isError == true) {
@@ -62,26 +61,26 @@ void main() {
       expect(server.isolateId, equals('isolate_1'));
     });
 
-    test('disconnect tool cleans up active streams and disposes VM Service',
-        () async {
-      server.vmService = fakeVmService;
-      server.isolateId = 'isolate_1';
-      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+    test(
+      'disconnect tool cleans up active streams and disposes VM Service',
+      () async {
+        server.vmService = fakeVmService;
+        server.isolateId = 'isolate_1';
+        server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.connection.name,
-          arguments: const {
-            'action': 'disconnect',
-          },
-        ),
-      );
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.connection.name,
+            arguments: const {'action': 'disconnect'},
+          ),
+        );
 
-      expect(result.isError, isNot(isTrue));
-      expect(fakeVmService.disposeCalled, isTrue);
-      expect(server.vmService, isNull);
-      expect(server.isolateId, isNull);
-    });
+        expect(result.isError, isNot(isTrue));
+        expect(fakeVmService.disposeCalled, isTrue);
+        expect(server.vmService, isNull);
+        expect(server.isolateId, isNull);
+      },
+    );
 
     test('toggle_debug_flag calls correct service extension', () async {
       server.vmService = fakeVmService;
@@ -90,7 +89,7 @@ void main() {
 
       fakeVmService
           .serviceExtensionResponses['ext.flutter.inspector.debugPaint'] = {
-        'value': 'true'
+        'value': 'true',
       };
 
       final result = await server.callTool(
@@ -123,10 +122,7 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {
-            'action': 'get_snapshot',
-            'topN': 5,
-          },
+          arguments: const {'action': 'get_snapshot', 'topN': 5},
         ),
       );
 
@@ -167,9 +163,7 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {
-            'action': 'force_gc',
-          },
+          arguments: const {'action': 'force_gc'},
         ),
       );
 
@@ -188,28 +182,28 @@ void main() {
       final startResult = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {
-            'action': 'start_gc_stream',
-          },
+          arguments: const {'action': 'start_gc_stream'},
         ),
       );
       expect(startResult.isError, isNot(isTrue));
-      expect((startResult.content.first as TextContent).text,
-          contains('GC Stream Monitoring Started'));
+      expect(
+        (startResult.content.first as TextContent).text,
+        contains('GC Stream Monitoring Started'),
+      );
 
       fakeVmService.emitGcEvent();
 
       final stopResult = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {
-            'action': 'stop_gc_stream',
-          },
+          arguments: const {'action': 'stop_gc_stream'},
         ),
       );
       expect(stopResult.isError, isNot(isTrue));
-      expect((stopResult.content.first as TextContent).text,
-          contains('GC Stream Monitoring Stopped'));
+      expect(
+        (stopResult.content.first as TextContent).text,
+        contains('GC Stream Monitoring Stopped'),
+      );
     });
 
     test('memory get_memory_timeline samples memory usage', () async {
@@ -254,79 +248,81 @@ void main() {
       expect(text, contains('Pressure Level'));
     });
 
-    test('memory explain_memory_breakdown returns detailed breakdown',
-        () async {
-      server.vmService = fakeVmService;
-      server.isolateId = 'isolate_1';
-      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+    test(
+      'memory explain_memory_breakdown returns detailed breakdown',
+      () async {
+        server.vmService = fakeVmService;
+        server.isolateId = 'isolate_1';
+        server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.memory.name,
-          arguments: const {
-            'action': 'explain_memory_breakdown',
-          },
-        ),
-      );
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.memory.name,
+            arguments: const {'action': 'explain_memory_breakdown'},
+          ),
+        );
 
-      expect(result.isError, isNot(isTrue));
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('Memory Usage Breakdown'));
-      expect(text, contains('Resident Set Size (RSS)'));
-      expect(text, contains('Dart Heap'));
-    });
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Memory Usage Breakdown'));
+        expect(text, contains('Resident Set Size (RSS)'));
+        expect(text, contains('Dart Heap'));
+      },
+    );
 
     test(
-        'memory start_gc_stream called twice handles RPCError 103 idempotently',
-        () async {
-      server.vmService = fakeVmService;
-      server.isolateId = 'isolate_1';
-      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+      'memory start_gc_stream called twice handles RPCError 103 idempotently',
+      () async {
+        server.vmService = fakeVmService;
+        server.isolateId = 'isolate_1';
+        server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
-      final res1 = await server.callTool(
-        CallToolRequest(
-          name: McpTool.memory.name,
-          arguments: const {'action': 'start_gc_stream'},
-        ),
-      );
-      expect(res1.isError, isNot(isTrue));
+        final res1 = await server.callTool(
+          CallToolRequest(
+            name: McpTool.memory.name,
+            arguments: const {'action': 'start_gc_stream'},
+          ),
+        );
+        expect(res1.isError, isNot(isTrue));
 
-      // Calling start_gc_stream again when stream is already subscribed
-      final res2 = await server.callTool(
-        CallToolRequest(
-          name: McpTool.memory.name,
-          arguments: const {'action': 'start_gc_stream'},
-        ),
-      );
-      expect(res2.isError, isNot(isTrue));
+        // Calling start_gc_stream again when stream is already subscribed
+        final res2 = await server.callTool(
+          CallToolRequest(
+            name: McpTool.memory.name,
+            arguments: const {'action': 'start_gc_stream'},
+          ),
+        );
+        expect(res2.isError, isNot(isTrue));
 
-      // Cleanup
-      await server.callTool(
-        CallToolRequest(
-          name: McpTool.memory.name,
-          arguments: const {'action': 'stop_gc_stream'},
-        ),
-      );
-    });
+        // Cleanup
+        await server.callTool(
+          CallToolRequest(
+            name: McpTool.memory.name,
+            arguments: const {'action': 'stop_gc_stream'},
+          ),
+        );
+      },
+    );
 
     test(
-        'memory stop_gc_stream when not started returns empty events gracefully',
-        () async {
-      server.vmService = fakeVmService;
-      server.isolateId = 'isolate_1';
-      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+      'memory stop_gc_stream when not started returns empty events gracefully',
+      () async {
+        server.vmService = fakeVmService;
+        server.isolateId = 'isolate_1';
+        server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.memory.name,
-          arguments: const {'action': 'stop_gc_stream'},
-        ),
-      );
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.memory.name,
+            arguments: const {'action': 'stop_gc_stream'},
+          ),
+        );
 
-      expect(result.isError, isNot(isTrue));
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('Total Events Captured**: 0'));
-    });
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Total Events Captured**: 0'));
+      },
+    );
 
     test('memory stop_gc_stream respects limit parameter', () async {
       server.vmService = fakeVmService;
@@ -349,10 +345,7 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {
-            'action': 'stop_gc_stream',
-            'limit': 2,
-          },
+          arguments: const {'action': 'stop_gc_stream', 'limit': 2},
         ),
       );
 
@@ -361,48 +354,52 @@ void main() {
       expect(text, contains('Events Returned**: 2'));
     });
 
-    test('memory get_memory_timeline clamps negative or excessive duration',
-        () async {
-      server.vmService = fakeVmService;
-      server.isolateId = 'isolate_1';
-      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+    test(
+      'memory get_memory_timeline clamps negative or excessive duration',
+      () async {
+        server.vmService = fakeVmService;
+        server.isolateId = 'isolate_1';
+        server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.memory.name,
-          arguments: const {
-            'action': 'get_memory_timeline',
-            'duration_seconds': -10, // Clamped to 1s
-          },
-        ),
-      );
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.memory.name,
+            arguments: const {
+              'action': 'get_memory_timeline',
+              'duration_seconds': -10, // Clamped to 1s
+            },
+          ),
+        );
 
-      expect(result.isError, isNot(isTrue));
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('Memory Timeline (1s recording)'));
-    });
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Memory Timeline (1s recording)'));
+      },
+    );
 
-    test('memory watch_gc_pressure categorizes pressure levels correctly',
-        () async {
-      server.vmService = fakeVmService;
-      server.isolateId = 'isolate_1';
-      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+    test(
+      'memory watch_gc_pressure categorizes pressure levels correctly',
+      () async {
+        server.vmService = fakeVmService;
+        server.isolateId = 'isolate_1';
+        server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.memory.name,
-          arguments: const {
-            'action': 'watch_gc_pressure',
-            'duration_seconds': 1,
-            'limit': 10,
-          },
-        ),
-      );
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.memory.name,
+            arguments: const {
+              'action': 'watch_gc_pressure',
+              'duration_seconds': 1,
+              'limit': 10,
+            },
+          ),
+        );
 
-      expect(result.isError, isNot(isTrue));
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('Pressure Level**: `LOW`'));
-    });
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Pressure Level**: `LOW`'));
+      },
+    );
 
     test(
         'memory explain_memory_breakdown handles raster cache extension failure gracefully',
@@ -421,9 +418,7 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {
-            'action': 'explain_memory_breakdown',
-          },
+          arguments: const {'action': 'explain_memory_breakdown'},
         ),
       );
 
@@ -463,9 +458,7 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.getCallStack.name,
-          arguments: const {
-            'limit': 5,
-          },
+          arguments: const {'limit': 5},
         ),
       );
 
@@ -506,10 +499,7 @@ void main() {
       final removeResult = await server.callTool(
         CallToolRequest(
           name: McpTool.breakpoint.name,
-          arguments: const {
-            'action': 'remove',
-            'breakpoint_id': 'bp_1',
-          },
+          arguments: const {'action': 'remove', 'breakpoint_id': 'bp_1'},
         ),
       );
 
@@ -532,20 +522,17 @@ void main() {
           'creationLocation': {
             'file': 'file:///Users/User/projects/my_app/lib/main.dart',
             'line': 50,
-            'column': 12
+            'column': 12,
           },
           'hasChildren': false,
-          'children': <dynamic>[]
-        }
+          'children': <dynamic>[],
+        },
       };
 
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.widget.name,
-          arguments: const {
-            'action': 'get_tree',
-            'maxDepth': 2,
-          },
+          arguments: const {'action': 'get_tree', 'maxDepth': 2},
         ),
       );
 
@@ -567,19 +554,13 @@ void main() {
 
       // Hot reload
       final reloadResult = await server.callTool(
-        CallToolRequest(
-          name: McpTool.hotReload.name,
-          arguments: const {},
-        ),
+        CallToolRequest(name: McpTool.hotReload.name, arguments: const {}),
       );
       expect(reloadResult.isError, isNot(isTrue));
 
       // Hot restart
       final restartResult = await server.callTool(
-        CallToolRequest(
-          name: McpTool.hotRestart.name,
-          arguments: const {},
-        ),
+        CallToolRequest(name: McpTool.hotRestart.name, arguments: const {}),
       );
       expect(restartResult.isError, isNot(isTrue));
     });
@@ -599,11 +580,11 @@ void main() {
           'creationLocation': {
             'file': 'file:///Users/User/projects/my_app/lib/main.dart',
             'line': 50,
-            'column': 12
+            'column': 12,
           },
           'hasChildren': false,
-          'children': <dynamic>[]
-        }
+          'children': <dynamic>[],
+        },
       };
 
       // 1. Set format to json
@@ -618,10 +599,7 @@ void main() {
       final jsonTreeResult = await server.callTool(
         CallToolRequest(
           name: McpTool.widget.name,
-          arguments: const {
-            'action': 'get_tree',
-            'maxDepth': 2,
-          },
+          arguments: const {'action': 'get_tree', 'maxDepth': 2},
         ),
       );
       expect(jsonTreeResult.isError, isNot(isTrue));
@@ -640,10 +618,7 @@ void main() {
       final mdTreeResult = await server.callTool(
         CallToolRequest(
           name: McpTool.widget.name,
-          arguments: const {
-            'action': 'get_tree',
-            'maxDepth': 2,
-          },
+          arguments: const {'action': 'get_tree', 'maxDepth': 2},
         ),
       );
       expect(mdTreeResult.isError, isNot(isTrue));
@@ -652,21 +627,23 @@ void main() {
       expect(mdText, contains('Widget Tree'));
     });
 
-    test('widget get_tree when VM Service is not connected returns error',
-        () async {
-      server.vmService = null;
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.widget.name,
-          arguments: const {
-            'action': 'get_tree',
-          },
-        ),
-      );
-      expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Not connected to a running application'));
-    });
+    test(
+      'widget get_tree when VM Service is not connected returns error',
+      () async {
+        server.vmService = null;
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.widget.name,
+            arguments: const {'action': 'get_tree'},
+          ),
+        );
+        expect(result.isError, isTrue);
+        expect(
+          (result.content.first as TextContent).text,
+          contains('Not connected to a running application'),
+        );
+      },
+    );
 
     test(
         'widget get_tree when inspector extension is not registered returns error',
@@ -683,14 +660,14 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.widget.name,
-          arguments: const {
-            'action': 'get_tree',
-          },
+          arguments: const {'action': 'get_tree'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('(-32601) Method not found'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('(-32601) Method not found'),
+      );
     });
 
     test(
@@ -701,7 +678,10 @@ void main() {
       fakeVmService.customServiceExtensionError = (method) {
         if (method.startsWith('ext.flutter.inspector')) {
           return RPCError(
-              'callServiceExtension', -32000, 'Internal inspector error');
+            'callServiceExtension',
+            -32000,
+            'Internal inspector error',
+          );
         }
         return null;
       };
@@ -709,14 +689,14 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.widget.name,
-          arguments: const {
-            'action': 'get_tree',
-          },
+          arguments: const {'action': 'get_tree'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('(-32000) Internal inspector error'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('(-32000) Internal inspector error'),
+      );
     });
 
     test('widget with unknown action returns error', () async {
@@ -727,14 +707,14 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.widget.name,
-          arguments: const {
-            'action': 'invalid_widget_action',
-          },
+          arguments: const {'action': 'invalid_widget_action'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Unknown widget action'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Unknown widget action'),
+      );
     });
 
     test('screenshot with invalid action returns error', () async {
@@ -745,37 +725,40 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.screenshot.name,
-          arguments: const {
-            'action': 'invalid_screenshot_action',
-          },
+          arguments: const {'action': 'invalid_screenshot_action'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Unknown screenshot action'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Unknown screenshot action'),
+      );
     });
 
     test(
-        'screenshot compare with invalid baseline_name returns validation error',
-        () async {
-      server.vmService = fakeVmService;
-      server.isolateId = 'isolate_1';
-      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
-      server.workspaceRoot = '/some/workspace';
+      'screenshot compare with invalid baseline_name returns validation error',
+      () async {
+        server.vmService = fakeVmService;
+        server.isolateId = 'isolate_1';
+        server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+        server.workspaceRoot = '/some/workspace';
 
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.screenshot.name,
-          arguments: const {
-            'action': 'compare',
-            'baseline_name': '../../invalid_name',
-          },
-        ),
-      );
-      expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Invalid baseline_name'));
-    });
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.screenshot.name,
+            arguments: const {
+              'action': 'compare',
+              'baseline_name': '../../invalid_name',
+            },
+          ),
+        );
+        expect(result.isError, isTrue);
+        expect(
+          (result.content.first as TextContent).text,
+          contains('Invalid baseline_name'),
+        );
+      },
+    );
 
     test('memory with invalid action returns error', () async {
       server.vmService = fakeVmService;
@@ -785,14 +768,14 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.memory.name,
-          arguments: const {
-            'action': 'invalid_memory_action',
-          },
+          arguments: const {'action': 'invalid_memory_action'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Unknown memory action'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Unknown memory action'),
+      );
     });
 
     test('profiling with invalid action returns error', () async {
@@ -803,14 +786,14 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.profiling.name,
-          arguments: const {
-            'action': 'invalid_profiling_action',
-          },
+          arguments: const {'action': 'invalid_profiling_action'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Unknown profiling action'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Unknown profiling action'),
+      );
     });
 
     test('breakpoint with invalid action returns error', () async {
@@ -821,14 +804,14 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.breakpoint.name,
-          arguments: const {
-            'action': 'invalid_breakpoint_action',
-          },
+          arguments: const {'action': 'invalid_breakpoint_action'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Unknown breakpoint action'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Unknown breakpoint action'),
+      );
     });
 
     test('network with invalid action returns error', () async {
@@ -839,103 +822,112 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.network.name,
-          arguments: const {
-            'action': 'invalid_network_action',
-          },
+          arguments: const {'action': 'invalid_network_action'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Unknown network action'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Unknown network action'),
+      );
     });
 
-    test('memory get_snapshot when not connected returns error result',
-        () async {
-      server.vmService = null;
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.memory.name,
-          arguments: const {
-            'action': 'get_snapshot',
-          },
-        ),
-      );
-      expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Not connected to a running application'));
-    });
+    test(
+      'memory get_snapshot when not connected returns error result',
+      () async {
+        server.vmService = null;
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.memory.name,
+            arguments: const {'action': 'get_snapshot'},
+          ),
+        );
+        expect(result.isError, isTrue);
+        expect(
+          (result.content.first as TextContent).text,
+          contains('Not connected to a running application'),
+        );
+      },
+    );
 
-    test('discover_apps returns empty list when no running apps found',
-        () async {
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.discoverApps.name,
-          arguments: const {},
-        ),
-      );
-      expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('No active Flutter applications were discovered'));
-    });
+    test(
+      'discover_apps returns empty list when no running apps found',
+      () async {
+        final result = await server.callTool(
+          CallToolRequest(name: McpTool.discoverApps.name, arguments: const {}),
+        );
+        expect(result.isError, isTrue);
+        expect(
+          (result.content.first as TextContent).text,
+          contains('No active Flutter applications were discovered'),
+        );
+      },
+    );
 
     test('set_response_format with invalid format returns error', () async {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.setResponseFormat.name,
-          arguments: const {
-            'format': 'xml',
-          },
+          arguments: const {'format': 'xml'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Invalid format'));
-    });
-
-    test('console_logs with negative limit clamps limit and succeeds',
-        () async {
-      server.vmService = fakeVmService;
-      server.isolateId = 'isolate_1';
-      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
-
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.consoleLogs.name,
-          arguments: const {
-            'limit': -5,
-          },
-        ),
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Invalid format'),
       );
-      expect(result.isError, isNot(isTrue));
-      expect((result.content.first as TextContent).text,
-          contains('Console Log Cache'));
     });
 
-    test('console_logs watch action captures log entries during window',
-        () async {
-      server.vmService = fakeVmService;
-      server.isolateId = 'isolate_1';
-      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+    test(
+      'console_logs with negative limit clamps limit and succeeds',
+      () async {
+        server.vmService = fakeVmService;
+        server.isolateId = 'isolate_1';
+        server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
 
-      // Simulate a log entry arriving during the watch window
-      Future.delayed(const Duration(milliseconds: 100), () {
-        server.addToLogBuffer('[STDOUT]', 'Test live watch log message');
-      });
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.consoleLogs.name,
+            arguments: const {'limit': -5},
+          ),
+        );
+        expect(result.isError, isNot(isTrue));
+        expect(
+          (result.content.first as TextContent).text,
+          contains('Console Log Cache'),
+        );
+      },
+    );
 
-      final result = await server.callTool(
-        CallToolRequest(
-          name: McpTool.consoleLogs.name,
-          arguments: const {
-            'action': 'watch',
-            'duration_seconds': 1,
-            'filter': 'Test live',
-          },
-        ),
-      );
-      expect(result.isError, isNot(isTrue));
-      expect((result.content.first as TextContent).text,
-          contains('Test live watch log message'));
-    });
+    test(
+      'console_logs watch action captures log entries during window',
+      () async {
+        server.vmService = fakeVmService;
+        server.isolateId = 'isolate_1';
+        server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+        // Simulate a log entry arriving during the watch window
+        Future.delayed(const Duration(milliseconds: 100), () {
+          server.addToLogBuffer('[STDOUT]', 'Test live watch log message');
+        });
+
+        final result = await server.callTool(
+          CallToolRequest(
+            name: McpTool.consoleLogs.name,
+            arguments: const {
+              'action': 'watch',
+              'duration_seconds': 1,
+              'filter': 'Test live',
+            },
+          ),
+        );
+        expect(result.isError, isNot(isTrue));
+        expect(
+          (result.content.first as TextContent).text,
+          contains('Test live watch log message'),
+        );
+      },
+    );
 
     test('network watch action with include_details: true succeeds', () async {
       server.vmService = fakeVmService;
@@ -963,14 +955,14 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.getCallStack.name,
-          arguments: const {
-            'limit': 5,
-          },
+          arguments: const {'limit': 5},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Isolate not found'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Isolate not found'),
+      );
     });
 
     test('evaluate_expression when not connected returns error', () async {
@@ -978,38 +970,36 @@ void main() {
       final result = await server.callTool(
         CallToolRequest(
           name: McpTool.evaluateExpression.name,
-          arguments: const {
-            'expression': '1 + 1',
-          },
+          arguments: const {'expression': '1 + 1'},
         ),
       );
       expect(result.isError, isTrue);
-      expect((result.content.first as TextContent).text,
-          contains('Not connected to a running application'));
+      expect(
+        (result.content.first as TextContent).text,
+        contains('Not connected to a running application'),
+      );
     });
 
     test('hotReload and hotRestart when not connected return error', () async {
       server.vmService = null;
 
       final reloadRes = await server.callTool(
-        CallToolRequest(
-          name: McpTool.hotReload.name,
-          arguments: const {},
-        ),
+        CallToolRequest(name: McpTool.hotReload.name, arguments: const {}),
       );
       expect(reloadRes.isError, isTrue);
-      expect((reloadRes.content.first as TextContent).text,
-          contains('Not connected to a running application'));
+      expect(
+        (reloadRes.content.first as TextContent).text,
+        contains('Not connected to a running application'),
+      );
 
       final restartRes = await server.callTool(
-        CallToolRequest(
-          name: McpTool.hotRestart.name,
-          arguments: const {},
-        ),
+        CallToolRequest(name: McpTool.hotRestart.name, arguments: const {}),
       );
       expect(restartRes.isError, isTrue);
-      expect((restartRes.content.first as TextContent).text,
-          contains('Not connected to a running application'));
+      expect(
+        (restartRes.content.first as TextContent).text,
+        contains('Not connected to a running application'),
+      );
     });
 
     group('get_navigation_stack tests', () {
@@ -1021,107 +1011,118 @@ void main() {
         server.isolateId = 'isolate_1';
       });
 
-      test('get_navigation_stack returns formatted tree and current url',
-          () async {
-        final mockResponse = {
-          'currentUrl': '/profile',
-          'staticRouteTree':
-              'Full paths for routes:\n  ├─ /home (HomeScreen)\n  └─ /profile (ProfileScreen)',
-          'navigators': [
-            {
-              'id': 1,
-              'parentId': null,
-              'parentRouteHash': null,
-              'total': 2,
-              'routes': [
-                {
-                  'name': '/',
-                  'screenName': 'HomeScreen',
-                  'type': 'MaterialPageRoute',
-                  'settingsType': 'RouteSettings',
-                  'hash': 123,
-                  'isCurrent': false,
-                  'isFirst': true
-                },
-                {
-                  'name': '/profile',
-                  'screenName': 'ProfileScreen',
-                  'type': 'MaterialPageRoute',
-                  'settingsType': 'RouteSettings',
-                  'hash': 456,
-                  'isCurrent': true,
-                  'isFirst': false
-                }
-              ]
-            }
-          ]
-        };
+      test(
+        'get_navigation_stack returns formatted tree and current url',
+        () async {
+          final mockResponse = {
+            'currentUrl': '/profile',
+            'staticRouteTree':
+                'Full paths for routes:\n  ├─ /home (HomeScreen)\n  └─ /profile (ProfileScreen)',
+            'navigators': [
+              {
+                'id': 1,
+                'parentId': null,
+                'parentRouteHash': null,
+                'total': 2,
+                'routes': [
+                  {
+                    'name': '/',
+                    'screenName': 'HomeScreen',
+                    'type': 'MaterialPageRoute',
+                    'settingsType': 'RouteSettings',
+                    'hash': 123,
+                    'isCurrent': false,
+                    'isFirst': true,
+                  },
+                  {
+                    'name': '/profile',
+                    'screenName': 'ProfileScreen',
+                    'type': 'MaterialPageRoute',
+                    'settingsType': 'RouteSettings',
+                    'hash': 456,
+                    'isCurrent': true,
+                    'isFirst': false,
+                  },
+                ],
+              },
+            ],
+          };
 
-        navFakeVm.evaluateResult = jsonEncode(mockResponse);
+          navFakeVm.evaluateResult = jsonEncode(mockResponse);
 
-        final result = await server.callTool(
-          CallToolRequest(
-            name: McpTool.getNavigationStack.name,
-            arguments: const {},
-          ),
-        );
+          final result = await server.callTool(
+            CallToolRequest(
+              name: McpTool.getNavigationStack.name,
+              arguments: const {},
+            ),
+          );
 
-        expect(result.isError, isNot(isTrue));
-        final text = (result.content.first as TextContent).text;
-        expect(text, contains('Current URL: /profile'));
-        expect(text, contains('Static Route Tree:'));
-        expect(text, contains('Full paths for routes:'));
-        expect(text, contains('  ├─ /home (HomeScreen)'));
-        expect(text, contains('Navigator [root] (2 routes)'));
-        expect(text, contains('├── / (HomeScreen) (MaterialPageRoute) [root]'));
-        expect(
+          expect(result.isError, isNot(isTrue));
+          final text = (result.content.first as TextContent).text;
+          expect(text, contains('Current URL: /profile'));
+          expect(text, contains('Static Route Tree:'));
+          expect(text, contains('Full paths for routes:'));
+          expect(text, contains('  ├─ /home (HomeScreen)'));
+          expect(text, contains('Navigator [root] (2 routes)'));
+          expect(
+            text,
+            contains('├── / (HomeScreen) (MaterialPageRoute) [root]'),
+          );
+          expect(
             text,
             contains(
-                '└── /profile (ProfileScreen) (MaterialPageRoute) [current]'));
-      });
+              '└── /profile (ProfileScreen) (MaterialPageRoute) [current]',
+            ),
+          );
+        },
+      );
 
-      test('get_navigation_stack displays warning when stack depth exceeds 20',
-          () async {
-        final routesList = List.generate(
-          25,
-          (index) => {
-            'name': 'route_$index',
-            'screenName': 'Screen_$index',
-            'type': 'MaterialPageRoute',
-            'settingsType': 'RouteSettings',
-            'hash': index + 1,
-            'isCurrent': index == 24,
-            'isFirst': index == 0
-          },
-        );
+      test(
+        'get_navigation_stack displays warning when stack depth exceeds 20',
+        () async {
+          final routesList = List.generate(
+            25,
+            (index) => {
+              'name': 'route_$index',
+              'screenName': 'Screen_$index',
+              'type': 'MaterialPageRoute',
+              'settingsType': 'RouteSettings',
+              'hash': index + 1,
+              'isCurrent': index == 24,
+              'isFirst': index == 0,
+            },
+          );
 
-        final mockResponse = {
-          'currentUrl': '/route_24',
-          'navigators': [
-            {
-              'id': 1,
-              'parentId': null,
-              'parentRouteHash': null,
-              'total': 25,
-              'routes': routesList
-            }
-          ]
-        };
+          final mockResponse = {
+            'currentUrl': '/route_24',
+            'navigators': [
+              {
+                'id': 1,
+                'parentId': null,
+                'parentRouteHash': null,
+                'total': 25,
+                'routes': routesList,
+              },
+            ],
+          };
 
-        navFakeVm.evaluateResult = jsonEncode(mockResponse);
+          navFakeVm.evaluateResult = jsonEncode(mockResponse);
 
-        final result = await server.callTool(
-          CallToolRequest(
-            name: McpTool.getNavigationStack.name,
-            arguments: const {},
-          ),
-        );
+          final result = await server.callTool(
+            CallToolRequest(
+              name: McpTool.getNavigationStack.name,
+              arguments: const {},
+            ),
+          );
 
-        expect(result.isError, isNot(isTrue));
-        final text = (result.content.first as TextContent).text;
-        expect(text,
-            contains('WARNING: Navigator stack depth 25 exceeds limit of 20'));
-      });
+          expect(result.isError, isNot(isTrue));
+          final text = (result.content.first as TextContent).text;
+          expect(
+            text,
+            contains('WARNING: Navigator stack depth 25 exceeds limit of 20'),
+          );
+        },
+      );
 
       test('get_navigation_stack handles empty stack gracefully', () async {
         final mockResponse = {'currentUrl': null, 'navigators': <dynamic>[]};
@@ -1172,11 +1173,11 @@ void main() {
                   'settingsType': 'RouteSettings',
                   'hash': 123,
                   'isCurrent': true,
-                  'isFirst': true
-                }
-              ]
-            }
-          ]
+                  'isFirst': true,
+                },
+              ],
+            },
+          ],
         };
 
         navFakeVm.evaluateResult = jsonEncode(mockResponse);
@@ -1213,63 +1214,64 @@ void main() {
       });
 
       test(
-          'get_navigation_stack handles nested navigators and formats properly',
-          () async {
-        final mockResponse = {
-          'currentUrl': '/sub',
-          'navigators': [
-            {
-              'id': 1,
-              'parentId': null,
-              'parentRouteHash': null,
-              'total': 1,
-              'routes': [
-                {
-                  'name': '/',
-                  'screenName': 'HomeScreen',
-                  'type': 'MaterialPageRoute',
-                  'settingsType': 'RouteSettings',
-                  'hash': 111,
-                  'isCurrent': false,
-                  'isFirst': true
-                }
-              ]
-            },
-            {
-              'id': 2,
-              'parentId': 1,
-              'parentRouteHash': 111,
-              'total': 1,
-              'routes': [
-                {
-                  'name': '/sub',
-                  'screenName': 'SubScreen',
-                  'type': 'MaterialPageRoute',
-                  'settingsType': 'RouteSettings',
-                  'hash': 222,
-                  'isCurrent': true,
-                  'isFirst': false
-                }
-              ]
-            }
-          ]
-        };
+        'get_navigation_stack handles nested navigators and formats properly',
+        () async {
+          final mockResponse = {
+            'currentUrl': '/sub',
+            'navigators': [
+              {
+                'id': 1,
+                'parentId': null,
+                'parentRouteHash': null,
+                'total': 1,
+                'routes': [
+                  {
+                    'name': '/',
+                    'screenName': 'HomeScreen',
+                    'type': 'MaterialPageRoute',
+                    'settingsType': 'RouteSettings',
+                    'hash': 111,
+                    'isCurrent': false,
+                    'isFirst': true,
+                  },
+                ],
+              },
+              {
+                'id': 2,
+                'parentId': 1,
+                'parentRouteHash': 111,
+                'total': 1,
+                'routes': [
+                  {
+                    'name': '/sub',
+                    'screenName': 'SubScreen',
+                    'type': 'MaterialPageRoute',
+                    'settingsType': 'RouteSettings',
+                    'hash': 222,
+                    'isCurrent': true,
+                    'isFirst': false,
+                  },
+                ],
+              },
+            ],
+          };
 
-        navFakeVm.evaluateResult = jsonEncode(mockResponse);
+          navFakeVm.evaluateResult = jsonEncode(mockResponse);
 
-        final result = await server.callTool(
-          CallToolRequest(
-            name: McpTool.getNavigationStack.name,
-            arguments: const {},
-          ),
-        );
+          final result = await server.callTool(
+            CallToolRequest(
+              name: McpTool.getNavigationStack.name,
+              arguments: const {},
+            ),
+          );
 
-        expect(result.isError, isNot(isTrue));
-        final text = (result.content.first as TextContent).text;
-        expect(text, contains('Navigator [root] (1 routes)'));
-        expect(text, contains('Navigator (1 routes)'));
-        expect(text, contains('SubScreen'));
-      });
+          expect(result.isError, isNot(isTrue));
+          final text = (result.content.first as TextContent).text;
+          expect(text, contains('Navigator [root] (1 routes)'));
+          expect(text, contains('Navigator (1 routes)'));
+          expect(text, contains('SubScreen'));
+        },
+      );
     });
   });
 }

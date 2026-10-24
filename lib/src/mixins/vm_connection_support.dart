@@ -101,7 +101,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     return CallToolResult(
       content: [
         TextContent(
-            text: 'Not connected to a running application. Run connect first.')
+          text: 'Not connected to a running application. Run connect first.',
+        ),
       ],
       isError: true,
     );
@@ -120,51 +121,46 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
 
     final requiresConnection = mcpTool.requiresConnection;
 
-    super.registerTool(
-      tool,
-      (req) async {
-        if (requiresConnection && vmService != null && isolateId == null) {
-          await refreshIsolateId();
-        }
-        if (requiresConnection && (vmService == null || isolateId == null)) {
-          return notConnected();
-        }
-        try {
-          return await impl(req);
-        } catch (e, st) {
-          if (requiresConnection && _isCollectedError(e)) {
-            stderr.writeln(
-                '[mcp:${mcpTool.name}] Detected collected/sentinel error, attempting to refresh isolate ID and retry...');
-            final refreshed = await refreshIsolateId();
-            if (refreshed) {
-              try {
-                return await impl(req);
-              } catch (retryErr, retrySt) {
-                stderr.writeln('[mcp:${mcpTool.name}] Retry failed: $retryErr');
-                stderr.writeln('[mcp:${mcpTool.name}] STACKTRACE: $retrySt');
-                return CallToolResult(
-                  content: [
-                    TextContent(
-                        text:
-                            '${mcpTool.name} execution failed (retry): $retryErr')
-                  ],
-                  isError: true,
-                );
-              }
+    super.registerTool(tool, (req) async {
+      if (requiresConnection && vmService != null && isolateId == null) {
+        await refreshIsolateId();
+      }
+      if (requiresConnection && (vmService == null || isolateId == null)) {
+        return notConnected();
+      }
+      try {
+        return await impl(req);
+      } catch (e, st) {
+        if (requiresConnection && _isCollectedError(e)) {
+          stderr.writeln(
+            '[mcp:${mcpTool.name}] Detected collected/sentinel error, attempting to refresh isolate ID and retry...',
+          );
+          final refreshed = await refreshIsolateId();
+          if (refreshed) {
+            try {
+              return await impl(req);
+            } catch (retryErr, retrySt) {
+              stderr.writeln('[mcp:${mcpTool.name}] Retry failed: $retryErr');
+              stderr.writeln('[mcp:${mcpTool.name}] STACKTRACE: $retrySt');
+              return CallToolResult(
+                content: [
+                  TextContent(
+                    text: '${mcpTool.name} execution failed (retry): $retryErr',
+                  ),
+                ],
+                isError: true,
+              );
             }
           }
-          stderr.writeln('[mcp:${mcpTool.name}] ERROR: $e');
-          stderr.writeln('[mcp:${mcpTool.name}] STACKTRACE: $st');
-          return CallToolResult(
-            content: [
-              TextContent(text: '${mcpTool.name} execution failed: $e')
-            ],
-            isError: true,
-          );
         }
-      },
-      validateArguments: validateArguments,
-    );
+        stderr.writeln('[mcp:${mcpTool.name}] ERROR: $e');
+        stderr.writeln('[mcp:${mcpTool.name}] STACKTRACE: $st');
+        return CallToolResult(
+          content: [TextContent(text: '${mcpTool.name} execution failed: $e')],
+          isError: true,
+        );
+      }
+    }, validateArguments: validateArguments);
   }
 
   /// Helper to determine if an error is related to garbage collection or isolate sentinels.
@@ -206,7 +202,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
         packageResolver = null;
         isBuiltInWidgetCache.clear();
         stderr.writeln(
-            '[mcp] Dynamically refreshed active isolate ID: $isolateId');
+          '[mcp] Dynamically refreshed active isolate ID: $isolateId',
+        );
         return true;
       }
     } catch (err) {
@@ -268,9 +265,7 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     }
 
     return CallToolResult(
-      content: [
-        TextContent(text: contentBuffer.toString().trim()),
-      ],
+      content: [TextContent(text: contentBuffer.toString().trim())],
       structuredContent: processedData,
     );
   }
@@ -314,7 +309,8 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
   Future<String> resolveDtdToVmServiceUri(String dtdUri) async {
     final wsDtd = normalizeToWsUri(dtdUri);
     stderr.writeln(
-        '[mcp:connect] Connecting to DTD WebSocket to resolve VM Service: $wsDtd');
+      '[mcp:connect] Connecting to DTD WebSocket to resolve VM Service: $wsDtd',
+    );
     final WebSocket ws;
     try {
       ws = await WebSocket.connect(wsDtd).timeout(const Duration(seconds: 3));
@@ -323,46 +319,55 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     }
 
     final completer = Completer<String>();
-    ws.listen((message) {
-      try {
-        final decoded = jsonDecode(message as String);
-        if (decoded
-            case {
-              'id': 1001,
-              'result': {
-                'vmServices': [
-                  {'exposedUri': final String vmUri} ||
-                      {'uri': final String vmUri},
-                  ...
-                ]
-              }
-            }) {
-          completer.complete(vmUri);
-          unawaited(ws.close());
-        } else if (decoded case {'id': 1001, 'result': {'vmServices': []}}) {
-          completer.completeError(
-              StateError('DTD reports no running VM Services connected.'));
-          unawaited(ws.close());
-        } else if (decoded case {'id': 1001, 'error': final error}) {
-          completer.completeError(StateError('DTD returned RPC error: $error'));
-          unawaited(ws.close());
-        } else if (decoded case {'id': 1001}) {
-          completer
-              .completeError(StateError('Invalid response format from DTD.'));
+    ws.listen(
+      (message) {
+        try {
+          final decoded = jsonDecode(message as String);
+          if (decoded
+              case {
+                'id': 1001,
+                'result': {
+                  'vmServices': [
+                    {'exposedUri': final String vmUri} ||
+                        {'uri': final String vmUri},
+                    ...,
+                  ],
+                },
+              }) {
+            completer.complete(vmUri);
+            unawaited(ws.close());
+          } else if (decoded case {'id': 1001, 'result': {'vmServices': []}}) {
+            completer.completeError(
+              StateError('DTD reports no running VM Services connected.'),
+            );
+            unawaited(ws.close());
+          } else if (decoded case {'id': 1001, 'error': final error}) {
+            completer.completeError(
+              StateError('DTD returned RPC error: $error'),
+            );
+            unawaited(ws.close());
+          } else if (decoded case {'id': 1001}) {
+            completer.completeError(
+              StateError('Invalid response format from DTD.'),
+            );
+            unawaited(ws.close());
+          }
+        } catch (e) {
+          if (!completer.isCompleted) completer.completeError(e);
           unawaited(ws.close());
         }
-      } catch (e) {
+      },
+      onError: (Object e) {
         if (!completer.isCompleted) completer.completeError(e);
-        unawaited(ws.close());
-      }
-    }, onError: (Object e) {
-      if (!completer.isCompleted) completer.completeError(e);
-    }, onDone: () {
-      if (!completer.isCompleted) {
-        completer.completeError(
-            StateError('DTD connection closed before response was received.'));
-      }
-    });
+      },
+      onDone: () {
+        if (!completer.isCompleted) {
+          completer.completeError(
+            StateError('DTD connection closed before response was received.'),
+          );
+        }
+      },
+    );
 
     final request = {
       'jsonrpc': '2.0',
@@ -372,11 +377,15 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
     };
     ws.add(jsonEncode(request));
 
-    return completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-      unawaited(ws.close());
-      throw TimeoutException(
-          'Timed out waiting for DTD getVmServices response.');
-    });
+    return completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        unawaited(ws.close());
+        throw TimeoutException(
+          'Timed out waiting for DTD getVmServices response.',
+        );
+      },
+    );
   }
 
   /// Locates the library ID corresponding to the main application package to run expression evaluations.
@@ -441,8 +450,10 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
       for (final lib in libraries) {
         final uri = lib.uri ?? '';
         if (uri.startsWith('package:') && uri.endsWith('main.dart')) {
-          return cachedPackageName =
-              uri.substring(8, uri.indexOf('/')); // 'package:'.length == 8
+          return cachedPackageName = uri.substring(
+            8,
+            uri.indexOf('/'),
+          ); // 'package:'.length == 8
         }
       }
       // Fallback: use first non-flutter package URI
@@ -543,8 +554,9 @@ base mixin VmConnectionSupport on MCPServer, ToolsSupport {
 
     // Fallback if workspaceRoot is null
     try {
-      final sdkPath =
-          p.canonicalize(p.dirname(p.dirname(Platform.resolvedExecutable)));
+      final sdkPath = p.canonicalize(
+        p.dirname(p.dirname(Platform.resolvedExecutable)),
+      );
       if (p.canonicalize(path).startsWith(sdkPath)) {
         return true;
       }

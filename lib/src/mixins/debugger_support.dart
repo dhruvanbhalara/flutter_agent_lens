@@ -19,15 +19,9 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         name: McpTool.getCallStack.name,
         description: 'Get call stack frames (when paused).',
         inputSchema: ObjectSchema(
-          properties: {
-            'limit': limitSchema(),
-            'full': fullSchema(),
-          },
+          properties: {'limit': limitSchema(), 'full': fullSchema()},
         ),
-        annotations: ToolAnnotations(
-          readOnlyHint: true,
-          idempotentHint: false,
-        ),
+        annotations: ToolAnnotations(readOnlyHint: true, idempotentHint: false),
       ),
       _handleGetCallStack,
     );
@@ -108,9 +102,7 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
           },
           required: ['expression'],
         ),
-        annotations: ToolAnnotations(
-          readOnlyHint: false,
-        ),
+        annotations: ToolAnnotations(readOnlyHint: false),
       ),
       _handleEvalExpression,
     );
@@ -169,7 +161,8 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
   /// Handles the set_exception_pause_mode tool request.
   Future<CallToolResult> _handleSetExceptionPauseMode(
-      CallToolRequest req) async {
+    CallToolRequest req,
+  ) async {
     final service = vmService;
     final currentIsolateId = isolateId;
     if (service == null || currentIsolateId == null) return notConnected();
@@ -177,14 +170,18 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final modeStr = req.requireArg<String>('mode');
     final mode = ExceptionPauseMode.fromString(modeStr);
     stderr.writeln(
-        '[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}');
+      '[mcp:set_exception_pause_mode] Setting mode to: ${mode.value}',
+    );
 
     try {
-      await service.setIsolatePauseMode(currentIsolateId,
-          exceptionPauseMode: mode.value);
+      await service.setIsolatePauseMode(
+        currentIsolateId,
+        exceptionPauseMode: mode.value,
+      );
     } catch (e) {
       stderr.writeln(
-          '[mcp:debugger] setIsolatePauseMode failed: $e. Trying deprecated fallback.');
+        '[mcp:debugger] setIsolatePauseMode failed: $e. Trying deprecated fallback.',
+      );
       try {
         // Fallback for older VM Service versions
         // ignore: deprecated_member_use
@@ -193,10 +190,13 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         stderr.writeln('[mcp:debugger] setExceptionPauseMode failed: $e2');
       }
     }
-    return CallToolResult(content: [
-      TextContent(
-          text: 'Successfully set exception pause mode to: ${mode.value}')
-    ]);
+    return CallToolResult(
+      content: [
+        TextContent(
+          text: 'Successfully set exception pause mode to: ${mode.value}',
+        ),
+      ],
+    );
   }
 
   /// Handles the add_breakpoint tool request.
@@ -208,8 +208,9 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     final filePath = req.requireArg<String>('file_path');
     final line = (req.requireArg<num>('line')).toInt();
     final column = (req.arg<num>('column'))?.toInt();
-    stderr
-        .writeln('[mcp:add_breakpoint] Setting breakpoint on: $filePath:$line');
+    stderr.writeln(
+      '[mcp:add_breakpoint] Setting breakpoint on: $filePath:$line',
+    );
 
     final uri =
         filePath.startsWith('file:') ? filePath : Uri.file(filePath).toString();
@@ -223,8 +224,9 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
         );
       } on RPCError catch (e) {
         throw StateError(
-            'Failed to add breakpoint at $filePath:$line. The line may not contain executable code, '
-            'or the file is not loaded in the running isolate. (Details: ${e.message})');
+          'Failed to add breakpoint at $filePath:$line. The line may not contain executable code, '
+          'or the file is not loaded in the running isolate. (Details: ${e.message})',
+        );
       }
     }();
 
@@ -254,8 +256,9 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     if (service == null || currentIsolateId == null) return notConnected();
 
     final breakpointId = req.requireArg<String>('breakpoint_id');
-    stderr
-        .writeln('[mcp:remove_breakpoint] Removing breakpoint: $breakpointId');
+    stderr.writeln(
+      '[mcp:remove_breakpoint] Removing breakpoint: $breakpointId',
+    );
 
     try {
       await service.removeBreakpoint(currentIsolateId, breakpointId);
@@ -263,14 +266,17 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
       return CallToolResult(
         content: [
           TextContent(
-              text: 'Failed to remove breakpoint `$breakpointId`: ${e.message}')
+            text: 'Failed to remove breakpoint `$breakpointId`: ${e.message}',
+          ),
         ],
         isError: true,
       );
     }
-    return CallToolResult(content: [
-      TextContent(text: 'Successfully removed breakpoint `$breakpointId`.')
-    ]);
+    return CallToolResult(
+      content: [
+        TextContent(text: 'Successfully removed breakpoint `$breakpointId`.'),
+      ],
+    );
   }
 
   /// Handles the evaluate_expression tool request.
@@ -284,17 +290,25 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
 
     if (frameIndex != null) {
       stderr.writeln(
-          '[mcp:evaluate_expression] Evaluating in frame $frameIndex: $expression');
+        '[mcp:evaluate_expression] Evaluating in frame $frameIndex: $expression',
+      );
     } else {
       stderr.writeln(
-          '[mcp:evaluate_expression] Evaluating in library: $expression');
+        '[mcp:evaluate_expression] Evaluating in library: $expression',
+      );
     }
 
     final Object res = frameIndex != null
         ? await service.evaluateInFrame(
-            currentIsolateId, frameIndex, expression)
+            currentIsolateId,
+            frameIndex,
+            expression,
+          )
         : await service.evaluate(
-            currentIsolateId, await getEvaluationLibraryId(), expression);
+            currentIsolateId,
+            await getEvaluationLibraryId(),
+            expression,
+          );
 
     final rawValStr = res is InstanceRef
         ? (res.valueAsString ?? res.toString())
@@ -305,10 +319,11 @@ base mixin DebuggerSupport on MCPServer, ToolsSupport, VmConnectionSupport {
     return CallToolResult(
       content: [
         TextContent(
-            text: 'Evaluation Result\n'
-                '- Kind: $kindStr\n'
-                '- Value: $valStr\n'
-                '- Class: $classStr')
+          text: 'Evaluation Result\n'
+              '- Kind: $kindStr\n'
+              '- Value: $valStr\n'
+              '- Class: $classStr',
+        ),
       ],
     );
   }

@@ -107,21 +107,23 @@ void main() {
       expect(schemaProps!['filter_zero_deltas'], isA<BooleanSchema>());
     });
 
-    test('diff_allocations filters zero deltas when filter_zero_deltas is true',
-        () async {
-      final req = CallToolRequest(
-        name: McpTool.memory.name,
-        arguments: {
-          'action': 'diff_allocations',
-          'duration_seconds': 1,
-          'filter_zero_deltas': true,
-        },
-      );
+    test(
+      'diff_allocations filters zero deltas when filter_zero_deltas is true',
+      () async {
+        final req = CallToolRequest(
+          name: McpTool.memory.name,
+          arguments: {
+            'action': 'diff_allocations',
+            'duration_seconds': 1,
+            'filter_zero_deltas': true,
+          },
+        );
 
-      final result = await mockServer.callTool(req);
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('ActiveWidget'));
-      expect(text, isNot(contains('UnchangedClass')));
-    });
+        final result = await mockServer.callTool(req);
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('ActiveWidget'));
+        expect(text, isNot(contains('UnchangedClass')));
+      },
+    );
   });
 }

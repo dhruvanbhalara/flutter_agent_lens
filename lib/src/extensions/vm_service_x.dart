@@ -73,3 +73,11 @@ extension VmServiceX on VmService {
     }
   }
 }
+
+/// Extension on [RPCError] to identify common service lifecycle errors.
+extension RPCErrorX on RPCError {
+  /// Returns `true` if the RPC error indicates the VM service has disappeared
+  /// or closed the connection.
+  bool get isServiceDisposedError =>
+      message.contains('Service has disappeared') || code == 112;
+}

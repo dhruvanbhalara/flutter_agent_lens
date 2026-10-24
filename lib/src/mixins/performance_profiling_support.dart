@@ -13,8 +13,6 @@ import 'package:vm_service/vm_service.dart';
 /// Support mixin providing tools for frame analysis, CPU sampling, and reload/restart execution.
 base mixin PerformanceProfilingSupport
     on MCPServer, ToolsSupport, VmConnectionSupport {
-  static const int _kFrameBudgetUs = 16666;
-
   /// Whether a CPU timeline sampling or profiling session is currently active.
   bool isProfiling = false;
 
@@ -126,6 +124,21 @@ base mixin PerformanceProfilingSupport
       '[mcp:diagnose_jank] Starting jank diagnosis, duration=${durationSeconds}s',
     );
 
+    // Refresh target fps for threshold calculation
+    try {
+      final response = await service.callServiceExtension(
+        'ext.flutter.displayRefreshRate',
+        isolateId: isolateId,
+      );
+      final rate = response.json?['fps'] as num?;
+      if (rate != null && rate > 0) targetFps = rate.toDouble();
+    } catch (_) {}
+
+    // 1000000 microseconds per second
+    final double targetMsPerFrame =
+        targetFps != null && targetFps! > 0 ? 1000.0 / targetFps! : 16.6;
+    final int dynamicFrameBudgetUs = (targetMsPerFrame * 1000).round();
+
     await service.setVMTimelineFlags(const ['Embedder', 'Dart', 'GC', 'API']);
     await service.clearVMTimeline();
 
@@ -159,7 +172,7 @@ base mixin PerformanceProfilingSupport
       if (eventName case 'GPURasterizer::Draw' || 'Animator::BeginFrame') {
         totalFrames++;
         final durationUs = (event.json?['dur'] as num?) ?? 0;
-        if (durationUs > _kFrameBudgetUs) {
+        if (durationUs > dynamicFrameBudgetUs) {
           jankyFrames++;
           frameEvents.add({
             'event': eventName,
@@ -181,11 +194,15 @@ base mixin PerformanceProfilingSupport
       dataName: 'timeline events',
     );
 
+    final thresholdStr = targetMsPerFrame.toStringAsFixed(1);
     mdBuffer
       ..writeln('### Jank Diagnostic Report\n')
+      ..writeln(
+        '- **Target FPS:** ${targetFps?.toStringAsFixed(1) ?? 'Unknown (assuming 60)'}',
+      )
       ..writeln('- **Total Frame Events Sampled:** $totalFrames')
       ..writeln(
-        '- **Janky Frame Events (> 16.6ms):** $jankyFrames (${jankPercentage.toStringAsFixed(1)}%)\n',
+        '- **Janky Frame Events (> ${thresholdStr}ms):** $jankyFrames (${jankPercentage.toStringAsFixed(1)}%)\n',
       );
 
     final limit = req.limitArg(defaultValue: 15);
@@ -197,14 +214,17 @@ base mixin PerformanceProfilingSupport
           limit != null ? frameEvents.take(limit) : frameEvents;
       for (final f in displayedEvents) {
         final dur = f['duration_ms'] as double;
-        final severity = dur > 33.3 ? 'CRITICAL (>33ms)' : 'WARNING (>16ms)';
+        final criticalThreshold = targetMsPerFrame * 2;
+        final severity = dur > criticalThreshold
+            ? 'CRITICAL (>${criticalThreshold.toStringAsFixed(1)}ms)'
+            : 'WARNING (>${thresholdStr}ms)';
         mdBuffer.writeln(
           '| ${f['event']} | ${dur.toStringAsFixed(2)} | $severity |',
         );
       }
     } else {
       mdBuffer.writeln(
-        '✨ **Clean Render Cycle:** No frame events exceeded the 16.6ms budget.',
+        '✨ **Clean Render Cycle:** No frame events exceeded the ${thresholdStr}ms budget.',
       );
     }
 

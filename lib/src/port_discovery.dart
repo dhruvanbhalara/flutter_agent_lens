@@ -90,12 +90,13 @@ class PortDiscovery {
       if (Platform.isWindows) {
         final result = await processRunner.run('powershell', [
           '-Command',
-          r'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*development-service*" } | Select-Object CommandLine, ProcessId, WorkingDirectory | ConvertTo-Json'
+          r'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*development-service*" } | Select-Object CommandLine, ProcessId, WorkingDirectory | ConvertTo-Json',
         ]).timeout(const Duration(seconds: 5));
 
         if (result.exitCode != 0) {
           stderr.writeln(
-              '[discovery] PowerShell command failed: ${result.exitCode}');
+            '[discovery] PowerShell command failed: ${result.exitCode}',
+          );
           return apps;
         }
 
@@ -127,7 +128,11 @@ class PortDiscovery {
               : 'Flutter App (pid $pid)';
 
           await _probeAndAddApp(
-              rawVmUri, projectName, 'process scan (DDS pid $pid)', apps);
+            rawVmUri,
+            projectName,
+            'process scan (DDS pid $pid)',
+            apps,
+          );
         }
       } else {
         final psResult = await processRunner
@@ -147,10 +152,13 @@ class PortDiscovery {
           final uriMatch = _vmUriPattern.firstMatch(line);
           final pidMatch = _pidPattern.firstMatch(line);
           if (uriMatch == null || pidMatch == null) {
-            final sanitizedLine =
-                line.replaceAll(_vmUriPattern, '--vm-service-uri=<redacted>');
+            final sanitizedLine = line.replaceAll(
+              _vmUriPattern,
+              '--vm-service-uri=<redacted>',
+            );
             stderr.writeln(
-                '[discovery] DDS process found but could not parse: $sanitizedLine');
+              '[discovery] DDS process found but could not parse: $sanitizedLine',
+            );
             continue;
           }
 
@@ -158,7 +166,8 @@ class PortDiscovery {
           final pid = pidMatch.group(1)!;
           final sanitizedVmUri = _sanitizeUri(rawVmUri);
           stderr.writeln(
-              '[discovery] Found DDS process pid=$pid, rawVmUri=$sanitizedVmUri');
+            '[discovery] Found DDS process pid=$pid, rawVmUri=$sanitizedVmUri',
+          );
 
           // Get project name from the process's working directory.
           String projectName = 'Flutter App (pid $pid)';
@@ -173,7 +182,8 @@ class PortDiscovery {
                   final cwdPath = cwdLine.substring(1);
                   projectName = p.basename(cwdPath);
                   stderr.writeln(
-                      '[discovery] Project name from cwd: $projectName');
+                    '[discovery] Project name from cwd: $projectName',
+                  );
                   break;
                 }
               }
@@ -183,10 +193,15 @@ class PortDiscovery {
           }
 
           await _probeAndAddApp(
-              rawVmUri, projectName, 'process scan (DDS pid $pid)', apps);
+            rawVmUri,
+            projectName,
+            'process scan (DDS pid $pid)',
+            apps,
+          );
         }
         stderr.writeln(
-            '[discovery] Scanned $ddsCount DDS processes, found ${apps.length} app(s)');
+          '[discovery] Scanned $ddsCount DDS processes, found ${apps.length} app(s)',
+        );
       }
     } catch (e) {
       stderr.writeln('[discovery] Process scan failed: $e');
@@ -220,11 +235,13 @@ class PortDiscovery {
         final locationUri = Uri.parse(location);
         final wsUriParam = locationUri.queryParameters['uri'];
         if (wsUriParam != null && wsUriParam.isNotEmpty) {
-          apps.add(DiscoveredApp(
-            serviceUri: wsUriParam,
-            projectName: projectName,
-            configPath: configPath,
-          ));
+          apps.add(
+            DiscoveredApp(
+              serviceUri: wsUriParam,
+              projectName: projectName,
+              configPath: configPath,
+            ),
+          );
         } else {
           final locPath = locationUri.path;
           final pathSegments =
@@ -234,11 +251,13 @@ class PortDiscovery {
             final ddsPort = locationUri.port;
             final ddsHost = locationUri.host;
             final wsUri = 'ws://$ddsHost:$ddsPort/$ddsToken/ws';
-            apps.add(DiscoveredApp(
-              serviceUri: wsUri,
-              projectName: projectName,
-              configPath: configPath,
-            ));
+            apps.add(
+              DiscoveredApp(
+                serviceUri: wsUri,
+                projectName: projectName,
+                configPath: configPath,
+              ),
+            );
           }
         }
       } else if (statusCode == 200) {
@@ -247,14 +266,17 @@ class PortDiscovery {
             uri.pathSegments.where((s) => s.isNotEmpty).toList();
         final authToken = pathSegments.isNotEmpty ? pathSegments.first : '';
         final wsUri = 'ws://${uri.host}:${uri.port}/$authToken/ws';
-        apps.add(DiscoveredApp(
-          serviceUri: wsUri,
-          projectName: projectName,
-          configPath: configPath,
-        ));
+        apps.add(
+          DiscoveredApp(
+            serviceUri: wsUri,
+            projectName: projectName,
+            configPath: configPath,
+          ),
+        );
       } else {
         stderr.writeln(
-            '[discovery] Unexpected response from raw VM service: status=$statusCode');
+          '[discovery] Unexpected response from raw VM service: status=$statusCode',
+        );
       }
 
       // Drain response body to prevent socket leakage
@@ -264,7 +286,8 @@ class PortDiscovery {
     } catch (e) {
       final sanitizedVmUri = _sanitizeUri(rawVmUri);
       stderr.writeln(
-          '[discovery] Failed to probe raw VM service at $sanitizedVmUri: $e');
+        '[discovery] Failed to probe raw VM service at $sanitizedVmUri: $e',
+      );
     } finally {
       client.close(force: true);
     }

@@ -1,3 +1,10 @@
+## 1.8.1
+
+### Fixed
+- Improved frame budget accuracy during jank diagnosis by adapting to the target device's display refresh rate.
+- Prevented target application memory buildup during network capture sessions.
+- Resolved crashes and error noise when target applications disconnect during memory leak audits or widget rebuild tracking.
+
 ## 1.8.0
 
 ### Added

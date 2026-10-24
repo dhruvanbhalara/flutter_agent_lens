@@ -43,12 +43,18 @@ void main() {
     });
 
     test('normalizeToWsUri converts http/https/ws schemes properly', () {
-      expect(mock.normalizeToWsUri('http://127.0.0.1:8181/token/'),
-          equals('ws://127.0.0.1:8181/token/ws'));
-      expect(mock.normalizeToWsUri('https://127.0.0.1:8181/token'),
-          equals('wss://127.0.0.1:8181/token/ws'));
-      expect(mock.normalizeToWsUri('ws://127.0.0.1:8181/token'),
-          equals('ws://127.0.0.1:8181/token/ws'));
+      expect(
+        mock.normalizeToWsUri('http://127.0.0.1:8181/token/'),
+        equals('ws://127.0.0.1:8181/token/ws'),
+      );
+      expect(
+        mock.normalizeToWsUri('https://127.0.0.1:8181/token'),
+        equals('wss://127.0.0.1:8181/token/ws'),
+      );
+      expect(
+        mock.normalizeToWsUri('ws://127.0.0.1:8181/token'),
+        equals('ws://127.0.0.1:8181/token/ws'),
+      );
     });
 
     test('serializeDualFormat formats as json when preferred', () {
@@ -126,8 +132,10 @@ void main() {
       );
       final textExplicit = (resExplicit.content.first as TextContent).text;
       expect(textExplicit, isNot(contains('[TRUNCATED')));
-      expect((resExplicit.structuredContent!['items']! as List).length,
-          equals(50));
+      expect(
+        (resExplicit.structuredContent!['items']! as List).length,
+        equals(50),
+      );
 
       // Via req with full: true
       final req = CallToolRequest(name: 'test', arguments: {'full': true});
@@ -172,38 +180,44 @@ void main() {
       expect(text, contains('Invalid URI scheme'));
     });
 
-    test('connect tool with missing uri and vmServiceUri returns error',
-        () async {
-      final result = await edgeMock.callTool(
-        CallToolRequest(
-          name: McpTool.connection.name,
-          arguments: const {
-            'action': 'connect',
-            'workspace_root': '/some/path',
-          },
-        ),
-      );
-      expect(result.isError, isTrue);
-      final text = (result.content.first as TextContent).text;
-      expect(text,
-          contains('Required parameter "uri" or "vmServiceUri" is missing.'));
-    });
+    test(
+      'connect tool with missing uri and vmServiceUri returns error',
+      () async {
+        final result = await edgeMock.callTool(
+          CallToolRequest(
+            name: McpTool.connection.name,
+            arguments: const {
+              'action': 'connect',
+              'workspace_root': '/some/path',
+            },
+          ),
+        );
+        expect(result.isError, isTrue);
+        final text = (result.content.first as TextContent).text;
+        expect(
+          text,
+          contains('Required parameter "uri" or "vmServiceUri" is missing.'),
+        );
+      },
+    );
 
-    test('connect_dtd tool with missing uri and vmServiceUri returns error',
-        () async {
-      final result = await edgeMock.callTool(
-        CallToolRequest(
-          name: McpTool.connection.name,
-          arguments: const {
-            'action': 'connect_dtd',
-          },
-        ),
-      );
-      expect(result.isError, isTrue);
-      final text = (result.content.first as TextContent).text;
-      expect(
-          text, contains('Missing required argument "uri" or "vmServiceUri"'));
-    });
+    test(
+      'connect_dtd tool with missing uri and vmServiceUri returns error',
+      () async {
+        final result = await edgeMock.callTool(
+          CallToolRequest(
+            name: McpTool.connection.name,
+            arguments: const {'action': 'connect_dtd'},
+          ),
+        );
+        expect(result.isError, isTrue);
+        final text = (result.content.first as TextContent).text;
+        expect(
+          text,
+          contains('Missing required argument "uri" or "vmServiceUri"'),
+        );
+      },
+    );
 
     test('connect_dtd tool with dummy URI returns connection error', () async {
       final result = await edgeMock.callTool(
@@ -220,23 +234,23 @@ void main() {
       expect(text, contains('Failed to connect to DTD'));
     });
 
-    test('disconnect tool when not connected is successful and no-op',
-        () async {
-      edgeMock.vmService = null;
+    test(
+      'disconnect tool when not connected is successful and no-op',
+      () async {
+        edgeMock.vmService = null;
 
-      final result = await edgeMock.callTool(
-        CallToolRequest(
-          name: McpTool.connection.name,
-          arguments: const {
-            'action': 'disconnect',
-          },
-        ),
-      );
+        final result = await edgeMock.callTool(
+          CallToolRequest(
+            name: McpTool.connection.name,
+            arguments: const {'action': 'disconnect'},
+          ),
+        );
 
-      expect(result.isError, isNot(isTrue));
-      final text = (result.content.first as TextContent).text;
-      expect(text, contains('Not connected to any VM Service app'));
-    });
+        expect(result.isError, isNot(isTrue));
+        final text = (result.content.first as TextContent).text;
+        expect(text, contains('Not connected to any VM Service app'));
+      },
+    );
   });
 }
 

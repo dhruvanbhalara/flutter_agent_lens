@@ -4,11 +4,7 @@ import 'package:test/test.dart';
 void main() {
   group('ClassAllocation Tests', () {
     test('fromMap and toMap round-trip', () {
-      final json = {
-        'name': 'MyWidget',
-        'bytes': 1024,
-        'instances': 42,
-      };
+      final json = {'name': 'MyWidget', 'bytes': 1024, 'instances': 42};
 
       final alloc = ClassAllocation.fromMap(json);
       expect(alloc.name, equals('MyWidget'));
@@ -63,11 +59,7 @@ void main() {
         'heapCapacity': 10000000,
         'externalUsage': 1000000,
         'topClasses': [
-          {
-            'name': 'MyWidget',
-            'bytes': 1024,
-            'instances': 42,
-          }
+          {'name': 'MyWidget', 'bytes': 1024, 'instances': 42},
         ],
       };
 
@@ -129,11 +121,7 @@ void main() {
         'heapCapacity': 200,
         'externalUsage': 50,
         'topClasses': [
-          {
-            'name': 'MyWidget',
-            'bytes': 1024,
-            'instances': 42,
-          }
+          {'name': 'MyWidget', 'bytes': 1024, 'instances': 42},
         ],
       };
       final snapshot = MemorySnapshot.fromMap(json);
