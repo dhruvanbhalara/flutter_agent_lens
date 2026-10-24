@@ -13,6 +13,7 @@ import 'package:flutter_agent_lens/src/mixins/performance_profiling_support.dart
 import 'package:flutter_agent_lens/src/mixins/rebuild_tracking_support.dart';
 import 'package:flutter_agent_lens/src/mixins/screenshot_support.dart';
 import 'package:flutter_agent_lens/src/mixins/scroll_gesture_support.dart';
+import 'package:flutter_agent_lens/src/mixins/uri_resolution_support.dart';
 import 'package:flutter_agent_lens/src/mixins/vm_connection_support.dart';
 import 'package:flutter_agent_lens/src/mixins/widget_inspection_support.dart';
 import 'package:stream_channel/stream_channel.dart';
@@ -37,6 +38,7 @@ final class FlutterAgentLensServer extends MCPServer
         NetworkCaptureSupport,
         DebuggerSupport,
         ScreenshotSupport,
+        UriResolutionSupport,
         ConnectionSupport,
         DiagnoseProjectSupport {
   /// Creates a new [FlutterAgentLensServer] instance communicating over the given [channel].
@@ -106,6 +108,7 @@ final class FlutterAgentLensServer extends MCPServer
     registerDebuggerTools();
     registerScreenshotTools();
     registerAppInfoTools();
+    registerUriResolutionTools();
     registerDtdTools();
     _connectedToolsRegistered = true;
   }
