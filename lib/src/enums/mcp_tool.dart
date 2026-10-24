@@ -64,7 +64,10 @@ enum McpTool {
   getNavigationStack('get_navigation_stack'),
 
   /// Set response format for all tools (markdown or json).
-  setResponseFormat('set_response_format', requiresConnection: false);
+  setResponseFormat('set_response_format', requiresConnection: false),
+
+  /// Resolve package or file URIs to absolute local file paths or package URIs.
+  resolveUri('resolve_uri');
 
   const McpTool(this.name, {this.requiresConnection = true});
 
