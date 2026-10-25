@@ -14,6 +14,8 @@ AI assistants (such as Claude or Copilot) can inspect, profile, and debug any Fl
 - Capture console, stdout, stderr, and logging streams.
 - Read local build sizes to locate heavy packages and assets.
 - Validate App Links and Universal Links configurations.
+- Resolve `package:` URIs to local source files for precise navigation.
+- Discover and trigger registered service extension RPCs.
 - Drive scroll behaviors and trigger hot reloads.
 
 ---
@@ -77,7 +79,8 @@ This server groups functions into action-based tools to keep the schema footprin
 | | `trigger_scroll_gesture` | *N/A* | Scroll the application viewport. |
 | **Widget Inspector** | `widget` | `inspect`, `toggle_selection`, `get_tree` | Find widget tree structure, get layout details, and toggle device inspector. |
 | | `get_navigation_stack` | *N/A* | Inspect active Flutter Router and Navigator route tree, current URL, and depth. |
-| | `debug_flag` | `toggle`, `toggle_package_widgets` | Change debug settings (e.g. paint size) or toggle package widget visibility. |
+| | `debug_flag` | `toggle`, `toggle_package_widgets`, `list_extensions`, `call_extension` | Change debug settings (e.g. paint size), toggle package widget visibility, list registered service extensions, or call arbitrary extension RPCs. |
+| **URI Resolution** | `resolve_uri` | *N/A* | Translate `package:...` URIs to absolute local filesystem paths or convert local file paths to package URIs. |
 | **Screenshots** | `screenshot` | `take`, `capture_baseline`, `compare` | Take screen capture or run visual regression comparisons. |
 | **Hot Reload** | `hot_reload` / `hot_restart`| *N/A* | Trigger hot reload or hot restart. |
 | **Debugger** | `breakpoint` | `add`, `remove` | Add or remove code breakpoints. |
