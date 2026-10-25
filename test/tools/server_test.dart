@@ -114,6 +114,29 @@ void main() {
       expect(text, contains('true'));
     });
 
+    test('resolve_uri tool resolves package URIs when connected', () async {
+      server.vmService = fakeVmService;
+      server.isolateId = 'isolate_1';
+      server.vmServiceUri = 'ws://127.0.0.1:8181/auth_token/ws';
+
+      fakeVmService.mockResolvedPackageUris = {
+        'package:my_app/main.dart': 'file:///project/lib/main.dart',
+      };
+
+      final result = await server.callTool(
+        CallToolRequest(
+          name: McpTool.resolveUri.name,
+          arguments: const {
+            'uris': ['package:my_app/main.dart'],
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('file:///project/lib/main.dart'));
+    });
+
     test('memory retrieves structured memory info', () async {
       server.vmService = fakeVmService;
       server.isolateId = 'isolate_1';

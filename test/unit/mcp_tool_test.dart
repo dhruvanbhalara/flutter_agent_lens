@@ -11,6 +11,7 @@ void main() {
     test('fromName returns correct enum or null', () {
       expect(McpTool.fromName('connection'), equals(McpTool.connection));
       expect(McpTool.fromName('memory'), equals(McpTool.memory));
+      expect(McpTool.fromName('resolve_uri'), equals(McpTool.resolveUri));
       expect(McpTool.fromName('non_existent'), isNull);
     });
 
@@ -18,6 +19,7 @@ void main() {
       expect(McpTool.connection.requiresConnection, isFalse);
       expect(McpTool.discoverApps.requiresConnection, isFalse);
       expect(McpTool.memory.requiresConnection, isTrue);
+      expect(McpTool.resolveUri.requiresConnection, isTrue);
     });
   });
 

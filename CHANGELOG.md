@@ -1,3 +1,10 @@
+## 1.8.2
+
+### Added
+- Added `resolve_uri` MCP tool for bidirectional translation between `package:...` URIs and absolute local filesystem paths.
+- Added `list_extensions` action to `debug_flag` for discovering registered service extensions in running applications.
+- Added `call_extension` action to `debug_flag` for invoking arbitrary Flutter and package service extension RPCs.
+
 ## 1.8.1
 
 ### Fixed

@@ -24,6 +24,8 @@ class FakeVmService extends VmService {
     'ext.dart.io.getHttpProfile',
     'ext.dart.io.getHttpProfileRequest',
   ];
+  Map<String, String?> mockResolvedPackageUris = {};
+  Map<String, String?> mockPackageUris = {};
   Map<String, dynamic> mockTimelineResponse = {};
 
   FakeVmService() : super(const Stream<dynamic>.empty(), (msg) {});
@@ -285,6 +287,23 @@ class FakeVmService extends VmService {
     String breakpointId,
   ) async {
     return Success();
+  }
+
+  @override
+  Future<UriList> lookupResolvedPackageUris(
+    String isolateId,
+    List<String> uris, {
+    bool? local,
+  }) async {
+    return UriList(uris: uris.map((u) => mockResolvedPackageUris[u]).toList());
+  }
+
+  @override
+  Future<UriList> lookupPackageUris(
+    String isolateId,
+    List<String> uris,
+  ) async {
+    return UriList(uris: uris.map((u) => mockPackageUris[u]).toList());
   }
 
   @override

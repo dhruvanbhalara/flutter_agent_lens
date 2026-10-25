@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
@@ -14,4 +15,16 @@ CallToolResult handleToolError(
     content: [TextContent(text: '$toolName execution failed: $error')],
     isError: true,
   );
+}
+
+/// Safely executes a tool operation with error logging and standardized error response.
+Future<CallToolResult> safeToolCall({
+  required String toolName,
+  required Future<CallToolResult> Function() action,
+}) async {
+  try {
+    return await action();
+  } catch (error, stack) {
+    return handleToolError(error, stack, toolName);
+  }
 }

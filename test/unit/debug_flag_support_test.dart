@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dart_mcp/server.dart';
 import 'package:flutter_agent_lens/src/mixins/debug_flag_support.dart';
@@ -24,8 +25,25 @@ base class DebugFlagMock extends MCPServer
 class FakeVmServiceForDebugFlags extends vm_service.VmService {
   String? lastExtensionCalled;
   Map<String, dynamic>? lastArgs;
+  List<String> mockExtensionRPCs = [
+    'ext.flutter.inspector.show',
+    'ext.flutter.debugPaint',
+  ];
+  bool throwRpcError = false;
 
   FakeVmServiceForDebugFlags() : super(const Stream<dynamic>.empty(), (msg) {});
+
+  @override
+  Future<vm_service.Isolate> getIsolate(
+    String isolateId, {
+    int? isolateGroupIndex,
+  }) async {
+    return vm_service.Isolate(
+      id: isolateId,
+      name: 'main',
+      extensionRPCs: mockExtensionRPCs,
+    );
+  }
 
   @override
   Future<vm_service.Response> callServiceExtension(
@@ -33,6 +51,13 @@ class FakeVmServiceForDebugFlags extends vm_service.VmService {
     String? isolateId,
     Map<String, dynamic>? args,
   }) async {
+    if (throwRpcError) {
+      throw vm_service.RPCError(
+        'callServiceExtension',
+        103,
+        'Service extension not found',
+      );
+    }
     lastExtensionCalled = method;
     lastArgs = args;
     return vm_service.Response.parse({'result': 'success'})!;
@@ -195,6 +220,173 @@ void main() {
       expect(result.isError, isTrue);
       final text = (result.content.first as TextContent).text;
       expect(text, contains('Unknown debug flag action'));
+    });
+
+    test(
+        'list_extensions returns registered service extensions from mockExtensionRPCs',
+        () async {
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'debug_flag',
+          arguments: const {
+            'action': 'list_extensions',
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Registered Service Extensions (2)'));
+      expect(text, contains('- `ext.flutter.debugPaint`'));
+      expect(text, contains('- `ext.flutter.inspector.show`'));
+    });
+
+    test('list_extensions returns json format when requested', () async {
+      mock.responseFormat = 'json';
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'debug_flag',
+          arguments: const {
+            'action': 'list_extensions',
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      final data = jsonDecode(text) as Map<String, dynamic>;
+      expect(data['count'], equals(2));
+      expect(
+        data['extensions'],
+        equals(['ext.flutter.debugPaint', 'ext.flutter.inspector.show']),
+      );
+    });
+
+    test('list_extensions handles empty extensions list gracefully', () async {
+      fakeVm.mockExtensionRPCs = [];
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'debug_flag',
+          arguments: const {
+            'action': 'list_extensions',
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Registered Service Extensions (0)'));
+      expect(text, contains('No registered service extensions found.'));
+    });
+
+    test('list_extensions returns not connected when vmService is null',
+        () async {
+      mock.vmService = null;
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'debug_flag',
+          arguments: const {
+            'action': 'list_extensions',
+          },
+        ),
+      );
+
+      expect(result.isError, isTrue);
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Not connected to a running application'));
+    });
+
+    test(
+        'call_extension passes extension_name and params to vmService and returns response',
+        () async {
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'debug_flag',
+          arguments: const {
+            'action': 'call_extension',
+            'extension_name': 'ext.flutter.debugPaint',
+            'params': {'enabled': 'true'},
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      expect(fakeVm.lastExtensionCalled, equals('ext.flutter.debugPaint'));
+      expect(fakeVm.lastArgs?['enabled'], equals('true'));
+      final text = (result.content.first as TextContent).text;
+      expect(
+          text, contains('Service Extension Result: `ext.flutter.debugPaint`'));
+      expect(text, contains('"result": "success"'));
+    });
+
+    test('call_extension returns json format when requested', () async {
+      mock.responseFormat = 'json';
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'debug_flag',
+          arguments: const {
+            'action': 'call_extension',
+            'extension_name': 'ext.flutter.debugPaint',
+          },
+        ),
+      );
+
+      expect(result.isError, isNot(isTrue));
+      expect(fakeVm.lastExtensionCalled, equals('ext.flutter.debugPaint'));
+      final text = (result.content.first as TextContent).text;
+      final data = jsonDecode(text) as Map<String, dynamic>;
+      expect(data['result'], equals('success'));
+    });
+
+    test('call_extension returns an error if extension_name is missing',
+        () async {
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'debug_flag',
+          arguments: const {
+            'action': 'call_extension',
+          },
+        ),
+      );
+
+      expect(result.isError, isTrue);
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('extension_name'));
+    });
+
+    test('call_extension returns not connected when vmService is null',
+        () async {
+      mock.vmService = null;
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'debug_flag',
+          arguments: const {
+            'action': 'call_extension',
+            'extension_name': 'ext.flutter.debugPaint',
+          },
+        ),
+      );
+
+      expect(result.isError, isTrue);
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('Not connected to a running application'));
+    });
+
+    test('call_extension handles RPCError gracefully', () async {
+      fakeVm.throwRpcError = true;
+      final result = await mock.callTool(
+        CallToolRequest(
+          name: 'debug_flag',
+          arguments: const {
+            'action': 'call_extension',
+            'extension_name': 'ext.flutter.nonExistent',
+          },
+        ),
+      );
+
+      expect(result.isError, isTrue);
+      final text = (result.content.first as TextContent).text;
+      expect(text, contains('RPCError invoking ext.flutter.nonExistent'));
     });
   });
 }
